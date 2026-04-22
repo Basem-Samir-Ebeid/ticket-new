@@ -46,6 +46,10 @@ export default function AdminDashboard() {
   const [loggingIn, setLoggingIn] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [resettingUserId, setResettingUserId] = useState(null)
+  const [leaveRequests, setLeaveRequests] = useState([])
+  const [rejectingLeaveId, setRejectingLeaveId] = useState(null)
+  const [rejectionNote, setRejectionNote] = useState('')
+  const [processingLeaveId, setProcessingLeaveId] = useState(null)
 
   useEffect(() => { 
     fetchTickets(); 
@@ -53,6 +57,16 @@ export default function AdminDashboard() {
     fetchRequests();
     fetchLoginTimes();
     checkTodayLogin();
+    fetchLeaveRequests();
+
+    const leaveChannel = supabase
+      .channel('admin-leaves')
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'leave_requests'
+      }, () => fetchLeaveRequests())
+      .subscribe()
+
+    return () => { supabase.removeChannel(leaveChannel) }
   }, [])
 
   useEffect(() => { if (selectedTicket) fetchReplies(selectedTicket.id) }, [selectedTicket])
@@ -89,6 +103,65 @@ export default function AdminDashboard() {
       .eq('is_request', true)
       .order('created_at', { ascending: false })
     setRequests(data || [])
+  }
+
+  async function fetchLeaveRequests() {
+    const { data } = await supabase
+      .from('leave_requests')
+      .select('*, user:profiles!leave_requests_user_id_fkey(full_name,email,role)')
+      .order('created_at', { ascending: false })
+    setLeaveRequests(data || [])
+  }
+
+  async function approveLeaveRequest(req) {
+    setProcessingLeaveId(req.id)
+    const { error } = await supabase.from('leave_requests').update({
+      status: 'approved',
+      admin_note: null,
+      decided_by: user.id,
+      decided_at: new Date().toISOString()
+    }).eq('id', req.id)
+    if (error) { setMsg('Error: ' + error.message); setProcessingLeaveId(null); return }
+
+    await supabase.from('notifications').insert({
+      user_id: req.user_id,
+      message: `✅ Your leave request (${req.start_date} → ${req.end_date}) was approved`
+    })
+
+    setMsg(`✓ Leave approved`)
+    setProcessingLeaveId(null)
+    fetchLeaveRequests()
+  }
+
+  async function rejectLeaveRequest(req) {
+    setProcessingLeaveId(req.id)
+    const note = rejectionNote.trim() || null
+    const { error } = await supabase.from('leave_requests').update({
+      status: 'rejected',
+      admin_note: note,
+      decided_by: user.id,
+      decided_at: new Date().toISOString()
+    }).eq('id', req.id)
+    if (error) { setMsg('Error: ' + error.message); setProcessingLeaveId(null); return }
+
+    await supabase.from('notifications').insert({
+      user_id: req.user_id,
+      message: `❌ Your leave request (${req.start_date} → ${req.end_date}) was rejected${note ? ' — ' + note : ''}`
+    })
+
+    setMsg(`✓ Leave rejected`)
+    setRejectingLeaveId(null)
+    setRejectionNote('')
+    setProcessingLeaveId(null)
+    fetchLeaveRequests()
+  }
+
+  async function deleteLeaveRequest(id) {
+    if (!window.confirm('Delete this leave request?')) return
+    const { error } = await supabase.from('leave_requests').delete().eq('id', id)
+    if (error) { setMsg('Error: ' + error.message); return }
+    setMsg('✓ Leave request deleted')
+    fetchLeaveRequests()
   }
 
   async function fetchLoginTimes() {
@@ -634,12 +707,15 @@ export default function AdminDashboard() {
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b border-white/10 overflow-x-auto pb-2">
-          {['dashboard', 'tickets', 'requests', 'users', 'attendance', 'performance'].map(t => (
+          {['dashboard', 'tickets', 'requests', 'leave', 'users', 'attendance', 'performance'].map(t => (
             <button key={t} onClick={() => { setTab(t); setSelectedUser(null); setSelectedTicket(null) }}
               className={`px-4 py-2 rounded-t-lg text-sm font-medium capitalize transition-all whitespace-nowrap ${
                 tab === t ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}>
-              {t === 'performance' ? '⭐ Performance' : t === 'requests' ? `📋 Requests${requests.filter(r=>r.request_status==='pending_review').length > 0 ? ` (${requests.filter(r=>r.request_status==='pending_review').length})` : ''}` : t}
+              {t === 'performance' ? '⭐ Performance'
+                : t === 'requests' ? `📋 Requests${requests.filter(r=>r.request_status==='pending_review').length > 0 ? ` (${requests.filter(r=>r.request_status==='pending_review').length})` : ''}`
+                : t === 'leave' ? `🌴 Leave${leaveRequests.filter(r=>r.status==='pending').length > 0 ? ` (${leaveRequests.filter(r=>r.status==='pending').length})` : ''}`
+                : t}
             </button>
           ))}
         </div>
@@ -1268,6 +1344,99 @@ export default function AdminDashboard() {
         )}
 
         {/* Tickets Tab */}
+        {tab === 'leave' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-white font-medium">Leave Requests</h2>
+              <div className="flex gap-3 text-xs text-slate-400">
+                <span>Pending: <span className="text-yellow-400 font-medium">{leaveRequests.filter(r=>r.status==='pending').length}</span></span>
+                <span>Approved: <span className="text-green-400 font-medium">{leaveRequests.filter(r=>r.status==='approved').length}</span></span>
+                <span>Rejected: <span className="text-red-400 font-medium">{leaveRequests.filter(r=>r.status==='rejected').length}</span></span>
+              </div>
+            </div>
+
+            {leaveRequests.length === 0 && (
+              <div className="glass rounded-xl py-12 text-center text-slate-500 animate-fadeIn">No leave requests yet</div>
+            )}
+
+            {leaveRequests.map((r, i) => (
+              <div key={r.id} className={`glass rounded-xl p-5 animate-fadeIn hover-lift border ${
+                r.status === 'pending' ? 'border-yellow-500/20' :
+                r.status === 'approved' ? 'border-green-500/20' :
+                'border-red-500/20'
+              }`} style={{animationDelay: `${i * 0.05}s`}}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                        r.status === 'pending' ? 'bg-yellow-900/30 text-yellow-400' :
+                        r.status === 'approved' ? 'bg-green-900/30 text-green-400' :
+                        'bg-red-900/30 text-red-400'
+                      }`}>
+                        {r.status === 'pending' ? '⏳ Pending' : r.status === 'approved' ? '✅ Approved' : '❌ Rejected'}
+                      </span>
+                      <span className="text-slate-500 text-xs mono">Submitted {new Date(r.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <h3 className="text-white font-medium">
+                      {new Date(r.start_date).toLocaleDateString()} → {new Date(r.end_date).toLocaleDateString()}
+                    </h3>
+                    {r.reason && <p className="text-slate-400 text-sm mt-1">{r.reason}</p>}
+                    <p className="text-slate-500 text-xs mt-2">
+                      Requested by: <span className="text-slate-300">{r.user?.full_name || r.user?.email || 'Unknown'}</span>
+                      {r.user?.role && <span className="text-slate-500 ml-1">({r.user.role})</span>}
+                    </p>
+                    {r.admin_note && (
+                      <p className="text-slate-300 text-xs mt-2 bg-white/5 rounded-lg p-2">
+                        <span className="text-slate-500">Admin note: </span>{r.admin_note}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2 min-w-fit">
+                    {r.status === 'pending' && (
+                      <>
+                        <button onClick={() => approveLeaveRequest(r)} disabled={processingLeaveId === r.id}
+                          className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-all hover:scale-105">
+                          {processingLeaveId === r.id ? '...' : 'Approve'}
+                        </button>
+                        <button onClick={() => { setRejectingLeaveId(r.id); setRejectionNote('') }} disabled={processingLeaveId === r.id}
+                          className="bg-red-900/40 hover:bg-red-800/60 text-red-400 hover:text-red-300 text-xs px-3 py-1.5 rounded-lg transition-all border border-red-500/20">
+                          Reject
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => deleteLeaveRequest(r.id)}
+                      className="bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 text-xs px-3 py-1.5 rounded-lg transition-all border border-red-500/20"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+
+                {rejectingLeaveId === r.id && (
+                  <div className="mt-4 pt-4 border-t border-white/10 animate-scaleIn">
+                    <label className="block text-xs text-slate-400 mb-2 uppercase tracking-wider">Reason (optional)</label>
+                    <div className="flex gap-2">
+                      <input type="text" value={rejectionNote} onChange={e => setRejectionNote(e.target.value)}
+                        placeholder="Why is this rejected?"
+                        className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-300 text-sm focus:outline-none focus:border-red-500" />
+                      <button onClick={() => rejectLeaveRequest(r)} disabled={processingLeaveId === r.id}
+                        className="bg-red-700 hover:bg-red-600 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-lg transition-all hover:scale-105">
+                        {processingLeaveId === r.id ? 'Saving...' : 'Confirm Reject'}
+                      </button>
+                      <button onClick={() => { setRejectingLeaveId(null); setRejectionNote('') }}
+                        className="text-slate-400 hover:text-white border border-white/10 text-sm px-3 py-2 rounded-lg transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         {tab === 'tickets' && !selectedTicket && (
           <div>
             <div className="flex justify-between items-center mb-4">

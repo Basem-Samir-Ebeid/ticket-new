@@ -31,6 +31,11 @@ export default function MemberDashboard() {
   const [loggingOut, setLoggingOut] = useState(false)
   const [attendanceRecords, setAttendanceRecords] = useState([])
   const [attendanceDate, setAttendanceDate] = useState(getLocalDateString())
+  const [leaveRequests, setLeaveRequests] = useState([])
+  const [showLeaveForm, setShowLeaveForm] = useState(false)
+  const [leaveForm, setLeaveForm] = useState({ start_date: '', end_date: '', reason: '' })
+  const [leaveMsg, setLeaveMsg] = useState('')
+  const [submittingLeave, setSubmittingLeave] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -38,6 +43,7 @@ export default function MemberDashboard() {
     fetchMyRequests()
     fetchNotifications()
     checkTodayLogin()
+    fetchLeaveRequests()
 
     const channel = supabase
       .channel('member-notifs-' + user.id)
@@ -48,10 +54,22 @@ export default function MemberDashboard() {
         fetchNotifications()
         fetchTickets()
         fetchMyRequests()
+        fetchLeaveRequests()
       })
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    const leaveChannel = supabase
+      .channel('member-leaves-' + user.id)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'leave_requests',
+        filter: `user_id=eq.${user.id}`
+      }, () => fetchLeaveRequests())
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+      supabase.removeChannel(leaveChannel)
+    }
   }, [user])
 
   useEffect(() => {
@@ -196,6 +214,50 @@ export default function MemberDashboard() {
       .from('ticket_replies').select('*, profiles(full_name)')
       .eq('ticket_id', ticketId).order('created_at', { ascending: true })
     setReplies(data || [])
+  }
+
+  async function fetchLeaveRequests() {
+    const { data } = await supabase
+      .from('leave_requests').select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+    setLeaveRequests(data || [])
+  }
+
+  async function submitLeaveRequest(e) {
+    e.preventDefault()
+    setLeaveMsg('')
+    if (!leaveForm.start_date || !leaveForm.end_date) {
+      setLeaveMsg('Error: Please pick start and end dates'); return
+    }
+    if (leaveForm.end_date < leaveForm.start_date) {
+      setLeaveMsg('Error: End date must be after start date'); return
+    }
+    setSubmittingLeave(true)
+    const { error } = await supabase.from('leave_requests').insert({
+      user_id: user.id,
+      start_date: leaveForm.start_date,
+      end_date: leaveForm.end_date,
+      reason: leaveForm.reason || null,
+      status: 'pending'
+    })
+    if (error) { setLeaveMsg('Error: ' + error.message); setSubmittingLeave(false); return }
+
+    const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin')
+    if (admins && admins.length > 0) {
+      await Promise.all(admins.map(admin =>
+        supabase.from('notifications').insert({
+          user_id: admin.id,
+          message: `🌴 New leave request from ${profile?.full_name || profile?.email || 'a user'} (${leaveForm.start_date} → ${leaveForm.end_date})`
+        })
+      ))
+    }
+
+    setLeaveMsg('✓ Leave request submitted!')
+    setLeaveForm({ start_date: '', end_date: '', reason: '' })
+    setShowLeaveForm(false)
+    fetchLeaveRequests()
+    setSubmittingLeave(false)
   }
 
   async function markAsRead(id) {
@@ -377,7 +439,7 @@ export default function MemberDashboard() {
         )}
 
         <div className="flex gap-2 mb-6">
-          {['tickets', 'requests', ...(profile?.can_view_attendance ? ['attendance'] : [])].map(t => (
+          {['tickets', 'requests', 'leave', ...(profile?.can_view_attendance ? ['attendance'] : [])].map(t => (
             <button key={t} onClick={() => setActiveTab(t)}
               className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${activeTab===t ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>
               {t}
@@ -474,6 +536,88 @@ export default function MemberDashboard() {
                   </div>
                   <h3 className="text-white font-medium">{r.title}</h3>
                   {r.description && <p className="text-slate-400 text-sm mt-1">{r.description}</p>}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {activeTab === 'leave' && (
+          <>
+            <div className="mb-4 flex items-center justify-between">
+              <button
+                onClick={() => { setShowLeaveForm(v => !v); setLeaveMsg('') }}
+                className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg"
+              >
+                {showLeaveForm ? 'Close' : '+ Request Leave'}
+              </button>
+              <div className="text-xs text-slate-400 flex gap-3">
+                <span>Pending: <span className="text-yellow-400 font-medium">{leaveRequests.filter(r => r.status === 'pending').length}</span></span>
+                <span>Approved: <span className="text-green-400 font-medium">{leaveRequests.filter(r => r.status === 'approved').length}</span></span>
+                <span>Rejected: <span className="text-red-400 font-medium">{leaveRequests.filter(r => r.status === 'rejected').length}</span></span>
+              </div>
+            </div>
+
+            {showLeaveForm && (
+              <form onSubmit={submitLeaveRequest} className="glass rounded-xl p-5 mb-4 space-y-4">
+                {leaveMsg && <div className={`${leaveMsg.startsWith('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'} text-sm rounded-lg p-3`}>{leaveMsg}</div>}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Start Date</label>
+                    <input type="date" required value={leaveForm.start_date}
+                      onChange={e => setLeaveForm(f => ({ ...f, start_date: e.target.value }))}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">End Date</label>
+                    <input type="date" required value={leaveForm.end_date}
+                      onChange={e => setLeaveForm(f => ({ ...f, end_date: e.target.value }))}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                  </div>
+                </div>
+                <textarea placeholder="Reason (optional)" rows={3} value={leaveForm.reason}
+                  onChange={e => setLeaveForm(f => ({ ...f, reason: e.target.value }))}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" />
+                <div className="flex gap-2">
+                  <button type="submit" disabled={submittingLeave}
+                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
+                    {submittingLeave ? 'Submitting...' : 'Submit Leave Request'}
+                  </button>
+                  <button type="button" onClick={() => setShowLeaveForm(false)}
+                    className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
+                </div>
+              </form>
+            )}
+
+            <div className="space-y-3">
+              {leaveRequests.length === 0 && (
+                <div className="glass rounded-xl py-12 text-center text-slate-500">No leave requests yet</div>
+              )}
+              {leaveRequests.map(r => (
+                <div key={r.id} className={`glass rounded-xl p-4 border ${
+                  r.status === 'pending' ? 'border-yellow-500/20' :
+                  r.status === 'approved' ? 'border-green-500/20' :
+                  'border-red-500/20'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                      r.status === 'approved' ? 'bg-green-900/30 text-green-400' :
+                      r.status === 'rejected' ? 'bg-red-900/30 text-red-400' :
+                      'bg-yellow-900/30 text-yellow-400'
+                    }`}>
+                      {r.status === 'pending' ? '⏳ Pending' : r.status === 'approved' ? '✅ Approved' : '❌ Rejected'}
+                    </span>
+                    <span className="text-slate-500 text-xs">Submitted {new Date(r.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <p className="text-white font-medium">
+                    {new Date(r.start_date).toLocaleDateString()} → {new Date(r.end_date).toLocaleDateString()}
+                  </p>
+                  {r.reason && <p className="text-slate-400 text-sm mt-1">{r.reason}</p>}
+                  {r.admin_note && (
+                    <p className="text-slate-300 text-xs mt-2 bg-white/5 rounded-lg p-2">
+                      <span className="text-slate-500">Admin note: </span>{r.admin_note}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
