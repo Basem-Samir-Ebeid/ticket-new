@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
 
 export default function Login() {
   const { signIn } = useAuth()
@@ -8,29 +7,12 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showReset, setShowReset] = useState(false)
-  const [resetEmail, setResetEmail] = useState('')
-  const [resetMsg, setResetMsg] = useState('')
 
   async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true); setError('')
     const { error } = await signIn(email, password)
     if (error) setError(error.message)
-    setLoading(false)
-  }
-
-  async function handleReset(e) {
-    e.preventDefault()
-    setLoading(true); setResetMsg('')
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    })
-    if (error) {
-      setResetMsg('Error: ' + error.message)
-    } else {
-      setResetMsg('✓ Check your email for reset link')
-    }
     setLoading(false)
   }
 
@@ -47,65 +29,32 @@ export default function Login() {
           <p className="text-slate-400 text-sm mt-1">Sign in to your account</p>
         </div>
 
-        {!showReset ? (
-          <form onSubmit={handleSubmit} className="glass rounded-2xl p-6 space-y-4 animate-scaleIn">
-            {error && <div className="bg-red-900/30 border border-red-500/30 text-red-400 text-sm rounded-lg p-3 animate-fadeIn">{error}</div>}
-            <div>
-              <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Email</label>
-              <input
-                type="email" required value={email} onChange={e => setEmail(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-all"
-                placeholder="you@company.com"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Password</label>
-              <input
-                type="password" required value={password} onChange={e => setPassword(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-all"
-                placeholder="••••••••"
-              />
-            </div>
-            <button
-              type="submit" disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm transition-all mt-2 hover:scale-105"
-            >
-              {loading ? 'Signing in...' : 'Sign In'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowReset(true)}
-              className="w-full text-slate-400 hover:text-white text-xs mt-2"
-            >
-              Forgot password?
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleReset} className="glass rounded-2xl p-6 space-y-4 animate-scaleIn">
-            {resetMsg && <div className={`${resetMsg.includes('Error') ? 'bg-red-900/30 border-red-500/30 text-red-400' : 'bg-green-900/30 border-green-500/30 text-green-400'} border text-sm rounded-lg p-3 animate-fadeIn`}>{resetMsg}</div>}
-            <div>
-              <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Email</label>
-              <input
-                type="email" required value={resetEmail} onChange={e => setResetEmail(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-all"
-                placeholder="you@company.com"
-              />
-            </div>
-            <button
-              type="submit" disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm transition-all hover:scale-105"
-            >
-              {loading ? 'Sending...' : 'Send Reset Link'}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setShowReset(false); setResetMsg('') }}
-              className="w-full text-slate-400 hover:text-white text-xs"
-            >
-              ← Back to Sign In
-            </button>
-          </form>
-        )}
+        <form onSubmit={handleSubmit} className="glass rounded-2xl p-6 space-y-4 animate-scaleIn">
+          {error && <div className="bg-red-900/30 border border-red-500/30 text-red-400 text-sm rounded-lg p-3 animate-fadeIn">{error}</div>}
+          <div>
+            <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Email</label>
+            <input
+              type="email" required value={email} onChange={e => setEmail(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-all"
+              placeholder="you@company.com"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Password</label>
+            <input
+              type="password" required value={password} onChange={e => setPassword(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-all"
+              placeholder="••••••••"
+              autoComplete="current-password"
+            />
+          </div>
+          <button
+            type="submit" disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm transition-all mt-2 hover:scale-105"
+          >
+            {loading ? 'Signing in...' : 'Sign In'}
+          </button>
+        </form>
       </div>
     </div>
   )

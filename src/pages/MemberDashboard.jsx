@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
 import StatusBadge from '../components/StatusBadge'
@@ -44,32 +44,6 @@ export default function MemberDashboard() {
     fetchNotifications()
     checkTodayLogin()
     fetchLeaveRequests()
-
-    const channel = supabase
-      .channel('member-notifs-' + user.id)
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'notifications',
-        filter: `user_id=eq.${user.id}`
-      }, () => {
-        fetchNotifications()
-        fetchTickets()
-        fetchMyRequests()
-        fetchLeaveRequests()
-      })
-      .subscribe()
-
-    const leaveChannel = supabase
-      .channel('member-leaves-' + user.id)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'leave_requests',
-        filter: `user_id=eq.${user.id}`
-      }, () => fetchLeaveRequests())
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-      supabase.removeChannel(leaveChannel)
-    }
   }, [user])
 
   useEffect(() => {
@@ -77,242 +51,104 @@ export default function MemberDashboard() {
   }, [selectedTicket])
 
   useEffect(() => {
-    if (profile?.can_view_attendance) {
-      fetchAttendanceRecords()
-    }
+    if (profile?.can_view_attendance) fetchAttendanceRecords()
   }, [profile?.can_view_attendance, attendanceDate])
 
   async function checkTodayLogin() {
-    const today = getLocalDateString()
-    const { data, error } = await supabase
-      .from('login_times')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('date', today)
-      .maybeSingle()
-    setTodayLogin(data)
+    try { setTodayLogin(await api.getTodayAttendance()) } catch {}
   }
 
   async function registerLogin() {
     setLoggingIn(true)
-
-    if (!navigator.geolocation) {
-      alert('Geolocation not supported')
+    if (!navigator.geolocation) { alert('Geolocation not supported'); setLoggingIn(false); return }
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      try { await api.registerLogin(pos.coords.latitude, pos.coords.longitude); await checkTodayLogin() } catch (e) { alert(e.message) }
       setLoggingIn(false)
-      return
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { error } = await supabase.rpc('register_attendance', {
-            user_lat: position.coords.latitude,
-            user_lon: position.coords.longitude
-          })
-
-          if (error) {
-            alert(error.message)
-          } else {
-            checkTodayLogin()
-          }
-        } catch (err) {
-          alert('Unexpected error')
-        }
-
-        setLoggingIn(false)
-      },
-      () => {
-        alert('Location permission is required')
-        setLoggingIn(false)
-      }
-    )
+    }, () => { alert('Location permission is required'); setLoggingIn(false) })
   }
 
   async function registerLogout() {
     if (!todayLogin || todayLogin.logout_time) return
     setLoggingOut(true)
-
-    if (!navigator.geolocation) {
-      alert('Geolocation not supported')
+    if (!navigator.geolocation) { alert('Geolocation not supported'); setLoggingOut(false); return }
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      try { await api.registerLogout(pos.coords.latitude, pos.coords.longitude); await checkTodayLogin() } catch (e) { alert(e.message) }
       setLoggingOut(false)
-      return
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { error } = await supabase.rpc('register_logout', {
-            user_lat: position.coords.latitude,
-            user_lon: position.coords.longitude
-          })
-
-          if (error) {
-            alert(error.message)
-          } else {
-            checkTodayLogin()
-          }
-        } catch (err) {
-          alert('Unexpected error')
-        }
-
-        setLoggingOut(false)
-      },
-      () => {
-        alert('Location permission is required')
-        setLoggingOut(false)
-      }
-    )
+    }, () => { alert('Location permission is required'); setLoggingOut(false) })
   }
 
   async function fetchAttendanceRecords() {
-    const { data, error } = await supabase.rpc('get_attendance_records', {
-      target_date: attendanceDate
-    })
-    if (error) {
-      console.error('Attendance fetch error:', error)
-      setAttendanceRecords([])
-      return
-    }
-    setAttendanceRecords(data || [])
+    try { setAttendanceRecords(await api.getAttendance(attendanceDate)) } catch { setAttendanceRecords([]) }
   }
 
-  function formatWorkDuration(startTime, endTime) {
-    if (!startTime || !endTime) return null
-    const diff = new Date(endTime) - new Date(startTime)
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-    return `${hours}h ${minutes}m`
+  function formatWorkDuration(s, e) {
+    if (!s || !e) return null
+    const d = new Date(e) - new Date(s)
+    return `${Math.floor(d/(1000*60*60))}h ${Math.floor((d%(1000*60*60))/(1000*60))}m`
   }
 
   async function fetchTickets() {
-    const { data } = await supabase
-      .from('tickets').select('*')
-      .eq('assigned_to', user.id)
-      .eq('is_request', false)
-      .order('created_at', { ascending: false })
-    setTickets(data || [])
+    try { setTickets(await api.getTickets()) } catch {}
   }
-
   async function fetchMyRequests() {
-    const { data } = await supabase
-      .from('tickets').select('*')
-      .eq('created_by', user.id).eq('is_request', true)
-      .order('created_at', { ascending: false })
-    setMyRequests(data || [])
+    try { setMyRequests(await api.getRequests()) } catch {}
   }
-
   async function fetchNotifications() {
-    const { data } = await supabase
-      .from('notifications').select('*')
-      .eq('user_id', user.id).eq('read', false)
-      .order('created_at', { ascending: false })
-    setNotifications(data || [])
+    try { setNotifications(await api.getNotifications()) } catch {}
   }
-
-  async function fetchReplies(ticketId) {
-    const { data } = await supabase
-      .from('ticket_replies').select('*, profiles(full_name)')
-      .eq('ticket_id', ticketId).order('created_at', { ascending: true })
-    setReplies(data || [])
-  }
-
   async function fetchLeaveRequests() {
-    const { data } = await supabase
-      .from('leave_requests').select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-    setLeaveRequests(data || [])
+    try { setLeaveRequests(await api.getLeaves()) } catch {}
+  }
+  async function fetchReplies(ticketId) {
+    try { setReplies(await api.getReplies(ticketId)) } catch {}
   }
 
   async function submitLeaveRequest(e) {
-    e.preventDefault()
-    setLeaveMsg('')
-    if (!leaveForm.start_date || !leaveForm.end_date) {
-      setLeaveMsg('Error: Please pick start and end dates'); return
-    }
-    if (leaveForm.end_date < leaveForm.start_date) {
-      setLeaveMsg('Error: End date must be after start date'); return
-    }
+    e.preventDefault(); setLeaveMsg('')
+    if (!leaveForm.start_date || !leaveForm.end_date) { setLeaveMsg('Error: Please pick start and end dates'); return }
+    if (leaveForm.end_date < leaveForm.start_date) { setLeaveMsg('Error: End date must be after start date'); return }
     setSubmittingLeave(true)
-    const { error } = await supabase.from('leave_requests').insert({
-      user_id: user.id,
-      start_date: leaveForm.start_date,
-      end_date: leaveForm.end_date,
-      reason: leaveForm.reason || null,
-      status: 'pending'
-    })
-    if (error) { setLeaveMsg('Error: ' + error.message); setSubmittingLeave(false); return }
-
-    const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin')
-    if (admins && admins.length > 0) {
-      await Promise.all(admins.map(admin =>
-        supabase.from('notifications').insert({
-          user_id: admin.id,
-          message: `🌴 New leave request from ${profile?.full_name || profile?.email || 'a user'} (${leaveForm.start_date} → ${leaveForm.end_date})`
-        })
-      ))
-    }
-
-    setLeaveMsg('✓ Leave request submitted!')
-    setLeaveForm({ start_date: '', end_date: '', reason: '' })
-    setShowLeaveForm(false)
-    fetchLeaveRequests()
+    try {
+      await api.createLeave(leaveForm)
+      setLeaveMsg('✓ Leave request submitted!')
+      setLeaveForm({ start_date: '', end_date: '', reason: '' })
+      setShowLeaveForm(false)
+      fetchLeaveRequests()
+    } catch (e) { setLeaveMsg('Error: ' + e.message) }
     setSubmittingLeave(false)
   }
 
   async function markAsRead(id) {
-    await supabase.from('notifications').update({ read: true }).eq('id', id)
-    fetchNotifications()
+    try { await api.markRead(id); fetchNotifications() } catch {}
   }
 
   async function submitRequest(e) {
-    e.preventDefault()
-    setLoading(true)
-    setRequestMsg('')
-    const { data: ticket, error } = await supabase
-      .from('tickets').insert({
-        title: requestForm.title, description: requestForm.description,
+    e.preventDefault(); setLoading(true); setRequestMsg('')
+    try {
+      await api.createTicket({
+        title: requestForm.title,
+        description: requestForm.description,
         affected_person: requestForm.affected_person,
-        created_by: user.id, assigned_to: null, status: 'opened',
-        is_request: true, request_status: 'pending_review'
-      }).select().single()
-
-    if (error) { setRequestMsg('Error: ' + error.message); setLoading(false); return }
-
-    const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin')
-    if (admins && admins.length > 0) {
-      await Promise.all(admins.map(admin => 
-        supabase.from('notifications').insert({
-          user_id: admin.id, ticket_id: ticket.id,
-          message: `📝 New ticket request: ${requestForm.title}`
-        })
-      ))
-    }
-
-    setRequestMsg('✓ Request submitted!')
-    setRequestForm({ title: '', description: '', affected_person: '' })
-    setShowRequestForm(false)
-    fetchMyRequests()
+        is_request: true,
+      })
+      setRequestMsg('✓ Request submitted!')
+      setRequestForm({ title: '', description: '', affected_person: '' })
+      setShowRequestForm(false)
+      fetchMyRequests()
+    } catch (e) { setRequestMsg('Error: ' + e.message) }
     setLoading(false)
   }
 
   async function submitReview(ticketId) {
     if (!review.trim()) return
     setSubmittingReview(true)
-    await supabase.from('tickets').update({ review }).eq('id', ticketId)
-    const { data: ticket } = await supabase.from('tickets').select('assigned_to').eq('id', ticketId).single()
-    if (ticket?.assigned_to) {
-      await supabase.from('notifications').insert({
-        user_id: ticket.assigned_to, ticket_id: ticketId,
-        message: `📝 New review received on ticket`
-      })
-    }
-    setReview('')
+    try {
+      await api.updateTicket(ticketId, { review })
+      setReview('')
+      fetchTickets()
+      if (selectedTicket?.id === ticketId) setSelectedTicket(p => ({...p, review}))
+    } catch {}
     setSubmittingReview(false)
-    fetchTickets()
-    if (selectedTicket?.id === ticketId) {
-      setSelectedTicket(prev => ({ ...prev, review }))
-    }
   }
 
   const filtered = filter === 'all' ? tickets : tickets.filter(t => t.status === filter)
@@ -322,8 +158,8 @@ export default function MemberDashboard() {
       <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
         <Navbar title="Ticket Details" />
         <div className="max-w-4xl mx-auto p-6">
-          <button onClick={() => setSelectedTicket(null)} className="text-slate-400 hover:text-white text-sm mb-4">← Back</button>
-          
+          <button onClick={()=>setSelectedTicket(null)} className="text-slate-400 hover:text-white text-sm mb-4">← Back</button>
+
           <div className="glass rounded-xl p-5 mb-5">
             <div className="flex items-center gap-2 mb-3">
               <StatusBadge status={selectedTicket.status} />
@@ -354,18 +190,8 @@ export default function MemberDashboard() {
           {selectedTicket.status === 'solved' && !selectedTicket.review && (
             <div className="glass rounded-xl p-5">
               <h3 className="text-white font-medium mb-3">Leave a Review</h3>
-              <textarea
-                value={review}
-                onChange={e => setReview(e.target.value)}
-                placeholder="How was your experience?"
-                rows={3}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none mb-3"
-              />
-              <button
-                onClick={() => submitReview(selectedTicket.id)}
-                disabled={submittingReview || !review.trim()}
-                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg"
-              >
+              <textarea value={review} onChange={e=>setReview(e.target.value)} placeholder="How was your experience?" rows={3} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none mb-3" />
+              <button onClick={()=>submitReview(selectedTicket.id)} disabled={submittingReview||!review.trim()} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
                 {submittingReview ? 'Submitting...' : 'Submit Review'}
               </button>
             </div>
@@ -379,7 +205,7 @@ export default function MemberDashboard() {
     <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
       <Navbar title="My Dashboard" />
       <div className="max-w-4xl mx-auto p-6">
-        {/* Login Time Card */}
+        {/* Attendance */}
         <div className="glass rounded-xl p-5 mb-6">
           <div className="flex items-center justify-between">
             <div>
@@ -387,63 +213,36 @@ export default function MemberDashboard() {
               {todayLogin ? (
                 <div>
                   <p className="text-white text-lg font-medium">✓ Logged at {new Date(todayLogin.login_time).toLocaleTimeString()}</p>
-                  <p className="text-slate-300 text-sm mt-1">
-                    Sign Off: {todayLogin.logout_time ? new Date(todayLogin.logout_time).toLocaleTimeString() : 'Not signed off yet'}
-                  </p>
-                  {todayLogin.logout_time && (
-                    <p className="text-green-400 text-xs mt-1">
-                      Worked: {formatWorkDuration(todayLogin.login_time, todayLogin.logout_time)}
-                    </p>
-                  )}
-                  {todayLogin.latitude && (
-                    <p className="text-slate-400 text-xs mt-1">📍 Location: {todayLogin.latitude.toFixed(4)}, {todayLogin.longitude.toFixed(4)}</p>
-                  )}
+                  <p className="text-slate-300 text-sm mt-1">Sign Off: {todayLogin.logout_time ? new Date(todayLogin.logout_time).toLocaleTimeString() : 'Not signed off yet'}</p>
+                  {todayLogin.logout_time && <p className="text-green-400 text-xs mt-1">Worked: {formatWorkDuration(todayLogin.login_time, todayLogin.logout_time)}</p>}
+                  {todayLogin.latitude && <p className="text-slate-400 text-xs mt-1">📍 {todayLogin.latitude.toFixed(4)}, {todayLogin.longitude.toFixed(4)}</p>}
                 </div>
-              ) : (
-                <p className="text-slate-500">Not logged yet</p>
-              )}
+              ) : <p className="text-slate-500">Not logged yet</p>}
             </div>
             <div className="flex gap-2">
-              {!todayLogin && (
-                <button
-                  onClick={registerLogin}
-                  disabled={loggingIn}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition-all hover:scale-105"
-                >
-                  {loggingIn ? 'Logging...' : 'Register Login'}
-                </button>
-              )}
-              {todayLogin && !todayLogin.logout_time && (
-                <button
-                  onClick={registerLogout}
-                  disabled={loggingOut}
-                  className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition-all hover:scale-105"
-                >
-                  {loggingOut ? 'Signing Off...' : 'Sign Off'}
-                </button>
-              )}
+              {!todayLogin && <button onClick={registerLogin} disabled={loggingIn} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{loggingIn ? 'Logging...' : 'Register Login'}</button>}
+              {todayLogin && !todayLogin.logout_time && <button onClick={registerLogout} disabled={loggingOut} className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{loggingOut ? 'Signing Off...' : 'Sign Off'}</button>}
             </div>
           </div>
         </div>
 
+        {/* Notifications */}
         {notifications.length > 0 && (
           <div className="glass rounded-xl p-4 mb-6 space-y-2">
             <h3 className="text-white text-sm font-medium mb-2">🔔 Notifications ({notifications.length})</h3>
             {notifications.slice(0, 3).map(n => (
               <div key={n.id} className="bg-white/5 rounded-lg p-3 flex justify-between items-start gap-3">
                 <p className="text-slate-300 text-sm flex-1">{n.message}</p>
-                <button onClick={() => markAsRead(n.id)} className="text-xs text-blue-400 hover:text-blue-300 whitespace-nowrap">Mark Read</button>
+                <button onClick={()=>markAsRead(n.id)} className="text-xs text-blue-400 hover:text-blue-300 whitespace-nowrap">Mark Read</button>
               </div>
             ))}
           </div>
         )}
 
+        {/* Tabs */}
         <div className="flex gap-2 mb-6">
           {['tickets', 'requests', 'leave', ...(profile?.can_view_attendance ? ['attendance'] : [])].map(t => (
-            <button key={t} onClick={() => setActiveTab(t)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${activeTab===t ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>
-              {t}
-            </button>
+            <button key={t} onClick={()=>setActiveTab(t)} className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${activeTab===t ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>{t}</button>
           ))}
         </div>
 
@@ -455,12 +254,9 @@ export default function MemberDashboard() {
                 { label: 'Opened', val: tickets.filter(t=>t.status==='opened').length, color: 'text-blue-400', icon: '🔵' },
                 { label: 'Pending', val: tickets.filter(t=>t.status==='pending').length, color: 'text-yellow-400', icon: '🟡' },
                 { label: 'Solved', val: tickets.filter(t=>t.status==='solved').length, color: 'text-green-400', icon: '✅' },
-              ].map((s, i) => (
+              ].map(s => (
                 <div key={s.label} className="glass rounded-xl p-4">
-                  <p className="text-xs text-slate-400 mb-1 flex items-center gap-2">
-                    <span>{s.icon}</span>
-                    {s.label}
-                  </p>
+                  <p className="text-xs text-slate-400 mb-1 flex items-center gap-2"><span>{s.icon}</span>{s.label}</p>
                   <p className={`text-2xl font-semibold ${s.color}`}>{s.val}</p>
                 </div>
               ))}
@@ -468,17 +264,14 @@ export default function MemberDashboard() {
 
             <div className="flex gap-2 mb-4">
               {['all','opened','pending','solved'].map(f => (
-                <button key={f} onClick={() => setFilter(f)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${filter===f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>
-                  {f}
-                </button>
+                <button key={f} onClick={()=>setFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${filter===f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>{f}</button>
               ))}
             </div>
 
             <div className="space-y-3">
               {filtered.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">No tickets</div>}
               {filtered.map(t => (
-                <div key={t.id} className="glass rounded-xl p-4 cursor-pointer" onClick={() => setSelectedTicket(t)}>
+                <div key={t.id} className="glass rounded-xl p-4 cursor-pointer" onClick={()=>setSelectedTicket(t)}>
                   <div className="flex items-center gap-2 mb-1">
                     <StatusBadge status={t.status} />
                     <span className="text-slate-500 text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
@@ -494,28 +287,18 @@ export default function MemberDashboard() {
         {activeTab === 'requests' && (
           <>
             <div className="mb-4">
-              <button
-                onClick={() => setShowRequestForm(v => !v)}
-                className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg"
-              >
-                + New Request
-              </button>
+              <button onClick={()=>setShowRequestForm(v=>!v)} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg">+ New Request</button>
             </div>
 
             {showRequestForm && (
               <form onSubmit={submitRequest} className="glass rounded-xl p-5 mb-4 space-y-4">
                 {requestMsg && <div className={`${requestMsg.includes('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'} text-sm rounded-lg p-3`}>{requestMsg}</div>}
-                <input type="text" required placeholder="Title" value={requestForm.title} onChange={e => setRequestForm(f => ({...f,title:e.target.value}))}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
-                <textarea required placeholder="Description" rows={3} value={requestForm.description} onChange={e => setRequestForm(f => ({...f,description:e.target.value}))}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" />
-                <input type="text" placeholder="Affected Person (optional)" value={requestForm.affected_person} onChange={e => setRequestForm(f => ({...f,affected_person:e.target.value}))}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                <input type="text" required placeholder="Title" value={requestForm.title} onChange={e=>setRequestForm(f=>({...f,title:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                <textarea required placeholder="Description" rows={3} value={requestForm.description} onChange={e=>setRequestForm(f=>({...f,description:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" />
+                <input type="text" placeholder="Affected Person (optional)" value={requestForm.affected_person} onChange={e=>setRequestForm(f=>({...f,affected_person:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
                 <div className="flex gap-2">
-                  <button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
-                    {loading ? 'Submitting...' : 'Submit Request'}
-                  </button>
-                  <button type="button" onClick={() => setShowRequestForm(false)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
+                  <button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{loading ? 'Submitting...' : 'Submit Request'}</button>
+                  <button type="button" onClick={()=>setShowRequestForm(false)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
                 </div>
               </form>
             )}
@@ -525,11 +308,7 @@ export default function MemberDashboard() {
               {myRequests.map(r => (
                 <div key={r.id} className="glass rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                      r.request_status === 'accepted' ? 'bg-green-900/30 text-green-400' :
-                      r.request_status === 'refused' ? 'bg-red-900/30 text-red-400' :
-                      'bg-yellow-900/30 text-yellow-400'
-                    }`}>
+                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${r.request_status==='accepted' ? 'bg-green-900/30 text-green-400' : r.request_status==='refused' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
                       {r.request_status?.replace('_', ' ')}
                     </span>
                     <span className="text-slate-500 text-xs">{new Date(r.created_at).toLocaleDateString()}</span>
@@ -545,79 +324,48 @@ export default function MemberDashboard() {
         {activeTab === 'leave' && (
           <>
             <div className="mb-4 flex items-center justify-between">
-              <button
-                onClick={() => { setShowLeaveForm(v => !v); setLeaveMsg('') }}
-                className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg"
-              >
+              <button onClick={()=>{setShowLeaveForm(v=>!v);setLeaveMsg('')}} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg">
                 {showLeaveForm ? 'Close' : '+ Request Leave'}
               </button>
               <div className="text-xs text-slate-400 flex gap-3">
-                <span>Pending: <span className="text-yellow-400 font-medium">{leaveRequests.filter(r => r.status === 'pending').length}</span></span>
-                <span>Approved: <span className="text-green-400 font-medium">{leaveRequests.filter(r => r.status === 'approved').length}</span></span>
-                <span>Rejected: <span className="text-red-400 font-medium">{leaveRequests.filter(r => r.status === 'rejected').length}</span></span>
+                <span>Pending: <span className="text-yellow-400 font-medium">{leaveRequests.filter(r=>r.status==='pending').length}</span></span>
+                <span>Approved: <span className="text-green-400 font-medium">{leaveRequests.filter(r=>r.status==='approved').length}</span></span>
               </div>
             </div>
 
             {showLeaveForm && (
-              <form onSubmit={submitLeaveRequest} className="glass rounded-xl p-5 mb-4 space-y-4">
+              <form onSubmit={submitLeaveRequest} className="glass rounded-xl p-5 mb-4 space-y-3">
                 {leaveMsg && <div className={`${leaveMsg.startsWith('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'} text-sm rounded-lg p-3`}>{leaveMsg}</div>}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Start Date</label>
-                    <input type="date" required value={leaveForm.start_date}
-                      onChange={e => setLeaveForm(f => ({ ...f, start_date: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                    <input type="date" required value={leaveForm.start_date} onChange={e=>setLeaveForm(f=>({...f,start_date:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
                   </div>
                   <div>
                     <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">End Date</label>
-                    <input type="date" required value={leaveForm.end_date}
-                      onChange={e => setLeaveForm(f => ({ ...f, end_date: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                    <input type="date" required value={leaveForm.end_date} onChange={e=>setLeaveForm(f=>({...f,end_date:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
                   </div>
                 </div>
-                <textarea placeholder="Reason (optional)" rows={3} value={leaveForm.reason}
-                  onChange={e => setLeaveForm(f => ({ ...f, reason: e.target.value }))}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" />
+                <textarea placeholder="Reason (optional)" rows={2} value={leaveForm.reason} onChange={e=>setLeaveForm(f=>({...f,reason:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" />
                 <div className="flex gap-2">
-                  <button type="submit" disabled={submittingLeave}
-                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
-                    {submittingLeave ? 'Submitting...' : 'Submit Leave Request'}
-                  </button>
-                  <button type="button" onClick={() => setShowLeaveForm(false)}
-                    className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
+                  <button type="submit" disabled={submittingLeave} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{submittingLeave ? 'Submitting...' : 'Submit'}</button>
+                  <button type="button" onClick={()=>setShowLeaveForm(false)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
                 </div>
               </form>
             )}
 
-            <div className="space-y-3">
-              {leaveRequests.length === 0 && (
-                <div className="glass rounded-xl py-12 text-center text-slate-500">No leave requests yet</div>
-              )}
+            <div className="space-y-2">
+              {leaveRequests.length === 0 && <p className="text-slate-500 text-sm text-center py-4">No leave requests yet</p>}
               {leaveRequests.map(r => (
-                <div key={r.id} className={`glass rounded-xl p-4 border ${
-                  r.status === 'pending' ? 'border-yellow-500/20' :
-                  r.status === 'approved' ? 'border-green-500/20' :
-                  'border-red-500/20'
-                }`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                      r.status === 'approved' ? 'bg-green-900/30 text-green-400' :
-                      r.status === 'rejected' ? 'bg-red-900/30 text-red-400' :
-                      'bg-yellow-900/30 text-yellow-400'
-                    }`}>
-                      {r.status === 'pending' ? '⏳ Pending' : r.status === 'approved' ? '✅ Approved' : '❌ Rejected'}
+                <div key={r.id} className={`bg-white/5 rounded-lg p-3 border ${r.status==='pending' ? 'border-yellow-500/20' : r.status==='approved' ? 'border-green-500/20' : 'border-red-500/20'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${r.status==='approved' ? 'bg-green-900/30 text-green-400' : r.status==='rejected' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                      {r.status==='pending' ? '⏳ Pending' : r.status==='approved' ? '✅ Approved' : '❌ Rejected'}
                     </span>
-                    <span className="text-slate-500 text-xs">Submitted {new Date(r.created_at).toLocaleDateString()}</span>
+                    <span className="text-slate-300 text-sm">{new Date(r.start_date).toLocaleDateString()} → {new Date(r.end_date).toLocaleDateString()}</span>
                   </div>
-                  <p className="text-white font-medium">
-                    {new Date(r.start_date).toLocaleDateString()} → {new Date(r.end_date).toLocaleDateString()}
-                  </p>
-                  {r.reason && <p className="text-slate-400 text-sm mt-1">{r.reason}</p>}
-                  {r.admin_note && (
-                    <p className="text-slate-300 text-xs mt-2 bg-white/5 rounded-lg p-2">
-                      <span className="text-slate-500">Admin note: </span>{r.admin_note}
-                    </p>
-                  )}
+                  {r.reason && <p className="text-slate-400 text-xs mt-1">{r.reason}</p>}
+                  {r.admin_note && <p className="text-slate-300 text-xs mt-2 bg-white/5 rounded p-2"><span className="text-slate-500">Admin note: </span>{r.admin_note}</p>}
                 </div>
               ))}
             </div>
@@ -625,49 +373,37 @@ export default function MemberDashboard() {
         )}
 
         {activeTab === 'attendance' && profile?.can_view_attendance && (
-          <div>
-            <div className="flex items-center justify-between mb-6">
+          <>
+            <div className="flex items-center justify-between mb-4">
               <h2 className="text-white font-medium">Attendance Table</h2>
-              <input
-                type="date"
-                value={attendanceDate}
-                onChange={e => setAttendanceDate(e.target.value)}
-                className="bg-white/5 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-              />
+              <input type="date" value={attendanceDate} onChange={e=>setAttendanceDate(e.target.value)} className="bg-white/5 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" />
             </div>
-
             <div className="glass rounded-2xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/8">
-                    {['Name', 'Email', 'Role', 'Login Time', 'Sign Off', 'Worked', 'Date'].map(h => (
+                    {['Name','Email','Role','Login Time','Sign Off','Worked','Date'].map(h => (
                       <th key={h} className="text-left text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {attendanceRecords.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="text-center text-slate-500 py-8">
-                        No attendance recorded for {new Date(attendanceDate).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  )}
-                  {attendanceRecords.map(record => (
-                    <tr key={record.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
-                      <td className="px-4 py-3 text-white font-medium">{record.full_name || '—'}</td>
-                      <td className="px-4 py-3 text-slate-300">{record.email}</td>
-                      <td className="px-4 py-3 text-slate-300 capitalize">{record.role}</td>
-                      <td className="px-4 py-3 text-white font-mono">{new Date(record.login_time).toLocaleTimeString()}</td>
-                      <td className="px-4 py-3 text-slate-300 font-mono">{record.logout_time ? new Date(record.logout_time).toLocaleTimeString() : 'Still working'}</td>
-                      <td className="px-4 py-3 text-green-400 text-xs font-medium">{record.logout_time ? formatWorkDuration(record.login_time, record.logout_time) : 'In progress'}</td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">{new Date(record.date).toLocaleDateString()}</td>
+                  {attendanceRecords.length === 0 && <tr><td colSpan={7} className="text-center text-slate-500 py-8">No attendance recorded</td></tr>}
+                  {attendanceRecords.map(r => (
+                    <tr key={r.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
+                      <td className="px-4 py-3 text-white font-medium">{r.full_name||'—'}</td>
+                      <td className="px-4 py-3 text-slate-300">{r.email}</td>
+                      <td className="px-4 py-3"><span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${r.role==='admin' ? 'bg-purple-900/30 text-purple-400' : r.role==='employee' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-900/30 text-slate-400'}`}>{r.role}</span></td>
+                      <td className="px-4 py-3 text-white font-mono">{new Date(r.login_time).toLocaleTimeString()}</td>
+                      <td className="px-4 py-3 text-slate-300 font-mono">{r.logout_time ? new Date(r.logout_time).toLocaleTimeString() : 'Still working'}</td>
+                      <td className="px-4 py-3 text-green-400 text-xs">{r.logout_time ? formatWorkDuration(r.login_time, r.logout_time) : 'In progress'}</td>
+                      <td className="px-4 py-3 text-slate-400 text-xs">{new Date(r.date).toLocaleDateString()}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>

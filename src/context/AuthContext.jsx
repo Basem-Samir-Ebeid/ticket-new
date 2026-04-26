@@ -1,7 +1,5 @@
-// src/context/AuthContext.jsx
-
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { api, connectWS, disconnectWS } from '../lib/api'
 
 const AuthContext = createContext({})
 export const useAuth = () => useContext(AuthContext)
@@ -18,129 +16,84 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  async function loadProfile(userId) {
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
-
-    if (error) {
-      throw error
+  function handleWsEvent(event, data) {
+    if (event === 'session_revoked') {
+      forceSignOut()
     }
-
-    setProfile(data ?? null)
-    return data ?? null
   }
 
-  async function forceLocalSignOut() {
+  async function loadUser() {
+    const token = localStorage.getItem('auth_token')
+    if (!token) { setLoading(false); return }
+    try {
+      const prof = await api.me()
+      if (!prof) { localStorage.removeItem('auth_token'); setLoading(false); return }
+      setUser({ id: prof.id })
+      setProfile(prof)
+      connectWS(token, handleWsEvent)
+    } catch {
+      localStorage.removeItem('auth_token')
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => { loadUser() }, [])
+
+  // Re-check profile every 15s and on focus
+  useEffect(() => {
+    if (!user) return
+    const check = async () => {
+      try {
+        const prof = await api.me()
+        if (!prof) { forceSignOut(); return }
+        setProfile(prof)
+      } catch {
+        forceSignOut()
+      }
+    }
+    const interval = setInterval(check, 15000)
+    window.addEventListener('focus', check)
+    return () => { clearInterval(interval); window.removeEventListener('focus', check) }
+  }, [user])
+
+  async function forceSignOut() {
+    localStorage.removeItem('auth_token')
+    disconnectWS()
     setUser(null)
     setProfile(null)
-    await supabase.auth.signOut()
   }
 
-  async function ensureActiveAccount(userId) {
+  async function signIn(email, password) {
     try {
-      const activeProfile = await loadProfile(userId)
-
-      // If the user's profile was deleted by admin, end the local session too.
-      if (!activeProfile) {
-        await forceLocalSignOut()
-        return false
-      }
-
-      return true
-    } catch (_) {
-      return true
+      const { token, user: prof } = await api.login(email, password)
+      localStorage.setItem('auth_token', token)
+      setUser({ id: prof.id })
+      setProfile(prof)
+      connectWS(token, handleWsEvent)
+      return { data: { user: prof }, error: null }
+    } catch (err) {
+      return { data: null, error: { message: err.message } }
     }
   }
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) ensureActiveAccount(session.user.id)
-      setLoading(false)
-    })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) ensureActiveAccount(session.user.id)
-      else setProfile(null)
-    })
-    return () => subscription.unsubscribe()
-  }, [])
-
-  useEffect(() => {
-    if (!user) return
-
-    const checkSessionProfile = () => {
-      ensureActiveAccount(user.id)
-    }
-
-    const intervalId = window.setInterval(checkSessionProfile, 15000)
-    window.addEventListener('focus', checkSessionProfile)
-
-    return () => {
-      window.clearInterval(intervalId)
-      window.removeEventListener('focus', checkSessionProfile)
-    }
-  }, [user])
-
-  useEffect(() => {
-    if (!user) return
-
-    const channel = supabase
-      .channel(`session-revocations:${user.id}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'session_revocations',
-        filter: `user_id=eq.${user.id}`
-      }, async () => {
-        await forceLocalSignOut()
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [user])
-
-  const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password })
 
   async function attemptAttendanceLogout() {
-    if (!user || typeof window === 'undefined') return
-
+    if (!user) return
     try {
-      const { data: todayLogin, error: loginError } = await supabase
-        .from('login_times')
-        .select('id, logout_time')
-        .eq('user_id', user.id)
-        .eq('date', getLocalDateString())
-        .maybeSingle()
-
-      if (loginError || !todayLogin || todayLogin.logout_time) return
-
+      const todayLogin = await api.getTodayAttendance()
+      if (!todayLogin || todayLogin.logout_time) return
       const position = await new Promise((resolve, reject) => {
-        if (!navigator.geolocation) {
-          reject(new Error('Geolocation not supported'))
-          return
-        }
-
+        if (!navigator.geolocation) { reject(new Error('Geolocation not supported')); return }
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
+          enableHighAccuracy: true, timeout: 10000, maximumAge: 0,
         })
       })
-
-      await supabase.rpc('register_logout', {
-        user_lat: position.coords.latitude,
-        user_lon: position.coords.longitude,
-      })
-    } catch (_) {
-      // Keep sign-out working even if attendance sign-off cannot be saved.
-    }
+      await api.registerLogout(position.coords.latitude, position.coords.longitude)
+    } catch {}
   }
 
   async function signOut() {
     await attemptAttendanceLogout()
-    return supabase.auth.signOut()
+    await forceSignOut()
   }
 
   return (
