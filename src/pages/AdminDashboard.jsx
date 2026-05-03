@@ -27,7 +27,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [showCreateUser, setShowCreateUser] = useState(false)
   const [showCreateTicket, setShowCreateTicket] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
-  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false })
+  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '' })
   const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened' })
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
@@ -725,6 +725,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <input type="checkbox" checked={userForm.can_view_attendance} onChange={e=>setUserForm(f=>({...f,can_view_attendance:e.target.checked}))} className="w-4 h-4 rounded" />
                   <span className="text-slate-300 text-sm">Can view attendance</span>
                 </label>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Profile Picture URL</label>
+                  <input type="url" value={userForm.profile_picture_url} onChange={e=>setUserForm(f=>({...f,profile_picture_url:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" placeholder="https://..." />
+                </div>
                 <div className="flex gap-2">
                   <button type="submit" disabled={loading} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{loading ? 'Creating...' : 'Create User'}</button>
                   <button type="button" onClick={()=>setShowCreateUser(false)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
@@ -754,6 +758,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <input type="checkbox" checked={userForm.can_view_attendance} onChange={e=>setUserForm(f=>({...f,can_view_attendance:e.target.checked}))} className="w-4 h-4 rounded" />
                   <span className="text-slate-300 text-sm">Can view attendance</span>
                 </label>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Profile Picture URL</label>
+                  <input type="url" value={userForm.profile_picture_url} onChange={e=>setUserForm(f=>({...f,profile_picture_url:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" placeholder="https://..." />
+                </div>
                 <div className="flex gap-2">
                   <button type="submit" disabled={loading} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{loading ? 'Saving...' : 'Save Changes'}</button>
                   <button type="button" onClick={()=>setEditingUser(null)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>

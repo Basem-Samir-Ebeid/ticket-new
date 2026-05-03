@@ -6,6 +6,7 @@ export const profiles = pgTable('profiles', {
   email: text('email').notNull().unique(),
   password_hash: text('password_hash').notNull(),
   full_name: text('full_name'),
+  profile_picture_url: text('profile_picture_url'),
   role: text('role').notNull().default('employee'),
   can_view_attendance: boolean('can_view_attendance').notNull().default(false),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

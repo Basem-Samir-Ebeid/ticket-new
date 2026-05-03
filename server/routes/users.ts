@@ -42,9 +42,9 @@ router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) 
 })
 
 router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, res) => {
-  const { full_name, role, can_view_attendance } = req.body
+  const { full_name, role, can_view_attendance, profile_picture_url } = req.body
   const [user] = await db.update(profiles)
-    .set({ full_name, role, can_view_attendance })
+    .set({ full_name, role, can_view_attendance, profile_picture_url })
     .where(eq(profiles.id, req.params.id))
     .returning()
 
