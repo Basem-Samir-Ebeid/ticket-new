@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "postgresql-16"]
+modules = ["nodejs-20", "web"]
 
 [nix]
 channel = "stable-25_05"
@@ -45,3 +45,4 @@ externalPort = 80
 [userenv.shared]
 VITE_SUPABASE_URL = "https://aozzsbyemcsptbhcqqsm.supabase.co"
 VITE_SUPABASE_ANON_KEY = "sb_publishable_DS8RnCVN3spFYlIqrLQOuQ_K2kSJDrr"
+JWT_SECRET = "it-ticket-secret-key-replit-2024"
