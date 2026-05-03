@@ -48,7 +48,7 @@ VITE_SUPABASE_ANON_KEY = "sb_publishable_DS8RnCVN3spFYlIqrLQOuQ_K2kSJDrr"
 JWT_SECRET = "it-ticket-secret-key-replit-2024"
 
 [deployment]
-deploymentTarget = "vm"
-publicDir = "dist/public"
+deploymentTarget = "static"
+publicDir = "dist"
 run = ["npm", "run", "start"]
 build = ["npm", "run", "build"]
