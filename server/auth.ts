@@ -32,7 +32,7 @@ export async function requireAuth(req: Request & { user?: any; profile?: any }, 
 }
 
 export async function requireAdmin(req: Request & { profile?: any }, res: Response, next: NextFunction) {
-  if (req.profile?.role !== 'admin') {
+  if (req.profile?.role !== 'admin' && req.profile?.role !== 'super_admin') {
     return res.status(403).json({ error: 'Admin access required' })
   }
   next()

@@ -11,7 +11,7 @@ function getLocalDateString(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
-export default function AdminDashboard() {
+export default function AdminDashboard({ isSuperAdmin = false }) {
   const { user } = useAuth()
   const [tab, setTab] = useState('dashboard')
   const [tickets, setTickets] = useState([])
@@ -335,7 +335,7 @@ export default function AdminDashboard() {
   if (selectedTicket) {
     return (
       <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
-        <Navbar title="Ticket Details" />
+        <Navbar title={isSuperAdmin ? '👑 Ticket Details' : 'Ticket Details'} />
         <div className="max-w-4xl mx-auto p-6">
           <button onClick={() => setSelectedTicket(null)} className="text-slate-400 hover:text-white text-sm mb-4 flex items-center gap-1">← Back</button>
 
@@ -383,7 +383,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
-      <Navbar title="Admin Panel" />
+      <Navbar title={isSuperAdmin ? '👑 Super Admin Panel' : 'Admin Panel'} />
 
       <div className="max-w-7xl mx-auto p-6">
         {msg && (
@@ -700,6 +700,7 @@ export default function AdminDashboard() {
                       <option value="member">Member</option>
                       <option value="employee">Employee</option>
                       <option value="admin">Admin</option>
+                      {isSuperAdmin && <option value="super_admin">Super Admin</option>}
                     </select>
                   </div>
                 </div>
@@ -728,6 +729,7 @@ export default function AdminDashboard() {
                       <option value="member">Member</option>
                       <option value="employee">Employee</option>
                       <option value="admin">Admin</option>
+                      {isSuperAdmin && <option value="super_admin">Super Admin</option>}
                     </select>
                   </div>
                 </div>
@@ -743,11 +745,12 @@ export default function AdminDashboard() {
             )}
 
             <div className="glass rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/10">
                     {['Name', 'Email', 'Role', 'Attendance', 'Actions'].map(h => (
-                      <th key={h} className="text-left text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium">{h}</th>
+                      <th key={h} className="text-left text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -755,10 +758,10 @@ export default function AdminDashboard() {
                   {users.length === 0 && <tr><td colSpan={5} className="text-center text-slate-500 py-8">No users yet</td></tr>}
                   {users.map((u, i) => (
                     <tr key={u.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
-                      <td className="px-4 py-3 text-white font-medium">{u.full_name || '—'}</td>
-                      <td className="px-4 py-3 text-slate-300">{u.email}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${u.role==='admin' ? 'bg-purple-900/30 text-purple-400' : u.role==='employee' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-900/30 text-slate-400'}`}>{u.role}</span>
+                      <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{u.full_name || '—'}</td>
+                      <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{u.email}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${u.role==='super_admin' ? 'bg-amber-900/30 text-amber-400' : u.role==='admin' ? 'bg-purple-900/30 text-purple-400' : u.role==='employee' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-900/30 text-slate-400'}`}>{u.role==='super_admin' ? '👑 Super Admin' : u.role}</span>
                       </td>
                       <td className="px-4 py-3 text-slate-400 text-xs">{u.can_view_attendance ? '✓ Yes' : '—'}</td>
                       <td className="px-4 py-3">
@@ -772,6 +775,7 @@ export default function AdminDashboard() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}
@@ -785,11 +789,12 @@ export default function AdminDashboard() {
             </div>
 
             <div className="glass rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/8">
                     {['Name','Email','Role','Login Time','Sign Off','Worked','Date','Actions'].map(h => (
-                      <th key={h} className="text-left text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium">{h}</th>
+                      <th key={h} className="text-left text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -797,20 +802,21 @@ export default function AdminDashboard() {
                   {loginTimes.length === 0 && <tr><td colSpan={8} className="text-center text-slate-500 py-8">No attendance recorded for {new Date(selectedDate).toLocaleDateString()}</td></tr>}
                   {loginTimes.map(lt => (
                     <tr key={lt.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
-                      <td className="px-4 py-3 text-white font-medium">{lt.full_name||'—'}</td>
-                      <td className="px-4 py-3 text-slate-300">{lt.email}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${lt.role==='admin' ? 'bg-purple-900/30 text-purple-400' : lt.role==='employee' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-900/30 text-slate-400'}`}>{lt.role}</span>
+                      <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{lt.full_name||'—'}</td>
+                      <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{lt.email}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${lt.role==='super_admin' ? 'bg-amber-900/30 text-amber-400' : lt.role==='admin' ? 'bg-purple-900/30 text-purple-400' : lt.role==='employee' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-900/30 text-slate-400'}`}>{lt.role==='super_admin' ? '👑 Super Admin' : lt.role}</span>
                       </td>
-                      <td className="px-4 py-3 text-white font-mono">{new Date(lt.login_time).toLocaleTimeString()}</td>
-                      <td className="px-4 py-3 text-slate-300 font-mono">{lt.logout_time ? new Date(lt.logout_time).toLocaleTimeString() : 'Still working'}</td>
-                      <td className="px-4 py-3 text-green-400 text-xs font-medium">{lt.logout_time ? calculateDuration(lt.login_time, lt.logout_time) : 'In progress'}</td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">{new Date(lt.date).toLocaleDateString()}</td>
-                      <td className="px-4 py-3"><button onClick={()=>deleteAttendance(lt.id)} disabled={loading} className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50">Delete</button></td>
+                      <td className="px-4 py-3 text-white font-mono whitespace-nowrap">{new Date(lt.login_time).toLocaleTimeString()}</td>
+                      <td className="px-4 py-3 text-slate-300 font-mono whitespace-nowrap">{lt.logout_time ? new Date(lt.logout_time).toLocaleTimeString() : 'Still working'}</td>
+                      <td className="px-4 py-3 text-green-400 text-xs font-medium whitespace-nowrap">{lt.logout_time ? calculateDuration(lt.login_time, lt.logout_time) : 'In progress'}</td>
+                      <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{new Date(lt.date).toLocaleDateString()}</td>
+                      <td className="px-4 py-3 whitespace-nowrap"><button onClick={()=>deleteAttendance(lt.id)} disabled={loading} className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50">Delete</button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4 mt-6">
