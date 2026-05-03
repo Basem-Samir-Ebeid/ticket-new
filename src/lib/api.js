@@ -1,4 +1,4 @@
-const BASE = ${import.meta.env.VITE_API_URL}/api
+const BASE = "https://ticket-new-production.up.railway.app/api"
 
 function getToken() {
   return localStorage.getItem('auth_token')
