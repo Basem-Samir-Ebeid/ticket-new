@@ -55,6 +55,5 @@ JWT_SECRET = "it-ticket-secret-key-replit-2024"
 
 [deployment]
 deploymentTarget = "autoscale"
-publicDir = "dist"
 run = ["npm", "run", "start"]
 build = ["npm", "run", "build"]
