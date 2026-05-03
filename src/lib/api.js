@@ -85,7 +85,10 @@ const listeners = new Map()
 export function connectWS(token, onEvent) {
   if (ws) ws.close()
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  ws = new WebSocket(`${protocol}//${window.location.host}/ws?token=${token}`)
+  const host = window.location.host.includes('localhost')
+    ? `localhost:3000`
+    : window.location.host
+  ws = new WebSocket(`${protocol}//${host}/ws?token=${token}`)
   ws.onmessage = (e) => {
     try {
       const { event, data } = JSON.parse(e.data)
