@@ -44,6 +44,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [rejectingLeaveId, setRejectingLeaveId] = useState(null)
   const [rejectionNote, setRejectionNote] = useState('')
   const [processingLeaveId, setProcessingLeaveId] = useState(null)
+  const [resetPwdTarget, setResetPwdTarget] = useState(null)
+  const [resetPwdValue, setResetPwdValue] = useState('')
+  const [resetPwdShow, setResetPwdShow] = useState(false)
+  const [resetPwdError, setResetPwdError] = useState('')
 
   useEffect(() => {
     fetchTickets()
@@ -195,15 +199,22 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     setLoading(false)
   }
 
-  async function resetUserPassword(targetUser) {
-    const newPassword = window.prompt(`Enter a new password for ${targetUser.email}`)
-    if (!newPassword) return
-    if (newPassword.length < 6) { setMsg('Error: Password must be at least 6 characters'); return }
-    setResettingUserId(targetUser.id); setMsg('')
+  function openResetPwd(targetUser) {
+    setResetPwdTarget(targetUser)
+    setResetPwdValue('')
+    setResetPwdError('')
+    setResetPwdShow(false)
+  }
+
+  async function submitResetPwd(e) {
+    e.preventDefault()
+    if (resetPwdValue.length < 6) { setResetPwdError('Password must be at least 6 characters'); return }
+    setResettingUserId(resetPwdTarget.id); setResetPwdError('')
     try {
-      await api.resetPassword(targetUser.id, newPassword)
-      setMsg(`✓ Password reset for ${targetUser.email}`)
-    } catch (e) { setMsg(`Error: ${e.message}`) }
+      await api.resetPassword(resetPwdTarget.id, resetPwdValue)
+      setMsg(`✓ Password reset for ${resetPwdTarget.email}`)
+      setResetPwdTarget(null)
+    } catch (e) { setResetPwdError(e.message) }
     setResettingUserId(null)
   }
 
@@ -773,7 +784,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:''})}} className="text-xs text-blue-400 hover:text-blue-300">Edit</button>
-                          <button onClick={()=>resetUserPassword(u)} disabled={resettingUserId===u.id} className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50">{resettingUserId===u.id ? '...' : 'Reset Pwd'}</button>
+                          <button onClick={()=>openResetPwd(u)} disabled={resettingUserId===u.id} className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50">{resettingUserId===u.id ? '...' : 'Reset Pwd'}</button>
                           <button onClick={()=>deleteUser(u.id)} disabled={loading} className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50">Delete</button>
                         </div>
                       </td>
@@ -930,6 +941,71 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
           </div>
         )}
       </div>
+
+      {/* ── Reset Password Modal ── */}
+      {resetPwdTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.7)', backdropFilter:'blur(8px)'}}>
+          <div className="w-full max-w-sm glass rounded-2xl p-6 animate-scaleIn border border-white/10 shadow-2xl">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-amber-600/20 border border-amber-500/30 flex items-center justify-center">
+                <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-base">Reset Password</h3>
+                <p className="text-slate-400 text-xs mt-0.5 truncate max-w-[200px]">{resetPwdTarget.email}</p>
+              </div>
+            </div>
+
+            <form onSubmit={submitResetPwd} className="space-y-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">New Password</label>
+                <div className="relative">
+                  <input
+                    type={resetPwdShow ? 'text' : 'password'}
+                    value={resetPwdValue}
+                    onChange={e => { setResetPwdValue(e.target.value); setResetPwdError('') }}
+                    autoFocus
+                    autoComplete="new-password"
+                    placeholder="Min. 6 characters"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500 pr-10 transition-all"
+                  />
+                  <button type="button" onClick={() => setResetPwdShow(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors">
+                    {resetPwdShow
+                      ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                      : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                    }
+                  </button>
+                </div>
+                {resetPwdError && (
+                  <p className="text-red-400 text-xs mt-1.5 flex items-center gap-1">
+                    <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                    {resetPwdError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button type="submit" disabled={resettingUserId === resetPwdTarget.id || !resetPwdValue}
+                  className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-sm font-medium py-2.5 rounded-lg transition-all">
+                  {resettingUserId === resetPwdTarget.id ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                      Resetting...
+                    </span>
+                  ) : 'Reset Password'}
+                </button>
+                <button type="button" onClick={() => setResetPwdTarget(null)}
+                  className="px-4 py-2.5 text-slate-400 hover:text-white border border-white/10 hover:border-white/20 text-sm rounded-lg transition-all">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
