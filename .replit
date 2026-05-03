@@ -50,5 +50,5 @@ JWT_SECRET = "it-ticket-secret-key-replit-2024"
 [deployment]
 deploymentTarget = "vm"
 publicDir = "dist/public"
-run = ["bash", "-c", "NODE_ENV=production PORT=5000 tsx server/index.ts"]
+run = ["npm", "run", "start"]
 build = ["npm", "run", "build"]
