@@ -13,6 +13,12 @@ function getLocalDateString(date = new Date()) {
 
 export default function AdminDashboard({ isSuperAdmin = false }) {
   const { user } = useAuth()
+  const btnPrimary = isSuperAdmin ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'
+  const tabActiveCls = isSuperAdmin ? 'bg-amber-600 text-white' : 'bg-blue-600 text-white'
+  const bgGrad = isSuperAdmin
+    ? 'radial-gradient(ellipse at 70% 0%, #2a1500 0%, #0a0a0f 55%)'
+    : 'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'
+  const focusBorder = isSuperAdmin ? 'focus:border-amber-500' : 'focus:border-blue-500'
   const [tab, setTab] = useState('dashboard')
   const [tickets, setTickets] = useState([])
   const [users, setUsers] = useState([])
@@ -334,7 +340,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   // ── Ticket detail view ──
   if (selectedTicket) {
     return (
-      <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
+      <div className="min-h-screen" style={{background: bgGrad}}>
         <Navbar title={isSuperAdmin ? '👑 Ticket Details' : 'Ticket Details'} />
         <div className="max-w-4xl mx-auto p-6">
           <button onClick={() => setSelectedTicket(null)} className="text-slate-400 hover:text-white text-sm mb-4 flex items-center gap-1">← Back</button>
@@ -382,7 +388,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   }
 
   return (
-    <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
+    <div className="min-h-screen" style={{background: bgGrad}}>
       <Navbar title={isSuperAdmin ? '👑 Super Admin Panel' : 'Admin Panel'} />
 
       <div className="max-w-7xl mx-auto p-6">
@@ -396,7 +402,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         <div className="flex gap-2 mb-6 border-b border-white/10 overflow-x-auto pb-2">
           {['dashboard', 'tickets', 'requests', 'leave', 'users', 'attendance', 'performance'].map(t => (
             <button key={t} onClick={() => { setTab(t); setSelectedTicket(null) }}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium capitalize transition-all whitespace-nowrap ${tab === t ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium capitalize transition-all whitespace-nowrap ${tab === t ? tabActiveCls : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
               {t === 'performance' ? '⭐ Performance'
                 : t === 'requests' ? `📋 Requests${requests.filter(r=>r.request_status==='pending_review').length > 0 ? ` (${requests.filter(r=>r.request_status==='pending_review').length})` : ''}`
                 : t === 'leave' ? `🌴 Leave${leaveRequests.filter(r=>r.status==='pending').length > 0 ? ` (${leaveRequests.filter(r=>r.status==='pending').length})` : ''}`
@@ -422,7 +428,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   ) : <p className="text-slate-500">Not logged yet</p>}
                 </div>
                 <div className="flex gap-2">
-                  {!todayLogin && <button onClick={registerLogin} disabled={loggingIn} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{loggingIn ? 'Logging...' : 'Register Login'}</button>}
+                  {!todayLogin && <button onClick={registerLogin} disabled={loggingIn} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{loggingIn ? 'Logging...' : 'Register Login'}</button>}
                   {todayLogin && !todayLogin.logout_time && <button onClick={registerLogout} disabled={loggingOut} className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{loggingOut ? 'Signing Off...' : 'Sign Off'}</button>}
                 </div>
               </div>
@@ -487,7 +493,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
           <div>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-white font-medium">All Tickets</h2>
-              <button onClick={() => setShowCreateTicket(v=>!v)} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg transition-all hover:scale-105">+ New Ticket</button>
+              <button onClick={() => setShowCreateTicket(v=>!v)} className={`${btnPrimary} text-white text-sm px-4 py-2 rounded-lg transition-all hover:scale-105`}>+ New Ticket</button>
             </div>
 
             {showCreateTicket && (
@@ -522,7 +528,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <textarea rows={3} value={ticketForm.description} onChange={e=>setTicketForm(f=>({...f,description:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" placeholder="Describe the issue..." />
                 </div>
                 <div className="flex gap-2">
-                  <button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{loading ? 'Creating...' : 'Create Ticket'}</button>
+                  <button type="submit" disabled={loading} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{loading ? 'Creating...' : 'Create Ticket'}</button>
                   <button type="button" onClick={()=>setShowCreateTicket(false)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
                 </div>
               </form>
@@ -676,7 +682,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
           <div>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-white font-medium">Users ({users.length})</h2>
-              <button onClick={()=>setShowCreateUser(v=>!v)} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg transition-all hover:scale-105">+ New User</button>
+              <button onClick={()=>setShowCreateUser(v=>!v)} className={`${btnPrimary} text-white text-sm px-4 py-2 rounded-lg transition-all hover:scale-105`}>+ New User</button>
             </div>
 
             {showCreateUser && (
@@ -700,7 +706,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <option value="member">Member</option>
                       <option value="employee">Employee</option>
                       <option value="admin">Admin</option>
-                      {isSuperAdmin && <option value="super_admin">Super Admin</option>}
+                      <option value="super_admin">👑 Super Admin</option>
                     </select>
                   </div>
                 </div>
@@ -709,7 +715,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <span className="text-slate-300 text-sm">Can view attendance</span>
                 </label>
                 <div className="flex gap-2">
-                  <button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{loading ? 'Creating...' : 'Create User'}</button>
+                  <button type="submit" disabled={loading} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{loading ? 'Creating...' : 'Create User'}</button>
                   <button type="button" onClick={()=>setShowCreateUser(false)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
                 </div>
               </form>
@@ -729,7 +735,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <option value="member">Member</option>
                       <option value="employee">Employee</option>
                       <option value="admin">Admin</option>
-                      {isSuperAdmin && <option value="super_admin">Super Admin</option>}
+                      <option value="super_admin">👑 Super Admin</option>
                     </select>
                   </div>
                 </div>
@@ -738,7 +744,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <span className="text-slate-300 text-sm">Can view attendance</span>
                 </label>
                 <div className="flex gap-2">
-                  <button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{loading ? 'Saving...' : 'Save Changes'}</button>
+                  <button type="submit" disabled={loading} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{loading ? 'Saving...' : 'Save Changes'}</button>
                   <button type="button" onClick={()=>setEditingUser(null)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
                 </div>
               </form>
