@@ -13,5 +13,5 @@ REMOTE_URL="https://${GITHUB_TOKEN}@github.com/Basem-Samir-Ebeid/ticket-new.git"
 BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "main")
 
 echo "[github-sync] Pushing branch '${BRANCH}' to GitHub..."
-git push "$REMOTE_URL" "${BRANCH}:${BRANCH}" --quiet
+git push "$REMOTE_URL" "${BRANCH}:${BRANCH}" --force --quiet
 echo "[github-sync] Done."

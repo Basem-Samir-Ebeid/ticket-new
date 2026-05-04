@@ -45,10 +45,21 @@ A full-stack IT Ticket Management System with role-based access control. Built w
 - `npm run build` — build frontend to `dist/`
 - `npm run start` — run production server (serves built frontend from `public/`)
 
+## GitHub Auto-Sync
+Every Replit checkpoint commit automatically pushes to GitHub via a post-commit git hook.
+
+- Hook: `.git/hooks/post-commit` (installed by `scripts/setup-git-hooks.sh`)
+- Push script: `scripts/github-sync.sh` (force-pushes current branch to GitHub)
+- Post-merge: `scripts/post-merge.sh` reinstalls the hook after task merges
+- Manual sync: `npm run sync:github`
+- Reinstall hook: `npm run hooks:setup`
+- Requires `GITHUB_TOKEN` secret (GitHub PAT with `repo` scope)
+
 ## Environment Variables
 - `DATABASE_URL` — PostgreSQL connection string (Replit managed)
 - `JWT_SECRET` — Secret for signing JWT tokens (set in shared env vars)
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_EMAIL` — For Web Push notifications (optional)
+- `GITHUB_TOKEN` — GitHub Personal Access Token for auto-sync (repo scope required)
 
 ## Default Credentials
 - Super Admin: `admin@company.com` / `Admin@123`
