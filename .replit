@@ -59,3 +59,7 @@ VAPID_PUBLIC_KEY = "BO75VuweXjk0o-DoHaFOslHXuMt1N7_JCeF_szW7o4jeGloFGgbETDLCbvhX
 deploymentTarget = "autoscale"
 run = ["npm", "run", "start"]
 build = ["npm", "run", "build"]
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 60000

@@ -8,7 +8,9 @@
     "dev:server": "tsx watch server/index.ts",
     "build": "vite build",
     "start": "NODE_ENV=production PORT=5000 tsx server/index.ts",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "sync:github": "bash scripts/github-sync.sh",
+    "hooks:setup": "bash scripts/setup-git-hooks.sh"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
