@@ -1,6 +1,37 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { api, connectWS, disconnectWS } from '../lib/api'
 
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  const outputArray = new Uint8Array(rawData.length)
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i)
+  return outputArray
+}
+
+async function registerPushSubscription() {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    const reg = await navigator.serviceWorker.register('/sw.js')
+    await navigator.serviceWorker.ready
+    const permission = await Notification.requestPermission()
+    if (permission !== 'granted') return
+    const { publicKey } = await api.getPushPublicKey()
+    if (!publicKey) return
+    const existing = await reg.pushManager.getSubscription()
+    if (existing) {
+      await api.subscribePush(existing.toJSON())
+      return
+    }
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    })
+    await api.subscribePush(sub.toJSON())
+  } catch {}
+}
+
 const AuthContext = createContext({})
 export const useAuth = () => useContext(AuthContext)
 
@@ -70,6 +101,10 @@ export function AuthProvider({ children }) {
       setUser({ id: prof.id })
       setProfile(prof)
       connectWS(token, handleWsEvent)
+      // Register push subscription for admins and super_admins
+      if (prof.role === 'admin' || prof.role === 'super_admin') {
+        registerPushSubscription()
+      }
       return { data: { user: prof }, error: null }
     } catch (err) {
       return { data: null, error: { message: err.message } }
