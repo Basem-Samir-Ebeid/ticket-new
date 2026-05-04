@@ -7,6 +7,7 @@ import AdminDashboard from './pages/AdminDashboard'
 import SuperAdminDashboard from './pages/SuperAdminDashboard'
 import EmployeeDashboard from './pages/EmployeeDashboard'
 import MemberDashboard from './pages/MemberDashboard'
+import ForceChangePassword from './components/ForceChangePassword'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -16,9 +17,10 @@ function ProtectedRoute({ children }) {
 }
 
 function RootRedirect() {
-  const { user, profile, loading } = useAuth()
+  const { user, profile, loading, refreshProfile } = useAuth()
   if (loading) return <div className="flex items-center justify-center h-screen text-slate-400">Loading...</div>
   if (!user) return <Navigate to="/login" />
+  if (profile?.must_change_password) return <ForceChangePassword onDone={refreshProfile} />
   if (profile?.role === 'super_admin') return <SuperAdminDashboard />
   if (profile?.role === 'admin') return <AdminDashboard />
   if (profile?.role === 'member') return <MemberDashboard />

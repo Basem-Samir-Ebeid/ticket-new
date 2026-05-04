@@ -25,6 +25,7 @@ export const api = {
   login: (email, password) => request('POST', '/auth/login', { email, password }),
   me: () => request('GET', '/auth/me'),
   changePassword: (currentPassword, newPassword) => request('POST', '/auth/change-password', { currentPassword, newPassword }),
+  forceChangePassword: (newPassword) => request('POST', '/auth/force-change-password', { newPassword }),
 
   // Users
   getUsers: () => request('GET', '/users'),

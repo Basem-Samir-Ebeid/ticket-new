@@ -9,14 +9,16 @@ import { broadcast } from '../ws'
 const router = Router()
 
 router.get('/', requireAuth as any, requireAdmin as any, async (req: any, res) => {
-  const users = await db.select({
-    id: profiles.id,
-    email: profiles.email,
-    full_name: profiles.full_name,
-    role: profiles.role,
-    can_view_attendance: profiles.can_view_attendance,
-    created_at: profiles.created_at,
-  }).from(profiles).orderBy(desc(profiles.created_at))
+  const isSuperAdmin = req.profile?.role === 'super_admin'
+  const rows = await db.select().from(profiles).orderBy(desc(profiles.created_at))
+  const users = rows.map(u => {
+    const { password_hash, ...rest } = u
+    if (!isSuperAdmin) {
+      const { plain_password, ...noPass } = rest
+      return noPass
+    }
+    return rest
+  })
   res.json(users)
 })
 
@@ -32,9 +34,11 @@ router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) 
   const [user] = await db.insert(profiles).values({
     email: email.toLowerCase(),
     password_hash,
+    plain_password: password,
     full_name: full_name || null,
     role: role || 'employee',
     can_view_attendance: can_view_attendance || false,
+    must_change_password: true,
   }).returning()
 
   const { password_hash: _, ...safeUser } = user
@@ -58,7 +62,7 @@ router.post('/:id/reset-password', requireAuth as any, requireAdmin as any, asyn
   if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
 
   const password_hash = await bcrypt.hash(newPassword, 10)
-  const [user] = await db.update(profiles).set({ password_hash }).where(eq(profiles.id, req.params.id)).returning()
+  const [user] = await db.update(profiles).set({ password_hash, plain_password: newPassword, must_change_password: true }).where(eq(profiles.id, req.params.id)).returning()
   if (!user) return res.status(404).json({ error: 'User not found' })
   res.json({ success: true })
 })

@@ -70,6 +70,13 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }
 
+  async function refreshProfile() {
+    try {
+      const prof = await api.me()
+      if (prof) setProfile(prof)
+    } catch {}
+  }
+
   useEffect(() => { loadUser() }, [])
 
   // Re-check profile every 15s and on focus
@@ -134,7 +141,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   )

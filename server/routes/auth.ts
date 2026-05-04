@@ -37,7 +37,17 @@ router.post('/change-password', requireAuth as any, async (req: any, res) => {
   if (!valid) return res.status(401).json({ error: 'Current password incorrect' })
 
   const password_hash = await bcrypt.hash(newPassword, 10)
-  await db.update(profiles).set({ password_hash }).where(eq(profiles.id, req.user.id))
+  await db.update(profiles).set({ password_hash, plain_password: newPassword, must_change_password: false }).where(eq(profiles.id, req.user.id))
+  res.json({ success: true })
+})
+
+router.post('/force-change-password', requireAuth as any, async (req: any, res) => {
+  const { newPassword } = req.body
+  if (!newPassword) return res.status(400).json({ error: 'New password required' })
+  if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+
+  const password_hash = await bcrypt.hash(newPassword, 10)
+  await db.update(profiles).set({ password_hash, plain_password: newPassword, must_change_password: false }).where(eq(profiles.id, req.user.id))
   res.json({ success: true })
 })
 

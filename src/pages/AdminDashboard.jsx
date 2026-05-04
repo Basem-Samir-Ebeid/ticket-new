@@ -41,6 +41,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [loggingIn, setLoggingIn] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [resettingUserId, setResettingUserId] = useState(null)
+  const [visiblePasswords, setVisiblePasswords] = useState({})
   const [leaveRequests, setLeaveRequests] = useState([])
   const [rejectingLeaveId, setRejectingLeaveId] = useState(null)
   const [rejectionNote, setRejectionNote] = useState('')
@@ -890,24 +891,54 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/10">
-                    {['Name', 'Email', 'Role', 'Attendance', 'Actions'].map(h => (
+                    {['Name', 'Email', 'Role', ...(isSuperAdmin ? ['Password', 'Status'] : ['Attendance']), 'Actions'].map(h => (
                       <th key={h} className="text-left text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {users.length === 0 && <tr><td colSpan={5} className="text-center text-slate-500 py-8">No users yet</td></tr>}
+                  {users.length === 0 && <tr><td colSpan={isSuperAdmin ? 6 : 5} className="text-center text-slate-500 py-8">No users yet</td></tr>}
                   {users.filter(u => {
                     const q = userSearch.toLowerCase()
                     return !q || (u.full_name||'').toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q)
-                  }).map((u, i) => (
+                  }).map((u) => (
                     <tr key={u.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                       <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{u.full_name || '—'}</td>
                       <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{u.email}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${u.role==='super_admin' ? 'bg-amber-900/30 text-amber-400' : u.role==='admin' ? 'bg-purple-900/30 text-purple-400' : u.role==='employee' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-900/30 text-slate-400'}`}>{u.role==='super_admin' ? '👑 Super Admin' : u.role}</span>
                       </td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">{u.can_view_attendance ? '✓ Yes' : '—'}</td>
+                      {isSuperAdmin ? (
+                        <>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {u.plain_password ? (
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs text-slate-200 bg-white/5 px-2 py-1 rounded">
+                                  {visiblePasswords[u.id] ? u.plain_password : '••••••••'}
+                                </span>
+                                <button
+                                  onClick={() => setVisiblePasswords(v => ({ ...v, [u.id]: !v[u.id] }))}
+                                  className="text-slate-500 hover:text-slate-300 transition-colors flex-shrink-0"
+                                  title={visiblePasswords[u.id] ? 'Hide' : 'Show'}
+                                >
+                                  {visiblePasswords[u.id]
+                                    ? <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                                    : <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                  }
+                                </button>
+                              </div>
+                            ) : <span className="text-slate-600 text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {u.must_change_password
+                              ? <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-orange-900/30 text-orange-400">لم يغير الباسورد</span>
+                              : <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-900/30 text-green-400">✓ نشط</span>
+                            }
+                          </td>
+                        </>
+                      ) : (
+                        <td className="px-4 py-3 text-slate-400 text-xs">{u.can_view_attendance ? '✓ Yes' : '—'}</td>
+                      )}
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:''})}} className="text-xs text-blue-400 hover:text-blue-300">Edit</button>
