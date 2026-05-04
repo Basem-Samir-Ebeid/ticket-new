@@ -21,10 +21,12 @@ async function withProfiles(rows: any[]) {
   }))
 }
 
+const isAdminRole = (role: string) => role === 'admin' || role === 'super_admin'
+
 // GET tickets (not requests)
 router.get('/', requireAuth as any, async (req: any, res) => {
   let rows
-  if (req.profile.role === 'admin') {
+  if (isAdminRole(req.profile.role)) {
     rows = await db.select().from(tickets).where(eq(tickets.is_request, false)).orderBy(desc(tickets.created_at))
   } else {
     rows = await db.select().from(tickets)
@@ -37,7 +39,7 @@ router.get('/', requireAuth as any, async (req: any, res) => {
 // GET requests
 router.get('/requests', requireAuth as any, async (req: any, res) => {
   let rows
-  if (req.profile.role === 'admin') {
+  if (isAdminRole(req.profile.role)) {
     rows = await db.select().from(tickets).where(eq(tickets.is_request, true)).orderBy(desc(tickets.created_at))
   } else {
     rows = await db.select().from(tickets)
@@ -65,10 +67,11 @@ router.post('/', requireAuth as any, async (req: any, res) => {
     solved_at: status === 'solved' ? now : null,
   }).returning()
 
-  // Notify admins if it's a member request
+  // Notify admins and super_admins if it's a member request
   if (is_request) {
-    const admins = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.role, 'admin'))
-    for (const admin of admins) {
+    const adminProfiles = await db.select({ id: profiles.id, role: profiles.role }).from(profiles)
+    const adminTargets = adminProfiles.filter(p => isAdminRole(p.role))
+    for (const admin of adminTargets) {
       const [notif] = await db.insert(notifications).values({
         user_id: admin.id,
         ticket_id: ticket.id,
