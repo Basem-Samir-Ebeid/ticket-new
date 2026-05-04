@@ -1,28 +1,27 @@
 import { useState, useCallback } from 'react'
 
+const GOLD_COLORS = ['#FFD700', '#FFC200', '#FFB800', '#FFDF00', '#F5C518', '#FFE066', '#FFA500']
+
 export default function LogoWithStars({ className = '', imgClassName = '' }) {
   const [stars, setStars] = useState([])
 
-  const handleClick = useCallback((e) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const cx = rect.left + rect.width / 2
-    const cy = rect.top + rect.height / 2
+  const handleClick = useCallback(() => {
     const id = Date.now()
-    const count = 18
+    const count = 30
     const newStars = Array.from({ length: count }, (_, i) => ({
       id: `${id}-${i}`,
-      cx,
-      cy,
-      angle: (360 / count) * i + Math.random() * 20 - 10,
-      speed: 2.5 + Math.random() * 3,
-      size: 4 + Math.random() * 6,
-      color: ['#facc15','#a78bfa','#38bdf8','#34d399','#fb923c','#f472b6'][Math.floor(Math.random()*6)],
-      opacity: 1,
+      left: Math.random() * 100,
+      delay: Math.random() * 0.6,
+      duration: 1.4 + Math.random() * 1.2,
+      size: 10 + Math.random() * 14,
+      color: GOLD_COLORS[Math.floor(Math.random() * GOLD_COLORS.length)],
+      drift: (Math.random() - 0.5) * 60,
+      spin: Math.random() * 360,
     }))
     setStars(prev => [...prev, ...newStars])
     setTimeout(() => {
       setStars(prev => prev.filter(s => !s.id.startsWith(String(id))))
-    }, 1000)
+    }, 3000)
   }, [])
 
   return (
@@ -30,7 +29,6 @@ export default function LogoWithStars({ className = '', imgClassName = '' }) {
       <div className={`relative cursor-pointer select-none ${className}`} onClick={handleClick}>
         <img src="/logo.png" alt="Logo" className={imgClassName} />
       </div>
-
       {stars.map(star => (
         <StarParticle key={star.id} {...star} />
       ))}
@@ -38,27 +36,22 @@ export default function LogoWithStars({ className = '', imgClassName = '' }) {
   )
 }
 
-function StarParticle({ cx, cy, angle, speed, size, color }) {
-  const rad = (angle * Math.PI) / 180
-  const tx = Math.cos(rad) * speed * 60
-  const ty = Math.sin(rad) * speed * 60 + 40
-
+function StarParticle({ left, delay, duration, size, color, drift, spin }) {
   return (
     <span
       style={{
         position: 'fixed',
-        left: cx,
-        top: cy,
-        width: size,
-        height: size,
+        left: `${left}%`,
+        top: 0,
         pointerEvents: 'none',
         zIndex: 9999,
-        transform: 'translate(-50%, -50%)',
-        animation: 'starFall 0.9s ease-out forwards',
-        '--tx': `${tx}px`,
-        '--ty': `${ty}px`,
-        fontSize: size,
+        fontSize: `${size}px`,
         lineHeight: 1,
+        color,
+        textShadow: `0 0 8px ${color}, 0 0 16px ${color}88`,
+        animation: `starFall ${duration}s ease-in ${delay}s forwards`,
+        '--drift': `${drift}px`,
+        '--spin': `${spin}deg`,
       }}
     >
       ★
