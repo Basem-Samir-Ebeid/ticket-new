@@ -838,7 +838,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Profile Picture</label>
                   <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/10 rounded-lg px-3 py-2 hover:bg-white/8 transition-colors">
                     <span className="text-slate-400 text-sm">📷 {profilePicFile ? profilePicFile.name : 'Choose from device...'}</span>
-                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>setProfilePicFile(e.target.files[0])} />
+                    <input type="file" accept="image/*" className="hidden" onChange={e=>setProfilePicFile(e.target.files[0])} />
                   </label>
                   {profilePicFile && <p className="text-xs text-green-400 mt-1">✓ {profilePicFile.name} selected</p>}
                 </div>
@@ -875,7 +875,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Profile Picture</label>
                   <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/10 rounded-lg px-3 py-2 hover:bg-white/8 transition-colors">
                     <span className="text-slate-400 text-sm">📷 {profilePicFile ? profilePicFile.name : 'Choose from device...'}</span>
-                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>setProfilePicFile(e.target.files[0])} />
+                    <input type="file" accept="image/*" className="hidden" onChange={e=>setProfilePicFile(e.target.files[0])} />
                   </label>
                   {profilePicFile && <p className="text-xs text-green-400 mt-1">✓ {profilePicFile.name} selected</p>}
                 </div>

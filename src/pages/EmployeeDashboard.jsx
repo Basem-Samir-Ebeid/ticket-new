@@ -219,7 +219,7 @@ export default function EmployeeDashboard() {
               <div className="flex items-center gap-3">
                 <label className="cursor-pointer bg-white/5 border border-white/10 text-slate-400 hover:text-white text-sm px-4 py-2 rounded-lg transition-colors">
                   📎 {replyImage ? replyImage.name : 'Attach Image'}
-                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>setReplyImage(e.target.files[0])} />
+                  <input type="file" accept="image/*" className="hidden" onChange={e=>setReplyImage(e.target.files[0])} />
                 </label>
                 <button type="submit" disabled={uploading || (!replyText.trim() && !replyImage)} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
                   {uploading ? 'Sending...' : 'Send Reply'}
@@ -244,7 +244,7 @@ export default function EmployeeDashboard() {
                 <div className="flex items-center gap-3">
                   <label className="cursor-pointer bg-white/5 border border-white/10 text-slate-400 hover:text-white text-sm px-4 py-2 rounded-lg transition-colors">
                     📷 {solutionImage ? solutionImage.name : 'Attach Photo'}
-                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>setSolutionImage(e.target.files[0])} />
+                    <input type="file" accept="image/*" className="hidden" onChange={e=>setSolutionImage(e.target.files[0])} />
                   </label>
                   <button type="submit" disabled={submittingSolution || !solutionText.trim()} className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-sm px-5 py-2 rounded-lg font-medium">
                     {submittingSolution ? 'Submitting...' : '✅ Submit & Mark Solved'}
