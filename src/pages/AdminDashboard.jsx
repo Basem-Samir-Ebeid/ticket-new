@@ -12,6 +12,24 @@ function getLocalDateString(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
+function isImageFile(url) {
+  if (!url) return false
+  return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url)
+}
+
+function FileAttachment({ url }) {
+  if (!url) return null
+  if (isImageFile(url)) {
+    return <img src={url} alt="Attachment" className="mt-2 rounded-lg max-w-xs max-h-64 object-contain border border-white/10" />
+  }
+  const filename = url.split('/').pop()
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-sm text-blue-400 hover:text-blue-300 transition-colors">
+      📎 {filename}
+    </a>
+  )
+}
+
 export default function AdminDashboard({ isSuperAdmin = false }) {
   const { user } = useAuth()
   const btnPrimary = isSuperAdmin ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'
@@ -62,6 +80,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [loadingSettings, setLoadingSettings] = useState(false)
   const [settingsLog, setSettingsLog] = useState([])
   const [loadingLog, setLoadingLog] = useState(false)
+  const [replyText, setReplyText] = useState('')
+  const [replyFile, setReplyFile] = useState(null)
+  const [uploading, setUploading] = useState(false)
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
@@ -379,6 +400,22 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     setLoading(false)
   }
 
+  async function submitReply(e) {
+    e.preventDefault()
+    if (!replyText.trim() && !replyFile) return
+    setUploading(true)
+    let file_url = null
+    if (replyFile) {
+      try { file_url = await api.uploadFile(replyFile) } catch {}
+    }
+    try {
+      await api.createReply(selectedTicket.id, { message: replyText, image_url: file_url })
+      setReplyText(''); setReplyFile(null)
+      fetchReplies(selectedTicket.id)
+    } catch {}
+    setUploading(false)
+  }
+
   function calculateDuration(startTime, endTime) {
     if (!startTime || !endTime) return null
     const diff = new Date(endTime) - new Date(startTime)
@@ -484,19 +521,45 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
           <div className="glass rounded-xl p-5">
             <h3 className="text-white font-medium mb-4">Replies ({replies.length})</h3>
-            <div className="space-y-3 max-h-96 overflow-y-auto mb-4">
+            <div className="space-y-3 max-h-96 overflow-y-auto mb-5 pr-1">
               {replies.length === 0 && <p className="text-slate-500 text-sm">No replies yet</p>}
               {replies.map(r => (
-                <div key={r.id} className="bg-white/5 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
+                <div key={r.id} className={`rounded-lg p-3 ${r.user_id === user?.id ? 'bg-blue-900/20 border border-blue-500/15 ml-4' : 'bg-white/5 border border-white/5'}`}>
+                  <div className="flex items-center gap-2 mb-1">
                     <span className="text-white text-sm font-medium">{r.profiles?.full_name || 'User'}</span>
+                    {r.user_id === user?.id && <span className="text-xs text-blue-400">(You)</span>}
                     <span className="text-slate-500 text-xs">{new Date(r.created_at).toLocaleString()}</span>
                   </div>
                   {r.message && <p className="text-slate-300 text-sm">{r.message}</p>}
-                  {r.image_url && <img src={r.image_url} alt="Reply" className="mt-2 rounded-lg max-w-sm" />}
+                  <FileAttachment url={r.image_url} />
                 </div>
               ))}
             </div>
+            <form onSubmit={submitReply} className="space-y-3 border-t border-white/10 pt-4">
+              <textarea
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                placeholder="Type your reply..."
+                rows={3}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none"
+              />
+              <div className="flex items-center gap-3 flex-wrap">
+                <label className="cursor-pointer bg-white/5 border border-white/10 text-slate-400 hover:text-white text-sm px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
+                  📎 {replyFile ? replyFile.name : 'Attach File or Image'}
+                  <input type="file" accept="*/*" className="hidden" onChange={e => setReplyFile(e.target.files[0])} />
+                </label>
+                {replyFile && (
+                  <button type="button" onClick={() => setReplyFile(null)} className="text-slate-500 hover:text-red-400 text-xs">✕ Remove</button>
+                )}
+                <button
+                  type="submit"
+                  disabled={uploading || (!replyText.trim() && !replyFile)}
+                  className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-5 py-2 rounded-lg font-medium`}
+                >
+                  {uploading ? 'Sending...' : 'Send Reply'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </div>

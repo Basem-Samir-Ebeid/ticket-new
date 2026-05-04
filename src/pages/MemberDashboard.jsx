@@ -12,6 +12,24 @@ function getLocalDateString(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
+function isImageFile(url) {
+  if (!url) return false
+  return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url)
+}
+
+function FileAttachment({ url }) {
+  if (!url) return null
+  if (isImageFile(url)) {
+    return <img src={url} alt="Attachment" className="mt-2 rounded-lg max-w-xs max-h-64 object-contain border border-white/10" />
+  }
+  const filename = url.split('/').pop()
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-sm text-blue-400 hover:text-blue-300 transition-colors">
+      📎 {filename}
+    </a>
+  )
+}
+
 export default function MemberDashboard() {
   const { user, profile } = useAuth()
   const [tickets, setTickets] = useState([])
@@ -19,9 +37,13 @@ export default function MemberDashboard() {
   const [notifications, setNotifications] = useState([])
   const [selectedTicket, setSelectedTicket] = useState(null)
   const [replies, setReplies] = useState([])
+  const [replyText, setReplyText] = useState('')
+  const [replyFile, setReplyFile] = useState(null)
+  const [uploading, setUploading] = useState(false)
   const [showRequestForm, setShowRequestForm] = useState(false)
   const [requestForm, setRequestForm] = useState({ title: '', description: '', affected_person: '' })
   const [filter, setFilter] = useState('all')
+  const [myFilter, setMyFilter] = useState('all')
   const [loading, setLoading] = useState(false)
   const [requestMsg, setRequestMsg] = useState('')
   const [review, setReview] = useState('')
@@ -165,6 +187,30 @@ export default function MemberDashboard() {
     setLoading(false)
   }
 
+  async function submitReply(e) {
+    e.preventDefault()
+    if (!replyText.trim() && !replyFile) return
+    setUploading(true)
+    let file_url = null
+    if (replyFile) {
+      try { file_url = await api.uploadFile(replyFile) } catch {}
+    }
+    try {
+      await api.createReply(selectedTicket.id, { message: replyText, image_url: file_url })
+      setReplyText(''); setReplyFile(null)
+      fetchReplies(selectedTicket.id)
+    } catch {}
+    setUploading(false)
+  }
+
+  async function updateStatus(id, status) {
+    try {
+      await api.updateTicket(id, { status })
+      fetchTickets()
+      if (selectedTicket?.id === id) setSelectedTicket(p => ({...p, status}))
+    } catch {}
+  }
+
   async function submitReview(ticketId) {
     if (!review.trim()) return
     setSubmittingReview(true)
@@ -177,9 +223,21 @@ export default function MemberDashboard() {
     setSubmittingReview(false)
   }
 
-  const filtered = filter === 'all' ? tickets : tickets.filter(t => t.status === filter)
+  const isMyTicket = (t) => t.created_by === user?.id
+  const assignedTickets = tickets.filter(t => !isMyTicket(t))
+  const myOwnTickets = tickets.filter(t => isMyTicket(t))
+  const filteredAssigned = filter === 'all' ? assignedTickets : assignedTickets.filter(t => t.status === filter)
+  const filteredMy = myFilter === 'all' ? myOwnTickets : myOwnTickets.filter(t => t.status === myFilter)
+
+  const requestStatusInfo = (s) => {
+    if (s === 'accepted') return { label: '✅ Accepted', cls: 'bg-green-900/30 text-green-400 border border-green-500/20' }
+    if (s === 'refused') return { label: '❌ Refused', cls: 'bg-red-900/30 text-red-400 border border-red-500/20' }
+    return { label: '⏳ Pending Review', cls: 'bg-yellow-900/30 text-yellow-400 border border-yellow-500/20' }
+  }
 
   if (selectedTicket) {
+    const canChangeStatus = isMyTicket(selectedTicket)
+    const statuses = ['opened', 'pending', 'solved']
     return (
       <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
         <Navbar title="Finest" />
@@ -187,33 +245,87 @@ export default function MemberDashboard() {
           <button onClick={()=>setSelectedTicket(null)} className="text-slate-400 hover:text-white text-sm mb-4">← Back</button>
 
           <div className="glass rounded-xl p-5 mb-5">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
               <StatusBadge status={selectedTicket.status} />
+              {isMyTicket(selectedTicket) && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-400 border border-blue-500/20">My Ticket</span>
+              )}
               <span className="text-slate-500 text-xs">{new Date(selectedTicket.created_at).toLocaleDateString()}</span>
             </div>
             <h2 className="text-white text-xl font-semibold mb-2">{selectedTicket.title}</h2>
             {selectedTicket.description && <p className="text-slate-400">{selectedTicket.description}</p>}
             {selectedTicket.affected_person && <p className="text-slate-500 text-sm mt-2">👤 {selectedTicket.affected_person}</p>}
+
+            {canChangeStatus && (
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <p className="text-slate-400 text-xs uppercase tracking-wider mb-3">Change Status</p>
+                <div className="flex gap-2 flex-wrap">
+                  {statuses.map(s => (
+                    <button
+                      key={s}
+                      onClick={() => updateStatus(selectedTicket.id, s)}
+                      disabled={selectedTicket.status === s}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all border ${
+                        selectedTicket.status === s
+                          ? s === 'opened' ? 'bg-blue-600/30 text-blue-400 border-blue-500/40 cursor-default'
+                            : s === 'pending' ? 'bg-yellow-600/30 text-yellow-400 border-yellow-500/40 cursor-default'
+                            : 'bg-green-600/30 text-green-400 border-green-500/40 cursor-default'
+                          : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      {s === 'opened' ? '🔵 Opened' : s === 'pending' ? '🟡 Pending' : '✅ Solved'}
+                      {selectedTicket.status === s && ' ✓'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="glass rounded-xl p-5 mb-5">
             <h3 className="text-white font-medium mb-4">Replies ({replies.length})</h3>
-            <div className="space-y-3 max-h-96 overflow-y-auto">
+            <div className="space-y-3 max-h-96 overflow-y-auto mb-5 pr-1">
               {replies.length === 0 && <p className="text-slate-500 text-sm">No replies yet</p>}
               {replies.map(r => (
-                <div key={r.id} className="bg-white/5 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
+                <div key={r.id} className={`rounded-lg p-3 ${r.user_id === user?.id ? 'bg-blue-900/20 border border-blue-500/15 ml-4' : 'bg-white/5 border border-white/5'}`}>
+                  <div className="flex items-center gap-2 mb-1">
                     <span className="text-white text-sm font-medium">{r.profiles?.full_name || 'User'}</span>
+                    {r.user_id === user?.id && <span className="text-xs text-blue-400">(You)</span>}
                     <span className="text-slate-500 text-xs">{new Date(r.created_at).toLocaleString()}</span>
                   </div>
                   {r.message && <p className="text-slate-300 text-sm">{r.message}</p>}
-                  {r.image_url && <img src={r.image_url} alt="Reply" className="mt-2 rounded-lg max-w-sm" />}
+                  <FileAttachment url={r.image_url} />
                 </div>
               ))}
             </div>
+            <form onSubmit={submitReply} className="space-y-3 border-t border-white/10 pt-4">
+              <textarea
+                value={replyText}
+                onChange={e=>setReplyText(e.target.value)}
+                placeholder="Type your reply..."
+                rows={3}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none"
+              />
+              <div className="flex items-center gap-3 flex-wrap">
+                <label className="cursor-pointer bg-white/5 border border-white/10 text-slate-400 hover:text-white text-sm px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
+                  📎 {replyFile ? replyFile.name : 'Attach File or Image'}
+                  <input type="file" accept="*/*" className="hidden" onChange={e=>setReplyFile(e.target.files[0])} />
+                </label>
+                {replyFile && (
+                  <button type="button" onClick={()=>setReplyFile(null)} className="text-slate-500 hover:text-red-400 text-xs">✕ Remove</button>
+                )}
+                <button
+                  type="submit"
+                  disabled={uploading || (!replyText.trim() && !replyFile)}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-5 py-2 rounded-lg font-medium"
+                >
+                  {uploading ? 'Sending...' : 'Send Reply'}
+                </button>
+              </div>
+            </form>
           </div>
 
-          {selectedTicket.status === 'solved' && !selectedTicket.review && (
+          {selectedTicket.status === 'solved' && !selectedTicket.review && !isMyTicket(selectedTicket) && (
             <div className="glass rounded-xl p-5">
               <h3 className="text-white font-medium mb-3">Leave a Review</h3>
               <textarea value={review} onChange={e=>setReview(e.target.value)} placeholder="How was your experience?" rows={3} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none mb-3" />
@@ -227,10 +339,14 @@ export default function MemberDashboard() {
     )
   }
 
+  const tabs = ['tickets', 'myTickets', 'requests', 'leave', ...(profile?.can_view_attendance ? ['attendance'] : [])]
+  const tabLabels = { tickets: 'Assigned Tickets', myTickets: 'My Tickets', requests: 'Requests', leave: 'Leave', attendance: 'Attendance' }
+
   return (
     <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
       <Navbar title="Finest" />
       <div className="max-w-4xl mx-auto p-6">
+
         {/* Attendance */}
         <div className="glass rounded-xl p-5 mb-6">
           <div className="flex items-center justify-between gap-4">
@@ -250,13 +366,7 @@ export default function MemberDashboard() {
                 </div>
               ) : <p className="text-slate-500 text-sm">No check-in recorded today</p>}
             </div>
-            <AttendanceButton
-              todayLogin={todayLogin}
-              loggingIn={loggingIn}
-              loggingOut={loggingOut}
-              onLogin={registerLogin}
-              onLogout={registerLogout}
-            />
+            <AttendanceButton todayLogin={todayLogin} loggingIn={loggingIn} loggingOut={loggingOut} onLogin={registerLogin} onLogout={registerLogout} />
           </div>
         </div>
 
@@ -274,20 +384,30 @@ export default function MemberDashboard() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-1 border-b border-white/10 scrollbar-hide">
-          {['tickets', 'requests', 'leave', ...(profile?.can_view_attendance ? ['attendance'] : [])].map(t => (
-            <button key={t} onClick={()=>setActiveTab(t)} className={`px-4 py-2 rounded-t-lg text-sm font-medium capitalize transition-all whitespace-nowrap flex-shrink-0 ${activeTab===t ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>{t}</button>
+        <div className="flex gap-1 mb-6 overflow-x-auto pb-1 border-b border-white/10">
+          {tabs.map(t => (
+            <button
+              key={t}
+              onClick={()=>setActiveTab(t)}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${activeTab===t ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+            >
+              {tabLabels[t]}
+              {t === 'myTickets' && myRequests.length > 0 && (
+                <span className="ml-2 bg-yellow-500/20 text-yellow-400 text-xs px-1.5 py-0.5 rounded-full">{myRequests.length}</span>
+              )}
+            </button>
           ))}
         </div>
 
+        {/* Assigned Tickets Tab */}
         {activeTab === 'tickets' && (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
               {[
-                { label: 'Total', val: tickets.length, color: 'text-white', icon: '📊' },
-                { label: 'Opened', val: tickets.filter(t=>t.status==='opened').length, color: 'text-blue-400', icon: '🔵' },
-                { label: 'Pending', val: tickets.filter(t=>t.status==='pending').length, color: 'text-yellow-400', icon: '🟡' },
-                { label: 'Solved', val: tickets.filter(t=>t.status==='solved').length, color: 'text-green-400', icon: '✅' },
+                { label: 'Total', val: assignedTickets.length, color: 'text-white', icon: '📊' },
+                { label: 'Opened', val: assignedTickets.filter(t=>t.status==='opened').length, color: 'text-blue-400', icon: '🔵' },
+                { label: 'Pending', val: assignedTickets.filter(t=>t.status==='pending').length, color: 'text-yellow-400', icon: '🟡' },
+                { label: 'Solved', val: assignedTickets.filter(t=>t.status==='solved').length, color: 'text-green-400', icon: '✅' },
               ].map(s => (
                 <div key={s.label} className="glass rounded-xl p-4">
                   <p className="text-xs text-slate-400 mb-1 flex items-center gap-2"><span>{s.icon}</span>{s.label}</p>
@@ -295,62 +415,154 @@ export default function MemberDashboard() {
                 </div>
               ))}
             </div>
-
             <div className="flex gap-2 mb-4">
               {['all','opened','pending','solved'].map(f => (
                 <button key={f} onClick={()=>setFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${filter===f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>{f}</button>
               ))}
             </div>
-
             <div className="space-y-3">
-              {filtered.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">No tickets</div>}
-              {filtered.map(t => (
-                <div key={t.id} className="glass rounded-xl p-4 cursor-pointer" onClick={()=>setSelectedTicket(t)}>
+              {filteredAssigned.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">No tickets</div>}
+              {filteredAssigned.map(t => (
+                <div key={t.id} className="glass rounded-xl p-4 cursor-pointer hover:border-white/15 transition-all" onClick={()=>setSelectedTicket(t)}>
                   <div className="flex items-center gap-2 mb-1">
                     <StatusBadge status={t.status} />
                     <span className="text-slate-500 text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
                   </div>
                   <h3 className="text-white font-medium">{t.title}</h3>
-                  {t.description && <p className="text-slate-400 text-sm mt-1">{t.description}</p>}
+                  {t.description && <p className="text-slate-400 text-sm mt-1 line-clamp-2">{t.description}</p>}
                 </div>
               ))}
             </div>
           </>
         )}
 
-        {activeTab === 'requests' && (
+        {/* My Tickets Tab */}
+        {activeTab === 'myTickets' && (
           <>
-            <div className="mb-4">
-              <button onClick={()=>setShowRequestForm(v=>!v)} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg">+ New Request</button>
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-white font-semibold text-lg">My Tickets</h2>
+                <p className="text-slate-500 text-sm">Create and track your own tickets</p>
+              </div>
+              <button
+                onClick={()=>{setShowRequestForm(v=>!v); setRequestMsg('')}}
+                className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg font-medium"
+              >
+                {showRequestForm ? 'Close' : '+ New Ticket'}
+              </button>
             </div>
 
             {showRequestForm && (
-              <form onSubmit={submitRequest} className="glass rounded-xl p-5 mb-4 space-y-4">
+              <form onSubmit={submitRequest} className="glass rounded-xl p-5 mb-6 space-y-4 border border-blue-500/20">
+                <h3 className="text-white font-medium">Send Ticket to Admin</h3>
                 {requestMsg && <div className={`${requestMsg.includes('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'} text-sm rounded-lg p-3`}>{requestMsg}</div>}
-                <input type="text" required placeholder="Title" value={requestForm.title} onChange={e=>setRequestForm(f=>({...f,title:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
-                <textarea required placeholder="Description" rows={3} value={requestForm.description} onChange={e=>setRequestForm(f=>({...f,description:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" />
-                <input type="text" placeholder="Affected Person (optional)" value={requestForm.affected_person} onChange={e=>setRequestForm(f=>({...f,affected_person:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Title *</label>
+                  <input type="text" required placeholder="Brief description..." value={requestForm.title} onChange={e=>setRequestForm(f=>({...f,title:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Description</label>
+                  <textarea placeholder="Explain the issue..." rows={3} value={requestForm.description} onChange={e=>setRequestForm(f=>({...f,description:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Affected Person</label>
+                  <input type="text" placeholder="Who is affected? (optional)" value={requestForm.affected_person} onChange={e=>setRequestForm(f=>({...f,affected_person:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                </div>
                 <div className="flex gap-2">
-                  <button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{loading ? 'Submitting...' : 'Submit Request'}</button>
+                  <button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-5 py-2 rounded-lg font-medium">{loading ? 'Submitting...' : 'Send to Admin'}</button>
                   <button type="button" onClick={()=>setShowRequestForm(false)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
                 </div>
               </form>
             )}
 
+            {myRequests.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-slate-400 text-xs uppercase tracking-wider mb-3">Pending Requests</h3>
+                <div className="space-y-3">
+                  {myRequests.map(r => {
+                    const info = requestStatusInfo(r.request_status)
+                    return (
+                      <div key={r.id} className="glass rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${info.cls}`}>{info.label}</span>
+                          <span className="text-slate-500 text-xs">{new Date(r.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <h3 className="text-white font-medium">{r.title}</h3>
+                        {r.description && <p className="text-slate-400 text-sm mt-1">{r.description}</p>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {myOwnTickets.length > 0 && (
+              <div>
+                <h3 className="text-slate-400 text-xs uppercase tracking-wider mb-3">Accepted Tickets</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                  {[
+                    { label: 'Total', val: myOwnTickets.length, color: 'text-white', icon: '📊' },
+                    { label: 'Opened', val: myOwnTickets.filter(t=>t.status==='opened').length, color: 'text-blue-400', icon: '🔵' },
+                    { label: 'Pending', val: myOwnTickets.filter(t=>t.status==='pending').length, color: 'text-yellow-400', icon: '🟡' },
+                    { label: 'Solved', val: myOwnTickets.filter(t=>t.status==='solved').length, color: 'text-green-400', icon: '✅' },
+                  ].map(s => (
+                    <div key={s.label} className="glass rounded-xl p-3">
+                      <p className="text-xs text-slate-400 mb-1 flex items-center gap-1"><span>{s.icon}</span>{s.label}</p>
+                      <p className={`text-xl font-semibold ${s.color}`}>{s.val}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 mb-3">
+                  {['all','opened','pending','solved'].map(f => (
+                    <button key={f} onClick={()=>setMyFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${myFilter===f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>{f}</button>
+                  ))}
+                </div>
+                <div className="space-y-3">
+                  {filteredMy.map(t => (
+                    <div key={t.id} className="glass rounded-xl p-4 cursor-pointer hover:border-white/15 transition-all" onClick={()=>setSelectedTicket(t)}>
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <StatusBadge status={t.status} />
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-400 border border-blue-500/20">My Ticket</span>
+                        <span className="text-slate-500 text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <h3 className="text-white font-medium">{t.title}</h3>
+                      {t.description && <p className="text-slate-400 text-sm mt-1 line-clamp-2">{t.description}</p>}
+                    </div>
+                  ))}
+                  {filteredMy.length === 0 && <div className="glass rounded-xl py-8 text-center text-slate-500 text-sm">No tickets with this status</div>}
+                </div>
+              </div>
+            )}
+
+            {myRequests.length === 0 && myOwnTickets.length === 0 && !showRequestForm && (
+              <div className="glass rounded-xl py-16 text-center">
+                <p className="text-slate-400 text-4xl mb-4">🎫</p>
+                <p className="text-white font-medium mb-2">No tickets yet</p>
+                <p className="text-slate-500 text-sm mb-5">Create a ticket and send it to admin for review</p>
+                <button onClick={()=>setShowRequestForm(true)} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-5 py-2 rounded-lg font-medium">+ Create First Ticket</button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Requests tab (old pending requests only) */}
+        {activeTab === 'requests' && (
+          <>
             <div className="space-y-3">
               {myRequests.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">No requests yet</div>}
-              {myRequests.map(r => (
-                <div key={r.id} className="glass rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${r.request_status==='accepted' ? 'bg-green-900/30 text-green-400' : r.request_status==='refused' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
-                      {r.request_status?.replace('_', ' ')}
-                    </span>
-                    <span className="text-slate-500 text-xs">{new Date(r.created_at).toLocaleDateString()}</span>
+              {myRequests.map(r => {
+                const info = requestStatusInfo(r.request_status)
+                return (
+                  <div key={r.id} className="glass rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${info.cls}`}>{info.label}</span>
+                      <span className="text-slate-500 text-xs">{new Date(r.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <h3 className="text-white font-medium">{r.title}</h3>
+                    {r.description && <p className="text-slate-400 text-sm mt-1">{r.description}</p>}
                   </div>
-                  <h3 className="text-white font-medium">{r.title}</h3>
-                  {r.description && <p className="text-slate-400 text-sm mt-1">{r.description}</p>}
-                </div>
-              ))}
+                )
+              })}
             </div>
           </>
         )}
@@ -366,7 +578,6 @@ export default function MemberDashboard() {
                 <span>Approved: <span className="text-green-400 font-medium">{leaveRequests.filter(r=>r.status==='approved').length}</span></span>
               </div>
             </div>
-
             {showLeaveForm && (
               <form onSubmit={submitLeaveRequest} className="glass rounded-xl p-5 mb-4 space-y-3">
                 {leaveMsg && <div className={`${leaveMsg.startsWith('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'} text-sm rounded-lg p-3`}>{leaveMsg}</div>}
@@ -387,7 +598,6 @@ export default function MemberDashboard() {
                 </div>
               </form>
             )}
-
             <div className="space-y-2">
               {leaveRequests.length === 0 && <p className="text-slate-500 text-sm text-center py-4">No leave requests yet</p>}
               {leaveRequests.map(r => (
@@ -414,29 +624,29 @@ export default function MemberDashboard() {
             </div>
             <div className="glass rounded-2xl overflow-hidden">
               <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-white/8">
-                    {['Name','Email','Role','Login Time','Sign Off','Worked','Date'].map(h => (
-                      <th key={h} className="text-left text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {attendanceRecords.length === 0 && <tr><td colSpan={7} className="text-center text-slate-500 py-8">No attendance recorded</td></tr>}
-                  {attendanceRecords.map(r => (
-                    <tr key={r.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
-                      <td className="px-4 py-3 text-white font-medium">{r.full_name||'—'}</td>
-                      <td className="px-4 py-3 text-slate-300">{r.email}</td>
-                      <td className="px-4 py-3"><span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${r.role==='admin' ? 'bg-purple-900/30 text-purple-400' : r.role==='employee' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-900/30 text-slate-400'}`}>{r.role}</span></td>
-                      <td className="px-4 py-3 text-white font-mono">{new Date(r.login_time).toLocaleTimeString()}</td>
-                      <td className="px-4 py-3 text-slate-300 font-mono">{r.logout_time ? new Date(r.logout_time).toLocaleTimeString() : 'Still working'}</td>
-                      <td className="px-4 py-3 text-green-400 text-xs">{r.logout_time ? formatWorkDuration(r.login_time, r.logout_time) : 'In progress'}</td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">{new Date(r.date).toLocaleDateString()}</td>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/8">
+                      {['Name','Email','Role','Login Time','Sign Off','Worked','Date'].map(h => (
+                        <th key={h} className="text-left text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium">{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {attendanceRecords.length === 0 && <tr><td colSpan={7} className="text-center text-slate-500 py-8">No attendance recorded</td></tr>}
+                    {attendanceRecords.map(r => (
+                      <tr key={r.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
+                        <td className="px-4 py-3 text-white font-medium">{r.full_name||'—'}</td>
+                        <td className="px-4 py-3 text-slate-300">{r.email}</td>
+                        <td className="px-4 py-3"><span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${r.role==='admin' ? 'bg-purple-900/30 text-purple-400' : r.role==='member' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-900/30 text-slate-400'}`}>{r.role}</span></td>
+                        <td className="px-4 py-3 text-white font-mono">{new Date(r.login_time).toLocaleTimeString()}</td>
+                        <td className="px-4 py-3 text-slate-300 font-mono">{r.logout_time ? new Date(r.logout_time).toLocaleTimeString() : 'Still working'}</td>
+                        <td className="px-4 py-3 text-green-400 text-xs">{r.logout_time ? formatWorkDuration(r.login_time, r.logout_time) : 'In progress'}</td>
+                        <td className="px-4 py-3 text-slate-400 text-xs">{new Date(r.date).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </>
