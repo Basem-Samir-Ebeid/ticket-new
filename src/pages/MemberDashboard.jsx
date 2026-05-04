@@ -40,6 +40,7 @@ export default function MemberDashboard() {
   const [replyText, setReplyText] = useState('')
   const [replyFile, setReplyFile] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [replyError, setReplyError] = useState('')
   const [showRequestForm, setShowRequestForm] = useState(false)
   const [requestForm, setRequestForm] = useState({ title: '', description: '', affected_person: '' })
   const [filter, setFilter] = useState('all')
@@ -191,15 +192,25 @@ export default function MemberDashboard() {
     e.preventDefault()
     if (!replyText.trim() && !replyFile) return
     setUploading(true)
+    setReplyError('')
     let file_url = null
     if (replyFile) {
-      try { file_url = await api.uploadFile(replyFile) } catch {}
+      try {
+        file_url = await api.uploadFile(replyFile)
+      } catch (err) {
+        setReplyError('File upload failed: ' + (err.message || 'Unknown error'))
+        setUploading(false)
+        return
+      }
     }
     try {
       await api.createReply(selectedTicket.id, { message: replyText, image_url: file_url })
-      setReplyText(''); setReplyFile(null)
+      setReplyText('')
+      setReplyFile(null)
       fetchReplies(selectedTicket.id)
-    } catch {}
+    } catch (err) {
+      setReplyError('Failed to send reply: ' + (err.message || 'Unknown error'))
+    }
     setUploading(false)
   }
 
@@ -299,9 +310,12 @@ export default function MemberDashboard() {
               ))}
             </div>
             <form onSubmit={submitReply} className="space-y-3 border-t border-white/10 pt-4">
+              {replyError && (
+                <div className="bg-red-900/30 border border-red-500/20 text-red-400 text-sm rounded-lg px-3 py-2">{replyError}</div>
+              )}
               <textarea
                 value={replyText}
-                onChange={e=>setReplyText(e.target.value)}
+                onChange={e=>{ setReplyText(e.target.value); setReplyError('') }}
                 placeholder="Type your reply..."
                 rows={3}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none"
@@ -309,7 +323,7 @@ export default function MemberDashboard() {
               <div className="flex items-center gap-3 flex-wrap">
                 <label className="cursor-pointer bg-white/5 border border-white/10 text-slate-400 hover:text-white text-sm px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
                   📎 {replyFile ? replyFile.name : 'Attach File or Image'}
-                  <input type="file" accept="*/*" className="hidden" onChange={e=>setReplyFile(e.target.files[0])} />
+                  <input type="file" accept="*/*" className="hidden" onChange={e=>{ setReplyFile(e.target.files[0]); setReplyError('') }} />
                 </label>
                 {replyFile && (
                   <button type="button" onClick={()=>setReplyFile(null)} className="text-slate-500 hover:text-red-400 text-xs">✕ Remove</button>

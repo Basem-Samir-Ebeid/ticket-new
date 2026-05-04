@@ -175,27 +175,37 @@ router.get('/:id/replies', requireAuth as any, async (req: any, res) => {
 
 // POST reply
 router.post('/:id/replies', requireAuth as any, async (req: any, res) => {
-  const { message, image_url } = req.body
-  const [reply] = await db.insert(ticketReplies).values({
-    ticket_id: req.params.id,
-    user_id: req.user.id,
-    message: message || null,
-    image_url: image_url || null,
-  }).returning()
-
-  // Notify ticket creator
-  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, req.params.id))
-  if (ticket?.created_by && ticket.created_by !== req.user.id) {
-    const [notif] = await db.insert(notifications).values({
-      user_id: ticket.created_by,
-      message: `New reply on ticket: ${ticket.title}`,
-      ticket_id: ticket.id,
+  try {
+    const { message, image_url } = req.body
+    if (!message && !image_url) {
+      return res.status(400).json({ error: 'Reply must have a message or attachment' })
+    }
+    const [reply] = await db.insert(ticketReplies).values({
+      ticket_id: req.params.id,
+      user_id: req.user.id,
+      message: message || null,
+      image_url: image_url || null,
     }).returning()
-    broadcast(ticket.created_by, 'notification', notif)
-  }
 
-  broadcastAll('ticket_reply', { ticket_id: req.params.id, reply_id: reply.id })
-  res.json(reply)
+    // Notify ticket creator
+    try {
+      const [ticket] = await db.select().from(tickets).where(eq(tickets.id, req.params.id))
+      if (ticket?.created_by && ticket.created_by !== req.user.id) {
+        const [notif] = await db.insert(notifications).values({
+          user_id: ticket.created_by,
+          message: `New reply on ticket: ${ticket.title}`,
+          ticket_id: ticket.id,
+        }).returning()
+        broadcast(ticket.created_by, 'notification', notif)
+      }
+      broadcastAll('ticket_reply', { ticket_id: req.params.id, reply_id: reply.id })
+    } catch {}
+
+    res.json(reply)
+  } catch (err: any) {
+    console.error('Reply error:', err)
+    res.status(500).json({ error: err.message || 'Failed to post reply' })
+  }
 })
 
 export default router
