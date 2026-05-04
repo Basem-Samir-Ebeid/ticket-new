@@ -3,6 +3,7 @@ import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
 import StatusBadge from '../components/StatusBadge'
+import AttendanceButton from '../components/AttendanceButton'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -207,22 +208,30 @@ export default function MemberDashboard() {
       <div className="max-w-4xl mx-auto p-6">
         {/* Attendance */}
         <div className="glass rounded-xl p-5 mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm mb-1">Today's Attendance</p>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <p className="text-slate-400 text-sm mb-2 uppercase tracking-wider font-medium">Today's Attendance</p>
               {todayLogin ? (
-                <div>
-                  <p className="text-white text-lg font-medium">✓ Logged at {new Date(todayLogin.login_time).toLocaleTimeString()}</p>
-                  <p className="text-slate-300 text-sm mt-1">Sign Off: {todayLogin.logout_time ? new Date(todayLogin.logout_time).toLocaleTimeString() : 'Not signed off yet'}</p>
-                  {todayLogin.logout_time && <p className="text-green-400 text-xs mt-1">Worked: {formatWorkDuration(todayLogin.login_time, todayLogin.logout_time)}</p>}
-                  {todayLogin.latitude && <p className="text-slate-400 text-xs mt-1">📍 {todayLogin.latitude.toFixed(4)}, {todayLogin.longitude.toFixed(4)}</p>}
+                <div className="space-y-1">
+                  <p className="text-white font-medium flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-400 inline-block"></span>
+                    Check-in: {new Date(todayLogin.login_time).toLocaleTimeString()}
+                  </p>
+                  <p className="text-slate-300 text-sm">
+                    Check-out: {todayLogin.logout_time ? new Date(todayLogin.logout_time).toLocaleTimeString() : <span className="text-amber-400">Pending</span>}
+                  </p>
+                  {todayLogin.logout_time && <p className="text-green-400 text-xs font-medium">⏱ Worked: {formatWorkDuration(todayLogin.login_time, todayLogin.logout_time)}</p>}
+                  {todayLogin.latitude && <p className="text-slate-500 text-xs">📍 {todayLogin.latitude.toFixed(4)}, {todayLogin.longitude.toFixed(4)}</p>}
                 </div>
-              ) : <p className="text-slate-500">Not logged yet</p>}
+              ) : <p className="text-slate-500 text-sm">No check-in recorded today</p>}
             </div>
-            <div className="flex gap-2">
-              {!todayLogin && <button onClick={registerLogin} disabled={loggingIn} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{loggingIn ? 'Logging...' : 'Register Login'}</button>}
-              {todayLogin && !todayLogin.logout_time && <button onClick={registerLogout} disabled={loggingOut} className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{loggingOut ? 'Signing Off...' : 'Sign Off'}</button>}
-            </div>
+            <AttendanceButton
+              todayLogin={todayLogin}
+              loggingIn={loggingIn}
+              loggingOut={loggingOut}
+              onLogin={registerLogin}
+              onLogout={registerLogout}
+            />
           </div>
         </div>
 
@@ -240,9 +249,9 @@ export default function MemberDashboard() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-1 border-b border-white/10 scrollbar-hide">
           {['tickets', 'requests', 'leave', ...(profile?.can_view_attendance ? ['attendance'] : [])].map(t => (
-            <button key={t} onClick={()=>setActiveTab(t)} className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${activeTab===t ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>{t}</button>
+            <button key={t} onClick={()=>setActiveTab(t)} className={`px-4 py-2 rounded-t-lg text-sm font-medium capitalize transition-all whitespace-nowrap flex-shrink-0 ${activeTab===t ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>{t}</button>
           ))}
         </div>
 
