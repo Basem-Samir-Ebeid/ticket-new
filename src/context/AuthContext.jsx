@@ -50,6 +50,8 @@ export function AuthProvider({ children }) {
   function handleWsEvent(event, data) {
     if (event === 'session_revoked') {
       forceSignOut()
+    } else {
+      window.dispatchEvent(new CustomEvent('ws:' + event, { detail: data }))
     }
   }
 

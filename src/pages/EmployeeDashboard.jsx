@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
@@ -35,6 +35,9 @@ export default function EmployeeDashboard() {
   const [leaveMsg, setLeaveMsg] = useState('')
   const [submittingLeave, setSubmittingLeave] = useState(false)
 
+  const selectedTicketRef = useRef(null)
+  useEffect(() => { selectedTicketRef.current = selectedTicket }, [selectedTicket])
+
   useEffect(() => {
     if (user) {
       fetchTickets()
@@ -42,6 +45,25 @@ export default function EmployeeDashboard() {
       fetchLeaveRequests()
     }
   }, [user])
+
+  useEffect(() => {
+    const onTicketUpdate = () => fetchTickets()
+    const onTicketReply = (e) => {
+      if (selectedTicketRef.current?.id === e.detail?.ticket_id) fetchReplies(selectedTicketRef.current.id)
+    }
+    const onAttendanceUpdate = () => checkTodayLogin()
+    const onLeaveUpdate = () => fetchLeaveRequests()
+    window.addEventListener('ws:ticket_update', onTicketUpdate)
+    window.addEventListener('ws:ticket_reply', onTicketReply)
+    window.addEventListener('ws:attendance_update', onAttendanceUpdate)
+    window.addEventListener('ws:leave_update', onLeaveUpdate)
+    return () => {
+      window.removeEventListener('ws:ticket_update', onTicketUpdate)
+      window.removeEventListener('ws:ticket_reply', onTicketReply)
+      window.removeEventListener('ws:attendance_update', onAttendanceUpdate)
+      window.removeEventListener('ws:leave_update', onLeaveUpdate)
+    }
+  }, [])
 
   useEffect(() => {
     if (profile?.can_view_attendance) fetchAttendanceRecords()

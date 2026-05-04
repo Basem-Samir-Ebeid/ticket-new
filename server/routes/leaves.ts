@@ -3,7 +3,7 @@ import { db } from '../db'
 import { leaveRequests, profiles, notifications } from '../../shared/schema'
 import { eq, desc } from 'drizzle-orm'
 import { requireAuth } from '../auth'
-import { broadcast } from '../ws'
+import { broadcast, broadcastAll } from '../ws'
 
 const router = Router()
 
@@ -51,6 +51,7 @@ router.post('/', requireAuth as any, async (req: any, res) => {
     broadcast(admin.id, 'notification', notif)
   }
 
+  broadcastAll('leave_update', { action: 'created', leave_id: leave.id })
   res.json(leave)
 })
 
@@ -70,7 +71,7 @@ router.patch('/:id/approve', requireAuth as any, async (req: any, res) => {
       message: `✅ Your leave request (${leave.start_date} → ${leave.end_date}) was approved`,
     }).returning()
     broadcast(leave.user_id, 'notification', notif)
-    broadcast(leave.user_id, 'leave_update', leave)
+    broadcastAll('leave_update', { action: 'approved', leave_id: leave.id })
   }
 
   res.json(leave)
@@ -93,7 +94,7 @@ router.patch('/:id/reject', requireAuth as any, async (req: any, res) => {
       message: `❌ Your leave request (${leave.start_date} → ${leave.end_date}) was rejected${note ? ' — ' + note : ''}`,
     }).returning()
     broadcast(leave.user_id, 'notification', notif)
-    broadcast(leave.user_id, 'leave_update', leave)
+    broadcastAll('leave_update', { action: 'rejected', leave_id: leave.id })
   }
 
   res.json(leave)
@@ -102,6 +103,7 @@ router.patch('/:id/reject', requireAuth as any, async (req: any, res) => {
 router.delete('/:id', requireAuth as any, async (req: any, res) => {
   if (req.profile.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
   await db.delete(leaveRequests).where(eq(leaveRequests.id, req.params.id))
+  broadcastAll('leave_update', { action: 'deleted' })
   res.json({ success: true })
 })
 

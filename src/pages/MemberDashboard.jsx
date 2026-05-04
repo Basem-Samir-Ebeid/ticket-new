@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
@@ -38,6 +38,9 @@ export default function MemberDashboard() {
   const [leaveMsg, setLeaveMsg] = useState('')
   const [submittingLeave, setSubmittingLeave] = useState(false)
 
+  const selectedTicketRef = useRef(null)
+  useEffect(() => { selectedTicketRef.current = selectedTicket }, [selectedTicket])
+
   useEffect(() => {
     if (!user) return
     fetchTickets()
@@ -46,6 +49,28 @@ export default function MemberDashboard() {
     checkTodayLogin()
     fetchLeaveRequests()
   }, [user])
+
+  useEffect(() => {
+    const onTicketUpdate = () => { fetchTickets(); fetchMyRequests() }
+    const onTicketReply = (e) => {
+      if (selectedTicketRef.current?.id === e.detail?.ticket_id) fetchReplies(selectedTicketRef.current.id)
+    }
+    const onLeaveUpdate = () => fetchLeaveRequests()
+    const onAttendanceUpdate = () => checkTodayLogin()
+    const onNotification = () => fetchNotifications()
+    window.addEventListener('ws:ticket_update', onTicketUpdate)
+    window.addEventListener('ws:ticket_reply', onTicketReply)
+    window.addEventListener('ws:leave_update', onLeaveUpdate)
+    window.addEventListener('ws:attendance_update', onAttendanceUpdate)
+    window.addEventListener('ws:notification', onNotification)
+    return () => {
+      window.removeEventListener('ws:ticket_update', onTicketUpdate)
+      window.removeEventListener('ws:ticket_reply', onTicketReply)
+      window.removeEventListener('ws:leave_update', onLeaveUpdate)
+      window.removeEventListener('ws:attendance_update', onAttendanceUpdate)
+      window.removeEventListener('ws:notification', onNotification)
+    }
+  }, [])
 
   useEffect(() => {
     if (selectedTicket) fetchReplies(selectedTicket.id)

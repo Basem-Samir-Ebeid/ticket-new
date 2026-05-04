@@ -3,6 +3,7 @@ import { db } from '../db'
 import { loginTimes, profiles } from '../../shared/schema'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../auth'
+import { broadcastAll } from '../ws'
 
 const router = Router()
 
@@ -64,6 +65,7 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
     longitude: longitude || null,
   }).returning()
 
+  broadcastAll('attendance_update', { action: 'login', user_id: req.user.id, date: today })
   res.json(record)
 })
 
@@ -84,6 +86,7 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
     logout_longitude: longitude || null,
   }).where(and(eq(loginTimes.user_id, req.user.id), eq(loginTimes.date, today))).returning()
 
+  broadcastAll('attendance_update', { action: 'logout', user_id: req.user.id, date: today })
   res.json(record)
 })
 
@@ -91,6 +94,7 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
 router.delete('/:id', requireAuth as any, async (req: any, res) => {
   if (req.profile.role !== 'admin' && req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Admin only' })
   await db.delete(loginTimes).where(eq(loginTimes.id, req.params.id))
+  broadcastAll('attendance_update', { action: 'deleted' })
   res.json({ success: true })
 })
 

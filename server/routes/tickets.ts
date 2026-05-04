@@ -80,13 +80,12 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       }).returning()
       broadcast(admin.id, 'notification', notif)
     }
-    // Send push notification to admins
     sendPushToAdmins('📝 New Ticket Request', title, '/')
   } else {
-    // Regular ticket — also push notify admins
     sendPushToAdmins('🎫 New Ticket', title, '/')
   }
 
+  broadcastAll('ticket_update', { action: 'created', ticket_id: ticket.id, is_request: ticket.is_request })
   res.json(ticket)
 })
 
@@ -107,12 +106,14 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
 
   const [ticket] = await db.update(tickets).set(updates).where(eq(tickets.id, req.params.id)).returning()
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
+  broadcastAll('ticket_update', { action: 'updated', ticket_id: ticket.id, status: ticket.status })
   res.json(ticket)
 })
 
 // DELETE ticket
 router.delete('/:id', requireAuth as any, async (req: any, res) => {
   await db.delete(tickets).where(eq(tickets.id, req.params.id))
+  broadcastAll('ticket_update', { action: 'deleted', ticket_id: req.params.id })
   res.json({ success: true })
 })
 
@@ -135,6 +136,7 @@ router.post('/:id/accept', requireAuth as any, async (req: any, res) => {
     broadcast(ticket.created_by, 'notification', notif)
   }
 
+  broadcastAll('ticket_update', { action: 'accepted', ticket_id: ticket?.id })
   res.json(ticket)
 })
 
@@ -152,6 +154,7 @@ router.post('/:id/refuse', requireAuth as any, async (req: any, res) => {
     broadcast(ticket.created_by, 'notification', notif)
   }
 
+  broadcastAll('ticket_update', { action: 'refused', ticket_id: ticket?.id })
   res.json(ticket)
 })
 
@@ -188,6 +191,7 @@ router.post('/:id/replies', requireAuth as any, async (req: any, res) => {
     broadcast(ticket.created_by, 'notification', notif)
   }
 
+  broadcastAll('ticket_reply', { ticket_id: req.params.id, reply_id: reply.id })
   res.json(reply)
 })
 

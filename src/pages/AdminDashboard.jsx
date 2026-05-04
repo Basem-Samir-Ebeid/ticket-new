@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
@@ -53,6 +53,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [uploadingPic, setUploadingPic] = useState(false)
   const [userSearch, setUserSearch] = useState('')
 
+  const selectedTicketRef = useRef(null)
+  const selectedDateRef = useRef(selectedDate)
+  useEffect(() => { selectedTicketRef.current = selectedTicket }, [selectedTicket])
+  useEffect(() => { selectedDateRef.current = selectedDate }, [selectedDate])
+
   useEffect(() => {
     fetchTickets()
     fetchUsers()
@@ -60,6 +65,31 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     fetchLoginTimes()
     checkTodayLogin()
     fetchLeaveRequests()
+  }, [])
+
+  useEffect(() => {
+    const onTicketUpdate = () => { fetchTickets(); fetchRequests() }
+    const onTicketReply = (e) => {
+      if (selectedTicketRef.current?.id === e.detail?.ticket_id) fetchReplies(selectedTicketRef.current.id)
+    }
+    const onLeaveUpdate = () => fetchLeaveRequests()
+    const onAttendanceUpdate = async () => {
+      checkTodayLogin()
+      try { setLoginTimes(await api.getAttendance(selectedDateRef.current)) } catch {}
+    }
+    const onNotification = () => {}
+    window.addEventListener('ws:ticket_update', onTicketUpdate)
+    window.addEventListener('ws:ticket_reply', onTicketReply)
+    window.addEventListener('ws:leave_update', onLeaveUpdate)
+    window.addEventListener('ws:attendance_update', onAttendanceUpdate)
+    window.addEventListener('ws:notification', onNotification)
+    return () => {
+      window.removeEventListener('ws:ticket_update', onTicketUpdate)
+      window.removeEventListener('ws:ticket_reply', onTicketReply)
+      window.removeEventListener('ws:leave_update', onLeaveUpdate)
+      window.removeEventListener('ws:attendance_update', onAttendanceUpdate)
+      window.removeEventListener('ws:notification', onNotification)
+    }
   }, [])
 
   useEffect(() => { if (selectedTicket) fetchReplies(selectedTicket.id) }, [selectedTicket])
