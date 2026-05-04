@@ -278,7 +278,7 @@ export default function MemberDashboard() {
   }
 
   if (selectedTicket) {
-    const canChangeStatus = isMyTicket(selectedTicket)
+    const canChangeStatus = isMyTicket(selectedTicket) || selectedTicket.assigned_to === user?.id
     const statuses = ['opened', 'pending', 'solved']
     return (
       <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
