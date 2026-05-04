@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db'
 import { tickets, ticketReplies, profiles, notifications } from '../../shared/schema'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { sendPushToAdmins } from './push'
@@ -31,7 +31,10 @@ router.get('/', requireAuth as any, async (req: any, res) => {
     rows = await db.select().from(tickets).where(eq(tickets.is_request, false)).orderBy(desc(tickets.created_at))
   } else {
     rows = await db.select().from(tickets)
-      .where(and(eq(tickets.assigned_to, req.user.id), eq(tickets.is_request, false)))
+      .where(and(
+        or(eq(tickets.assigned_to, req.user.id), eq(tickets.created_by, req.user.id)),
+        eq(tickets.is_request, false)
+      ))
       .orderBy(desc(tickets.created_at))
   }
   res.json(await withProfiles(rows))
