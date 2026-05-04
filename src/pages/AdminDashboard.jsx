@@ -50,6 +50,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [resetPwdError, setResetPwdError] = useState('')
   const [profilePicFile, setProfilePicFile] = useState(null)
   const [uploadingPic, setUploadingPic] = useState(false)
+  const [userSearch, setUserSearch] = useState('')
 
   useEffect(() => {
     fetchTickets()
@@ -707,9 +708,18 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Users Tab */}
         {tab === 'users' && (
           <div>
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-wrap gap-3 justify-between items-center mb-4">
               <h2 className="text-white font-medium">Users ({users.length})</h2>
-              <button onClick={()=>setShowCreateUser(v=>!v)} className={`${btnPrimary} text-white text-sm px-4 py-2 rounded-lg transition-all hover:scale-105`}>+ New User</button>
+              <div className="flex gap-3 flex-1 justify-end">
+                <input
+                  type="text"
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  placeholder="Search by name, email or role..."
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 w-56 placeholder-slate-500"
+                />
+                <button onClick={()=>setShowCreateUser(v=>!v)} className={`${btnPrimary} text-white text-sm px-4 py-2 rounded-lg transition-all hover:scale-105 whitespace-nowrap`}>+ New User</button>
+              </div>
             </div>
 
             {showCreateUser && (
@@ -805,7 +815,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 </thead>
                 <tbody>
                   {users.length === 0 && <tr><td colSpan={5} className="text-center text-slate-500 py-8">No users yet</td></tr>}
-                  {users.map((u, i) => (
+                  {users.filter(u => {
+                    const q = userSearch.toLowerCase()
+                    return !q || (u.full_name||'').toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q)
+                  }).map((u, i) => (
                     <tr key={u.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                       <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{u.full_name || '—'}</td>
                       <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{u.email}</td>
