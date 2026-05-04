@@ -87,3 +87,16 @@ export const sessionRevocations = pgTable('session_revocations', {
   reason: text('reason'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const settingsLog = pgTable('settings_log', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  changed_by: uuid('changed_by').references(() => profiles.id, { onDelete: 'set null' }),
+  changed_by_name: text('changed_by_name'),
+  from_lat: doublePrecision('from_lat'),
+  from_lng: doublePrecision('from_lng'),
+  from_radius: doublePrecision('from_radius'),
+  to_lat: doublePrecision('to_lat').notNull(),
+  to_lng: doublePrecision('to_lng').notNull(),
+  to_radius: doublePrecision('to_radius').notNull(),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})

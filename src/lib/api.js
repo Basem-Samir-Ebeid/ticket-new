@@ -85,6 +85,7 @@ export const api = {
   // Settings
   getOfficeLocation: () => request('GET', '/settings/office-location'),
   saveOfficeLocation: (data) => request('POST', '/settings/office-location', data),
+  getSettingsLog: () => request('GET', '/settings/log'),
 }
 
 // WebSocket client
