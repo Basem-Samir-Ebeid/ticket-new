@@ -13,6 +13,7 @@ import leaveRoutes from './routes/leaves'
 import notificationRoutes from './routes/notifications'
 import uploadRoutes from './routes/uploads'
 import pushRoutes from './routes/push'
+import settingsRoutes from './routes/settings'
 
 const app = express()
 const server = createServer(app)
@@ -35,6 +36,7 @@ app.use('/api/leaves', leaveRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/upload', uploadRoutes)
 app.use('/api/push', pushRoutes)
+app.use('/api/settings', settingsRoutes)
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {

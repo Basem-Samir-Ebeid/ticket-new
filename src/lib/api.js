@@ -81,6 +81,10 @@ export const api = {
   getPushPublicKey: () => request('GET', '/push/vapid-public-key'),
   subscribePush: (subscription) => request('POST', '/push/subscribe', subscription),
   unsubscribePush: (endpoint) => request('DELETE', '/push/unsubscribe', { endpoint }),
+
+  // Settings
+  getOfficeLocation: () => request('GET', '/settings/office-location'),
+  saveOfficeLocation: (data) => request('POST', '/settings/office-location', data),
 }
 
 // WebSocket client

@@ -4,12 +4,9 @@ import { loginTimes, profiles } from '../../shared/schema'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcastAll } from '../ws'
+import { getOfficeConfig } from '../officeConfig'
 
 const router = Router()
-
-const OFFICE_LAT = 30.0726
-const OFFICE_LNG = 31.3211
-const ALLOWED_RADIUS_METERS = 30
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000
@@ -72,10 +69,11 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
     return res.status(400).json({ error: 'Location is required to check in' })
   }
 
-  const distance = haversineDistance(Number(latitude), Number(longitude), OFFICE_LAT, OFFICE_LNG)
-  if (distance > ALLOWED_RADIUS_METERS) {
+  const cfg = getOfficeConfig()
+  const distance = haversineDistance(Number(latitude), Number(longitude), cfg.latitude, cfg.longitude)
+  if (distance > cfg.radius_meters) {
     return res.status(403).json({
-      error: `You are ${Math.round(distance)} m away from the office. Check-in is only allowed within ${ALLOWED_RADIUS_METERS} m.`
+      error: `You are ${Math.round(distance)} m away from the office. Check-in is only allowed within ${cfg.radius_meters} m.`
     })
   }
 
@@ -105,10 +103,11 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
     return res.status(400).json({ error: 'Location is required to check out' })
   }
 
-  const distance = haversineDistance(Number(latitude), Number(longitude), OFFICE_LAT, OFFICE_LNG)
-  if (distance > ALLOWED_RADIUS_METERS) {
+  const cfg = getOfficeConfig()
+  const distance = haversineDistance(Number(latitude), Number(longitude), cfg.latitude, cfg.longitude)
+  if (distance > cfg.radius_meters) {
     return res.status(403).json({
-      error: `You are ${Math.round(distance)} m away from the office. Check-out is only allowed within ${ALLOWED_RADIUS_METERS} m.`
+      error: `You are ${Math.round(distance)} m away from the office. Check-out is only allowed within ${cfg.radius_meters} m.`
     })
   }
 

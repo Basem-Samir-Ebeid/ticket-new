@@ -52,6 +52,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [profilePicFile, setProfilePicFile] = useState(null)
   const [uploadingPic, setUploadingPic] = useState(false)
   const [userSearch, setUserSearch] = useState('')
+  const [officeForm, setOfficeForm] = useState({ latitude: '', longitude: '', radius_meters: '' })
+  const [officeMsg, setOfficeMsg] = useState('')
+  const [savingOffice, setSavingOffice] = useState(false)
+  const [loadingSettings, setLoadingSettings] = useState(false)
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
@@ -94,6 +98,32 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
   useEffect(() => { if (selectedTicket) fetchReplies(selectedTicket.id) }, [selectedTicket])
   useEffect(() => { if (selectedDate) fetchLoginTimes() }, [selectedDate])
+
+  async function fetchOfficeSettings() {
+    setLoadingSettings(true)
+    try {
+      const data = await api.getOfficeLocation()
+      setOfficeForm({ latitude: String(data.latitude), longitude: String(data.longitude), radius_meters: String(data.radius_meters) })
+    } catch {}
+    setLoadingSettings(false)
+  }
+
+  async function handleSaveOffice(e) {
+    e.preventDefault()
+    setSavingOffice(true)
+    setOfficeMsg('')
+    try {
+      await api.saveOfficeLocation({
+        latitude: parseFloat(officeForm.latitude),
+        longitude: parseFloat(officeForm.longitude),
+        radius_meters: parseFloat(officeForm.radius_meters),
+      })
+      setOfficeMsg('Office location saved successfully.')
+    } catch (err) {
+      setOfficeMsg('Error: ' + err.message)
+    }
+    setSavingOffice(false)
+  }
 
   async function fetchTickets() {
     try { setTickets(await api.getTickets()) } catch {}
@@ -459,12 +489,16 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b border-white/10 overflow-x-auto pb-2">
-          {['dashboard', 'tickets', 'requests', 'leave', 'users', 'attendance', 'performance'].map(t => (
-            <button key={t} onClick={() => { setTab(t); setSelectedTicket(null) }}
+          {['dashboard', 'tickets', 'requests', 'leave', 'users', 'attendance', 'performance', 'settings'].map(t => (
+            <button key={t} onClick={() => {
+              setTab(t); setSelectedTicket(null)
+              if (t === 'settings') fetchOfficeSettings()
+            }}
               className={`px-4 py-2 rounded-t-lg text-sm font-medium capitalize transition-all whitespace-nowrap ${tab === t ? tabActiveCls : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
               {t === 'performance' ? '⭐ Performance'
                 : t === 'requests' ? `📋 Requests${requests.filter(r=>r.request_status==='pending_review').length > 0 ? ` (${requests.filter(r=>r.request_status==='pending_review').length})` : ''}`
                 : t === 'leave' ? `🌴 Leave${leaveRequests.filter(r=>r.status==='pending').length > 0 ? ` (${leaveRequests.filter(r=>r.status==='pending').length})` : ''}`
+                : t === 'settings' ? '⚙️ Settings'
                 : t}
             </button>
           ))}
@@ -1024,6 +1058,129 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
             </div>
           </div>
         )}
+        {/* Settings Tab */}
+        {tab === 'settings' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="glass rounded-xl p-6">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold text-lg">Office Geofence</h2>
+                  <p className="text-slate-400 text-xs">Only employees within the radius can check in or check out</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="glass rounded-xl p-6">
+              {loadingSettings ? (
+                <div className="flex items-center justify-center py-8">
+                  <svg className="w-6 h-6 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                  </svg>
+                  <span className="ml-3 text-slate-400 text-sm">Loading settings…</span>
+                </div>
+              ) : (
+                <form onSubmit={handleSaveOffice} className="space-y-5">
+                  <div className="grid md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Latitude</label>
+                      <input
+                        type="number" step="any" required
+                        value={officeForm.latitude}
+                        onChange={e => setOfficeForm(f => ({ ...f, latitude: e.target.value }))}
+                        placeholder="e.g. 30.0726"
+                        className={`w-full bg-white/5 border border-white/10 ${focusBorder} focus:outline-none text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-500`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Longitude</label>
+                      <input
+                        type="number" step="any" required
+                        value={officeForm.longitude}
+                        onChange={e => setOfficeForm(f => ({ ...f, longitude: e.target.value }))}
+                        placeholder="e.g. 31.3211"
+                        className={`w-full bg-white/5 border border-white/10 ${focusBorder} focus:outline-none text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-500`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="max-w-xs">
+                    <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Allowed Radius (meters)</label>
+                    <input
+                      type="number" step="1" min="1" required
+                      value={officeForm.radius_meters}
+                      onChange={e => setOfficeForm(f => ({ ...f, radius_meters: e.target.value }))}
+                      placeholder="e.g. 30"
+                      className={`w-full bg-white/5 border border-white/10 ${focusBorder} focus:outline-none text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-500`}
+                    />
+                  </div>
+
+                  {officeForm.latitude && officeForm.longitude && (
+                    <a
+                      href={`https://www.google.com/maps?q=${officeForm.latitude},${officeForm.longitude}`}
+                      target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                      </svg>
+                      Verify on Google Maps
+                    </a>
+                  )}
+
+                  {officeMsg && (
+                    <div className={`px-4 py-3 rounded-lg text-sm ${officeMsg.startsWith('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'}`}>
+                      {officeMsg}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 pt-1">
+                    <button type="submit" disabled={savingOffice}
+                      className={`${btnPrimary} px-5 py-2.5 rounded-lg text-white text-sm font-medium transition-all disabled:opacity-60 flex items-center gap-2`}>
+                      {savingOffice ? (
+                        <>
+                          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                          </svg>
+                          Saving…
+                        </>
+                      ) : 'Save Settings'}
+                    </button>
+                    <button type="button" onClick={fetchOfficeSettings}
+                      className="px-4 py-2.5 text-slate-400 hover:text-white border border-white/10 hover:border-white/20 text-sm rounded-lg transition-all">
+                      Reset
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            <div className="glass rounded-xl p-5">
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-3 font-medium">How it works</p>
+              <div className="space-y-2">
+                {[
+                  ['📍', 'Set your office latitude and longitude (use Google Maps to find exact coordinates)'],
+                  ['📏', 'Set the allowed radius in meters — employees must be within this distance to check in or out'],
+                  ['🔒', 'All checks happen server-side — employees cannot bypass this from the app'],
+                  ['🗺️', 'Use the "Verify on Google Maps" link to confirm the pin is placed correctly'],
+                ].map(([icon, text]) => (
+                  <div key={text} className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
+                    <span className="text-lg leading-none mt-0.5">{icon}</span>
+                    <p className="text-slate-300 text-sm">{text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* ── Reset Password Modal ── */}
