@@ -72,6 +72,15 @@ export const notifications = pgTable('notifications', {
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+export const pushSubscriptions = pgTable('push_subscriptions', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  endpoint: text('endpoint').notNull().unique(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const sessionRevocations = pgTable('session_revocations', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
