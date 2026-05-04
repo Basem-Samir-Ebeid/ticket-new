@@ -46,6 +46,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [rejectingLeaveId, setRejectingLeaveId] = useState(null)
   const [rejectionNote, setRejectionNote] = useState('')
   const [processingLeaveId, setProcessingLeaveId] = useState(null)
+  const [showLeaveForm, setShowLeaveForm] = useState(false)
+  const [leaveForm, setLeaveForm] = useState({ start_date: '', end_date: '', reason: '' })
+  const [submittingLeave, setSubmittingLeave] = useState(false)
   const [resetPwdTarget, setResetPwdTarget] = useState(null)
   const [resetPwdValue, setResetPwdValue] = useState('')
   const [resetPwdShow, setResetPwdShow] = useState(false)
@@ -188,6 +191,20 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       setMsg('✓ Leave request deleted')
       fetchLeaveRequests()
     } catch (e) { setMsg('Error: ' + e.message) }
+  }
+
+  async function submitOwnLeave(e) {
+    e.preventDefault()
+    if (!leaveForm.start_date || !leaveForm.end_date) return
+    setSubmittingLeave(true)
+    try {
+      await api.createLeave(leaveForm)
+      setMsg('✓ Leave request submitted')
+      setShowLeaveForm(false)
+      setLeaveForm({ start_date: '', end_date: '', reason: '' })
+      fetchLeaveRequests()
+    } catch (err) { setMsg('Error: ' + err.message) }
+    setSubmittingLeave(false)
   }
 
   async function registerLogin() {
@@ -736,14 +753,50 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Leave Tab */}
         {tab === 'leave' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
               <h2 className="text-white font-medium">Leave Requests</h2>
-              <div className="flex gap-3 text-xs text-slate-400">
-                <span>Pending: <span className="text-yellow-400 font-medium">{leaveRequests.filter(r=>r.status==='pending').length}</span></span>
-                <span>Approved: <span className="text-green-400 font-medium">{leaveRequests.filter(r=>r.status==='approved').length}</span></span>
-                <span>Rejected: <span className="text-red-400 font-medium">{leaveRequests.filter(r=>r.status==='rejected').length}</span></span>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex gap-3 text-xs text-slate-400">
+                  <span>Pending: <span className="text-yellow-400 font-medium">{leaveRequests.filter(r=>r.status==='pending').length}</span></span>
+                  <span>Approved: <span className="text-green-400 font-medium">{leaveRequests.filter(r=>r.status==='approved').length}</span></span>
+                  <span>Rejected: <span className="text-red-400 font-medium">{leaveRequests.filter(r=>r.status==='rejected').length}</span></span>
+                </div>
+                <button onClick={()=>setShowLeaveForm(v=>!v)} className="bg-green-700 hover:bg-green-600 text-white text-xs px-4 py-2 rounded-lg transition-all">
+                  🌴 {showLeaveForm ? 'Cancel' : 'Request Leave'}
+                </button>
               </div>
             </div>
+
+            {showLeaveForm && (
+              <form onSubmit={submitOwnLeave} className="glass rounded-xl p-5 space-y-4 animate-scaleIn border border-green-500/20">
+                <h3 className="text-white font-medium text-sm">🌴 Request Leave for Yourself</h3>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Start Date</label>
+                    <input required type="date" value={leaveForm.start_date}
+                      onChange={e=>setLeaveForm(f=>({...f,start_date:e.target.value}))}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">End Date</label>
+                    <input required type="date" value={leaveForm.end_date}
+                      onChange={e=>setLeaveForm(f=>({...f,end_date:e.target.value}))}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Reason (optional)</label>
+                  <input type="text" value={leaveForm.reason}
+                    onChange={e=>setLeaveForm(f=>({...f,reason:e.target.value}))}
+                    placeholder="e.g. Annual leave, Medical..."
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500" />
+                </div>
+                <button type="submit" disabled={submittingLeave}
+                  className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-sm px-5 py-2 rounded-lg transition-all">
+                  {submittingLeave ? 'Submitting...' : '✅ Submit Request'}
+                </button>
+              </form>
+            )}
 
             {leaveRequests.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">No leave requests yet</div>}
 
