@@ -413,6 +413,7 @@ export default function MemberDashboard() {
               <input type="date" value={attendanceDate} onChange={e=>setAttendanceDate(e.target.value)} className="bg-white/5 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" />
             </div>
             <div className="glass rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/8">
@@ -436,6 +437,7 @@ export default function MemberDashboard() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </>
         )}
