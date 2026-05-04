@@ -3,11 +3,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@keyframes starFall {
-  0%   { transform: translateX(-50%) translateY(0) scale(1) rotate(0deg); opacity: 1; }
-  80%  { opacity: 0.8; }
-  100% { transform: translateX(calc(-50% + var(--drift))) translateY(100vh) scale(0.4) rotate(var(--spin)); opacity: 0; }
-}
 
 * { font-family: 'IBM Plex Sans', sans-serif; }
 code, .mono { font-family: 'IBM Plex Mono', monospace; }
