@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "postgresql-16"]
+modules = ["nodejs-20", "web"]
 
 [nix]
 channel = "stable-25_05"
@@ -52,6 +52,8 @@ externalPort = 80
 
 [userenv.shared]
 JWT_SECRET = "it-ticket-secret-key-replit-2024"
+VAPID_PUBLIC_KEY = "BLt8duRrnsVSmztDDE8lFbpAGYGSHR0aVHaNcY7bfdUGDv2spFS8Hl4ec9mKFk7dhwXEGFvN3-e3rvtWD-dvGII"
+VAPID_EMAIL = "mailto:admin@ticketsystem.com"
 
 [deployment]
 deploymentTarget = "autoscale"
