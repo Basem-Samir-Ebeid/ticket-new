@@ -76,6 +76,11 @@ export const api = {
     if (!res.ok) throw new Error(data.error || 'Upload failed')
     return data.url
   },
+
+  // Push notifications
+  getPushPublicKey: () => request('GET', '/push/vapid-public-key'),
+  subscribePush: (subscription) => request('POST', '/push/subscribe', subscription),
+  unsubscribePush: (endpoint) => request('DELETE', '/push/unsubscribe', { endpoint }),
 }
 
 // WebSocket client
@@ -104,3 +109,4 @@ export function connectWS(token, onEvent) {
 export function disconnectWS() {
   if (ws) { ws.close(); ws = null }
 }
+
