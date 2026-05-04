@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import LogoWithStars from '../components/LogoWithStars'
 
 export default function Login() {
   const { signIn } = useAuth()
@@ -20,7 +21,9 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-4" style={{background:'radial-gradient(ellipse at 50% 0%, #1a1a3e 0%, #0a0a0f 60%)'}}>
       <div className="w-full max-w-sm animate-fadeIn">
         <div className="text-center mb-8">
-          <img src="/logo.png" alt="Logo" className="w-16 h-16 rounded-2xl object-cover mb-4 animate-scaleIn shadow-lg" />
+          <div className="flex justify-center mb-4">
+            <LogoWithStars imgClassName="w-16 h-16 rounded-2xl object-cover animate-scaleIn shadow-lg" />
+          </div>
           <h1 className="text-2xl font-semibold text-white">Finest</h1>
           <p className="text-slate-400 text-sm mt-1">Sign in to your account</p>
         </div>
