@@ -4,6 +4,7 @@ import { tickets, ticketReplies, profiles, notifications } from '../../shared/sc
 import { eq, and, desc } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
+import { sendPushToAdmins } from './push'
 
 const router = Router()
 
@@ -79,6 +80,11 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       }).returning()
       broadcast(admin.id, 'notification', notif)
     }
+    // Send push notification to admins
+    sendPushToAdmins('📝 New Ticket Request', title, '/')
+  } else {
+    // Regular ticket — also push notify admins
+    sendPushToAdmins('🎫 New Ticket', title, '/')
   }
 
   res.json(ticket)
