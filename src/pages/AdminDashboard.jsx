@@ -48,6 +48,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [resetPwdValue, setResetPwdValue] = useState('')
   const [resetPwdShow, setResetPwdShow] = useState(false)
   const [resetPwdError, setResetPwdError] = useState('')
+  const [profilePicFile, setProfilePicFile] = useState(null)
+  const [uploadingPic, setUploadingPic] = useState(false)
 
   useEffect(() => {
     fetchTickets()
@@ -167,12 +169,19 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   async function updateUser(e) {
     e.preventDefault(); setLoading(true); setMsg('')
     try {
+      let profile_picture_url = userForm.profile_picture_url
+      if (profilePicFile) {
+        setUploadingPic(true)
+        try { profile_picture_url = await api.uploadFile(profilePicFile) } catch {}
+        setUploadingPic(false)
+      }
       await api.updateUser(editingUser.id, {
         full_name: userForm.full_name,
         role: userForm.role,
-        can_view_attendance: userForm.can_view_attendance
+        can_view_attendance: userForm.can_view_attendance,
+        profile_picture_url,
       })
-      setMsg('✓ User updated!'); setEditingUser(null); fetchUsers()
+      setMsg('✓ User updated!'); setEditingUser(null); setProfilePicFile(null); fetchUsers()
     } catch (e) { setMsg('Error: ' + e.message) }
     setLoading(false)
   }
@@ -190,9 +199,16 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   async function createUser(e) {
     e.preventDefault(); setLoading(true); setMsg('')
     try {
-      await api.createUser(userForm)
+      let profile_picture_url = null
+      if (profilePicFile) {
+        setUploadingPic(true)
+        try { profile_picture_url = await api.uploadFile(profilePicFile) } catch {}
+        setUploadingPic(false)
+      }
+      await api.createUser({ ...userForm, profile_picture_url })
       setMsg('✓ User created!')
       setUserForm({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false })
+      setProfilePicFile(null)
       setShowCreateUser(false)
       fetchUsers()
     } catch (e) { setMsg('Error: ' + e.message) }
@@ -726,12 +742,16 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <span className="text-slate-300 text-sm">Can view attendance</span>
                 </label>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Profile Picture URL</label>
-                  <input type="url" value={userForm.profile_picture_url} onChange={e=>setUserForm(f=>({...f,profile_picture_url:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" placeholder="https://..." />
+                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Profile Picture</label>
+                  <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/10 rounded-lg px-3 py-2 hover:bg-white/8 transition-colors">
+                    <span className="text-slate-400 text-sm">📷 {profilePicFile ? profilePicFile.name : 'Choose from device...'}</span>
+                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>setProfilePicFile(e.target.files[0])} />
+                  </label>
+                  {profilePicFile && <p className="text-xs text-green-400 mt-1">✓ {profilePicFile.name} selected</p>}
                 </div>
                 <div className="flex gap-2">
-                  <button type="submit" disabled={loading} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{loading ? 'Creating...' : 'Create User'}</button>
-                  <button type="button" onClick={()=>setShowCreateUser(false)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
+                  <button type="submit" disabled={loading || uploadingPic} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{uploadingPic ? 'Uploading...' : loading ? 'Creating...' : 'Create User'}</button>
+                  <button type="button" onClick={()=>{setShowCreateUser(false);setProfilePicFile(null)}} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
                 </div>
               </form>
             )}
@@ -759,12 +779,16 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <span className="text-slate-300 text-sm">Can view attendance</span>
                 </label>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Profile Picture URL</label>
-                  <input type="url" value={userForm.profile_picture_url} onChange={e=>setUserForm(f=>({...f,profile_picture_url:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" placeholder="https://..." />
+                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Profile Picture</label>
+                  <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/10 rounded-lg px-3 py-2 hover:bg-white/8 transition-colors">
+                    <span className="text-slate-400 text-sm">📷 {profilePicFile ? profilePicFile.name : 'Choose from device...'}</span>
+                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>setProfilePicFile(e.target.files[0])} />
+                  </label>
+                  {profilePicFile && <p className="text-xs text-green-400 mt-1">✓ {profilePicFile.name} selected</p>}
                 </div>
                 <div className="flex gap-2">
-                  <button type="submit" disabled={loading} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{loading ? 'Saving...' : 'Save Changes'}</button>
-                  <button type="button" onClick={()=>setEditingUser(null)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
+                  <button type="submit" disabled={loading || uploadingPic} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{uploadingPic ? 'Uploading...' : loading ? 'Saving...' : 'Save Changes'}</button>
+                  <button type="button" onClick={()=>{setEditingUser(null);setProfilePicFile(null)}} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
                 </div>
               </form>
             )}
