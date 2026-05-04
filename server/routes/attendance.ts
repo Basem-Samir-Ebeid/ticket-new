@@ -7,6 +7,22 @@ import { broadcastAll } from '../ws'
 
 const router = Router()
 
+const OFFICE_LAT = 30.0726
+const OFFICE_LNG = 31.3211
+const ALLOWED_RADIUS_METERS = 30
+
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2)
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -52,6 +68,17 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
   const { latitude, longitude } = req.body
   const today = getLocalDateString()
 
+  if (latitude == null || longitude == null) {
+    return res.status(400).json({ error: 'Location is required to check in' })
+  }
+
+  const distance = haversineDistance(Number(latitude), Number(longitude), OFFICE_LAT, OFFICE_LNG)
+  if (distance > ALLOWED_RADIUS_METERS) {
+    return res.status(403).json({
+      error: `You are ${Math.round(distance)} m away from the office. Check-in is only allowed within ${ALLOWED_RADIUS_METERS} m.`
+    })
+  }
+
   // Check if already logged in today
   const existing = await db.select().from(loginTimes)
     .where(and(eq(loginTimes.user_id, req.user.id), eq(loginTimes.date, today)))
@@ -73,6 +100,17 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
 router.post('/logout', requireAuth as any, async (req: any, res) => {
   const { latitude, longitude } = req.body
   const today = getLocalDateString()
+
+  if (latitude == null || longitude == null) {
+    return res.status(400).json({ error: 'Location is required to check out' })
+  }
+
+  const distance = haversineDistance(Number(latitude), Number(longitude), OFFICE_LAT, OFFICE_LNG)
+  if (distance > ALLOWED_RADIUS_METERS) {
+    return res.status(403).json({
+      error: `You are ${Math.round(distance)} m away from the office. Check-out is only allowed within ${ALLOWED_RADIUS_METERS} m.`
+    })
+  }
 
   const [existing] = await db.select().from(loginTimes)
     .where(and(eq(loginTimes.user_id, req.user.id), eq(loginTimes.date, today)))
