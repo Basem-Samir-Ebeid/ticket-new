@@ -12,6 +12,7 @@ import attendanceRoutes from './routes/attendance'
 import leaveRoutes from './routes/leaves'
 import notificationRoutes from './routes/notifications'
 import uploadRoutes from './routes/uploads'
+import pushRoutes from './routes/push'
 
 const app = express()
 const server = createServer(app)
@@ -33,6 +34,7 @@ app.use('/api/attendance', attendanceRoutes)
 app.use('/api/leaves', leaveRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/upload', uploadRoutes)
+app.use('/api/push', pushRoutes)
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {
