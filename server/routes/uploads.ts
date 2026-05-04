@@ -22,7 +22,7 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } })
 router.post('/', requireAuth as any, upload.single('file'), (req: any, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
   const url = `/uploads/${req.file.filename}`
-  res.json({ url })
+  res.json({ url, name: req.file.originalname })
 })
 
 export default router

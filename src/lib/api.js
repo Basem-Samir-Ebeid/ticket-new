@@ -75,7 +75,7 @@ export const api = {
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Upload failed')
-    return data.url
+    return { url: data.url, name: data.name || file.name }
   },
 
   // Push notifications

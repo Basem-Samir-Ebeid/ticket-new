@@ -176,7 +176,7 @@ router.get('/:id/replies', requireAuth as any, async (req: any, res) => {
 // POST reply
 router.post('/:id/replies', requireAuth as any, async (req: any, res) => {
   try {
-    const { message, image_url } = req.body
+    const { message, image_url, attachment_name } = req.body
     if (!message && !image_url) {
       return res.status(400).json({ error: 'Reply must have a message or attachment' })
     }
@@ -185,6 +185,7 @@ router.post('/:id/replies', requireAuth as any, async (req: any, res) => {
       user_id: req.user.id,
       message: message || null,
       image_url: image_url || null,
+      attachment_name: attachment_name || null,
     }).returning()
 
     // Notify ticket creator

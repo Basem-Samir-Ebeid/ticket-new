@@ -37,6 +37,7 @@ export const ticketReplies = pgTable('ticket_replies', {
   user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
   message: text('message'),
   image_url: text('image_url'),
+  attachment_name: text('attachment_name'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 

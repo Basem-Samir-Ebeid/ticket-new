@@ -17,15 +17,43 @@ function isImageFile(url) {
   return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url)
 }
 
-function FileAttachment({ url }) {
+function getFileIcon(name) {
+  if (!name) return '📎'
+  const ext = name.split('.').pop()?.toLowerCase()
+  if (['pdf'].includes(ext)) return '📄'
+  if (['doc','docx'].includes(ext)) return '📝'
+  if (['xls','xlsx','csv'].includes(ext)) return '📊'
+  if (['ppt','pptx'].includes(ext)) return '📋'
+  if (['zip','rar','7z','tar','gz'].includes(ext)) return '🗜️'
+  if (['mp4','mov','avi','mkv'].includes(ext)) return '🎬'
+  if (['mp3','wav','ogg'].includes(ext)) return '🎵'
+  if (['txt','md'].includes(ext)) return '📃'
+  return '📎'
+}
+
+function FileAttachment({ url, name }) {
   if (!url) return null
   if (isImageFile(url)) {
-    return <img src={url} alt="Attachment" className="mt-2 rounded-lg max-w-xs max-h-64 object-contain border border-white/10" />
+    return (
+      <div className="mt-2">
+        <img src={url} alt={name || 'Attachment'} className="rounded-lg max-w-xs max-h-64 object-contain border border-white/10 cursor-pointer" onClick={() => window.open(url, '_blank')} />
+        {name && <p className="text-slate-500 text-xs mt-1">🖼️ {name}</p>}
+      </div>
+    )
   }
-  const filename = url.split('/').pop()
+  const displayName = name || url.split('/').pop()
+  const icon = getFileIcon(displayName)
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-sm text-blue-400 hover:text-blue-300 transition-colors">
-      📎 {filename}
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      download={displayName}
+      className="mt-2 inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-sm text-blue-400 hover:text-blue-300 transition-colors group"
+    >
+      <span className="text-base">{icon}</span>
+      <span className="flex-1 truncate max-w-xs">{displayName}</span>
+      <span className="text-slate-500 group-hover:text-blue-300 text-xs">↓ Download</span>
     </a>
   )
 }
@@ -169,9 +197,12 @@ export default function EmployeeDashboard() {
     setUploading(true)
     setReplyError('')
     let file_url = null
+    let file_name = null
     if (replyFile) {
       try {
-        file_url = await api.uploadFile(replyFile)
+        const result = await api.uploadFile(replyFile)
+        file_url = result.url
+        file_name = result.name
       } catch (err) {
         setReplyError('File upload failed: ' + (err.message || 'Unknown error'))
         setUploading(false)
@@ -179,7 +210,7 @@ export default function EmployeeDashboard() {
       }
     }
     try {
-      await api.createReply(selectedTicket.id, { message: replyText, image_url: file_url })
+      await api.createReply(selectedTicket.id, { message: replyText, image_url: file_url, attachment_name: file_name })
       setReplyText('')
       setReplyFile(null)
       fetchReplies(selectedTicket.id)
@@ -292,7 +323,7 @@ export default function EmployeeDashboard() {
                     <span className="text-slate-500 text-xs">{new Date(r.created_at).toLocaleString()}</span>
                   </div>
                   {r.message && <p className="text-slate-300 text-sm">{r.message}</p>}
-                  <FileAttachment url={r.image_url} />
+                  <FileAttachment url={r.image_url} name={r.attachment_name} />
                 </div>
               ))}
             </div>
