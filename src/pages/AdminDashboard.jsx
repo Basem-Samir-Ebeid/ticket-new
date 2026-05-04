@@ -106,6 +106,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [officeMsg, setOfficeMsg] = useState('')
   const [savingOffice, setSavingOffice] = useState(false)
   const [loadingSettings, setLoadingSettings] = useState(false)
+  const [detectingLocation, setDetectingLocation] = useState(false)
+  const [detectError, setDetectError] = useState('')
   const [settingsLog, setSettingsLog] = useState([])
   const [loadingLog, setLoadingLog] = useState(false)
   const [replyText, setReplyText] = useState('')
@@ -186,6 +188,30 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       setOfficeMsg('Error: ' + err.message)
     }
     setSavingOffice(false)
+  }
+
+  function handleDetectLocation() {
+    if (!navigator.geolocation) {
+      setDetectError('المتصفح لا يدعم تحديد الموقع')
+      return
+    }
+    setDetectingLocation(true)
+    setDetectError('')
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setOfficeForm(f => ({
+          ...f,
+          latitude: pos.coords.latitude.toFixed(7),
+          longitude: pos.coords.longitude.toFixed(7),
+        }))
+        setDetectingLocation(false)
+      },
+      (err) => {
+        setDetectError('تعذر تحديد الموقع: ' + err.message)
+        setDetectingLocation(false)
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
   }
 
   async function fetchTickets() {
@@ -1288,6 +1314,41 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 </div>
               ) : (
                 <form onSubmit={handleSaveOffice} className="space-y-5">
+
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-400">أدخل الإحداثيات يدوياً أو اضغط لتحديدها تلقائياً</p>
+                    <button
+                      type="button"
+                      onClick={handleDetectLocation}
+                      disabled={detectingLocation}
+                      className="flex items-center gap-2 bg-blue-600/20 hover:bg-blue-600/35 border border-blue-500/30 hover:border-blue-400/50 text-blue-300 hover:text-blue-200 text-xs font-medium px-3 py-2 rounded-lg transition-all disabled:opacity-60"
+                    >
+                      {detectingLocation ? (
+                        <>
+                          <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                          </svg>
+                          جاري التحديد...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                          </svg>
+                          تحديد موقعي تلقائياً
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {detectError && (
+                    <div className="px-4 py-2.5 rounded-lg text-xs bg-red-900/30 text-red-400 border border-red-500/20">
+                      {detectError}
+                    </div>
+                  )}
+
                   <div className="grid md:grid-cols-2 gap-5">
                     <div>
                       <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Latitude</label>
@@ -1323,16 +1384,43 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
 
                   {officeForm.latitude && officeForm.longitude && (
-                    <a
-                      href={`https://www.google.com/maps?q=${officeForm.latitude},${officeForm.longitude}`}
-                      target="_blank" rel="noreferrer"
-                      className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                      </svg>
-                      Verify on Google Maps
-                    </a>
+                    <div className="rounded-xl overflow-hidden border border-white/10 space-y-0">
+                      <div className="flex items-center justify-between px-3 py-2 bg-white/5 border-b border-white/10">
+                        <div className="flex items-center gap-2 text-xs text-slate-400">
+                          <svg className="w-3.5 h-3.5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                          </svg>
+                          <span>معاينة الموقع على الخريطة</span>
+                        </div>
+                        <a
+                          href={`https://www.google.com/maps?q=${officeForm.latitude},${officeForm.longitude}`}
+                          target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                          </svg>
+                          فتح في Google Maps
+                        </a>
+                      </div>
+                      <iframe
+                        key={`${officeForm.latitude},${officeForm.longitude}`}
+                        title="Office Location"
+                        width="100%"
+                        height="220"
+                        style={{ border: 0, display: 'block' }}
+                        loading="lazy"
+                        src={`https://www.openstreetmap.org/export/embed.html?bbox=${parseFloat(officeForm.longitude)-0.003}%2C${parseFloat(officeForm.latitude)-0.003}%2C${parseFloat(officeForm.longitude)+0.003}%2C${parseFloat(officeForm.latitude)+0.003}&layer=mapnik&marker=${officeForm.latitude}%2C${officeForm.longitude}`}
+                      />
+                      <div className="px-3 py-1.5 bg-white/5 flex items-center gap-2 text-xs text-slate-500">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                        </svg>
+                        {parseFloat(officeForm.latitude).toFixed(6)}, {parseFloat(officeForm.longitude).toFixed(6)}
+                        {officeForm.radius_meters && <span className="ml-auto text-orange-400/80">نطاق: {officeForm.radius_meters} متر</span>}
+                      </div>
+                    </div>
                   )}
 
                   {officeMsg && (
