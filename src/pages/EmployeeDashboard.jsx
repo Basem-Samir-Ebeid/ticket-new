@@ -181,7 +181,7 @@ export default function EmployeeDashboard() {
   if (selectedTicket) {
     return (
       <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
-        <Navbar title="Ticket Details" />
+        <Navbar title="Finest" />
         <div className="max-w-4xl mx-auto p-6">
           <button onClick={()=>setSelectedTicket(null)} className="text-slate-400 hover:text-white text-sm mb-4 flex items-center gap-1">← Back</button>
 
@@ -266,7 +266,7 @@ export default function EmployeeDashboard() {
 
   return (
     <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
-      <Navbar title="Assigned Tickets" />
+      <Navbar title="Finest" />
       <div className="max-w-4xl mx-auto p-6">
         {/* Attendance Card */}
         <div className="glass rounded-xl p-5 mb-6">

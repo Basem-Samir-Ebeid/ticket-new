@@ -440,7 +440,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   if (selectedTicket) {
     return (
       <div className="min-h-screen" style={{background: bgGrad}}>
-        <Navbar title={isSuperAdmin ? '👑 Ticket Details' : 'Ticket Details'} />
+        <Navbar title="Finest" />
         <div className="max-w-4xl mx-auto p-6">
           <button onClick={() => setSelectedTicket(null)} className="text-slate-400 hover:text-white text-sm mb-4 flex items-center gap-1">← Back</button>
 
@@ -488,7 +488,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
   return (
     <div className="min-h-screen" style={{background: bgGrad}}>
-      <Navbar title={isSuperAdmin ? '👑 Super Admin Panel' : 'Admin Panel'} />
+      <Navbar title="Finest" />
 
       <div className="max-w-7xl mx-auto p-6">
         {msg && (
