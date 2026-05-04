@@ -18,7 +18,7 @@ router.get('/', requireAuth as any, async (req: any, res) => {
   const { date } = req.query
   const targetDate = (date as string) || getLocalDateString()
 
-  const allowed = req.profile.role === 'admin' || req.profile.can_view_attendance
+  const allowed = req.profile.role === 'admin' || req.profile.role === 'super_admin' || req.profile.can_view_attendance
   if (!allowed) return res.status(403).json({ error: 'Not allowed to view attendance' })
 
   const rows = await db.select().from(loginTimes).where(eq(loginTimes.date, targetDate))
@@ -89,7 +89,7 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
 
 // DELETE attendance record (admin only)
 router.delete('/:id', requireAuth as any, async (req: any, res) => {
-  if (req.profile.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
+  if (req.profile.role !== 'admin' && req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Admin only' })
   await db.delete(loginTimes).where(eq(loginTimes.id, req.params.id))
   res.json({ success: true })
 })
