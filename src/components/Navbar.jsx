@@ -13,9 +13,9 @@ export default function Navbar({ title }) {
 
   return (
     <nav className="border-b border-white/8 px-6 py-4 flex items-center justify-between" style={{background:'rgba(10,10,15,0.8)', backdropFilter:'blur(12px)'}}>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col items-center">
         <img src="/logo.png" alt="Logo" className="w-8 h-8 rounded-lg object-cover" />
-        <span className="font-semibold text-white">{title}</span>
+        <span className="font-semibold text-white text-xs mt-0.5">{title}</span>
       </div>
       <div className="flex items-center gap-4">
         <div className="text-right hidden sm:block">
