@@ -109,6 +109,25 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
 
   const [ticket] = await db.update(tickets).set(updates).where(eq(tickets.id, req.params.id)).returning()
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
+
+  // Notify relevant users when status changes
+  if (status !== undefined) {
+    const changerName = req.profile?.full_name || 'Someone'
+    const statusLabel = status === 'solved' ? '✅ Solved' : status === 'pending' ? '🟡 Pending' : '🔵 Opened'
+    const notifMessage = `${statusLabel}: Ticket "${ticket.title}" was marked as ${status} by ${changerName}`
+    const notifyIds = new Set<string>()
+    if (ticket.created_by && ticket.created_by !== req.user.id) notifyIds.add(ticket.created_by)
+    if (ticket.assigned_to && ticket.assigned_to !== req.user.id) notifyIds.add(ticket.assigned_to)
+    for (const userId of notifyIds) {
+      const [notif] = await db.insert(notifications).values({
+        user_id: userId,
+        ticket_id: ticket.id,
+        message: notifMessage,
+      }).returning()
+      broadcast(userId, 'notification', notif)
+    }
+  }
+
   broadcastAll('ticket_update', { action: 'updated', ticket_id: ticket.id, status: ticket.status })
   res.json(ticket)
 })
