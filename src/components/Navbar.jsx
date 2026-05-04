@@ -18,10 +18,25 @@ export default function Navbar({ title }) {
         <LogoWithStars imgClassName="w-8 h-8 rounded-lg object-cover" />
         <span className="font-semibold text-white text-xs mt-0.5">{title}</span>
       </div>
-      <div className="flex items-center gap-4">
-        <div className="text-right hidden sm:block">
-          <p className="text-sm text-white">{profile?.full_name || profile?.email}</p>
-          <p className="text-xs text-slate-400 capitalize">{profile?.role}</p>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {profile?.profile_picture_url ? (
+            <img
+              src={profile.profile_picture_url}
+              alt={profile.full_name || 'User'}
+              className="w-8 h-8 rounded-full object-cover border border-white/20 flex-shrink-0"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-blue-600/40 border border-blue-500/30 flex items-center justify-center flex-shrink-0">
+              <span className="text-blue-300 text-sm font-semibold">
+                {(profile?.full_name || profile?.email || '?')[0].toUpperCase()}
+              </span>
+            </div>
+          )}
+          <div className="text-right hidden sm:block">
+            <p className="text-sm text-white">{profile?.full_name || profile?.email}</p>
+            <p className="text-xs text-slate-400 capitalize">{profile?.role}</p>
+          </div>
         </div>
         <button
           onClick={handleSignOut}
