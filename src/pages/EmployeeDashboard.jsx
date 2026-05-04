@@ -19,6 +19,9 @@ export default function EmployeeDashboard() {
   const [replyText, setReplyText] = useState('')
   const [replyImage, setReplyImage] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [solutionText, setSolutionText] = useState('')
+  const [solutionImage, setSolutionImage] = useState(null)
+  const [submittingSolution, setSubmittingSolution] = useState(false)
   const [filter, setFilter] = useState('all')
   const [todayLogin, setTodayLogin] = useState(null)
   const [loggingIn, setLoggingIn] = useState(false)
@@ -131,6 +134,25 @@ export default function EmployeeDashboard() {
     } catch {}
   }
 
+  async function submitSolution(e) {
+    e.preventDefault()
+    if (!solutionText.trim()) return
+    setSubmittingSolution(true)
+    let image_url = null
+    if (solutionImage) {
+      try { image_url = await api.uploadFile(solutionImage) } catch {}
+    }
+    try {
+      await api.createReply(selectedTicket.id, { message: solutionText, image_url })
+      await api.updateTicket(selectedTicket.id, { status: 'solved' })
+      setSolutionText(''); setSolutionImage(null)
+      fetchTickets()
+      fetchReplies(selectedTicket.id)
+      setSelectedTicket(p => ({...p, status: 'solved'}))
+    } catch {}
+    setSubmittingSolution(false)
+  }
+
   const filtered = filter === 'all' ? tickets : tickets.filter(t => t.status === filter)
 
   if (selectedTicket) {
@@ -151,11 +173,6 @@ export default function EmployeeDashboard() {
                 {selectedTicket.description && <p className="text-slate-400 mt-2">{selectedTicket.description}</p>}
                 {selectedTicket.affected_person && <p className="text-slate-500 text-sm mt-2">👤 {selectedTicket.affected_person}</p>}
               </div>
-              <select value={selectedTicket.status} onChange={e=>updateStatus(selectedTicket.id, e.target.value)} className="bg-white/5 border border-white/10 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
-                <option value="opened">Opened</option>
-                <option value="pending">Pending</option>
-                <option value="solved">Solved</option>
-              </select>
             </div>
           </div>
 
@@ -179,7 +196,7 @@ export default function EmployeeDashboard() {
               <div className="flex items-center gap-3">
                 <label className="cursor-pointer bg-white/5 border border-white/10 text-slate-400 hover:text-white text-sm px-4 py-2 rounded-lg transition-colors">
                   📎 {replyImage ? replyImage.name : 'Attach Image'}
-                  <input type="file" accept="image/*" className="hidden" onChange={e=>setReplyImage(e.target.files[0])} />
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>setReplyImage(e.target.files[0])} />
                 </label>
                 <button type="submit" disabled={uploading || (!replyText.trim() && !replyImage)} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
                   {uploading ? 'Sending...' : 'Send Reply'}
@@ -187,6 +204,38 @@ export default function EmployeeDashboard() {
               </div>
             </form>
           </div>
+
+          {selectedTicket.status !== 'solved' && (
+            <div className="glass rounded-xl p-5 border border-green-500/20">
+              <h3 className="text-white font-medium mb-1">✅ Submit Solution & Mark as Solved</h3>
+              <p className="text-slate-500 text-xs mb-4">Write the solution below. The ticket will be marked as solved when you submit.</p>
+              <form onSubmit={submitSolution} className="space-y-3">
+                <textarea
+                  required
+                  value={solutionText}
+                  onChange={e=>setSolutionText(e.target.value)}
+                  placeholder="Describe the solution..."
+                  rows={4}
+                  className="w-full bg-white/5 border border-green-500/30 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 resize-none"
+                />
+                <div className="flex items-center gap-3">
+                  <label className="cursor-pointer bg-white/5 border border-white/10 text-slate-400 hover:text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                    📷 {solutionImage ? solutionImage.name : 'Attach Photo'}
+                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>setSolutionImage(e.target.files[0])} />
+                  </label>
+                  <button type="submit" disabled={submittingSolution || !solutionText.trim()} className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-sm px-5 py-2 rounded-lg font-medium">
+                    {submittingSolution ? 'Submitting...' : '✅ Submit & Mark Solved'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {selectedTicket.status === 'solved' && (
+            <div className="glass rounded-xl p-4 border border-green-500/20 text-center">
+              <p className="text-green-400 font-medium">✅ This ticket has been solved</p>
+            </div>
+          )}
         </div>
       </div>
     )
