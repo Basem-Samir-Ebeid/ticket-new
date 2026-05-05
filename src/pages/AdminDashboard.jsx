@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
 import StatusBadge from '../components/StatusBadge'
 import AttendanceButton from '../components/AttendanceButton'
+import FileAttachment from '../components/FileAttachment'
 import { playNotificationSound, showBrowserNotification } from '../lib/sound'
 
 function getLocalDateString(date = new Date()) {
@@ -11,52 +12,6 @@ function getLocalDateString(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
-}
-
-function isImageFile(url) {
-  if (!url) return false
-  return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url)
-}
-
-function getFileIcon(name) {
-  if (!name) return '📎'
-  const ext = name.split('.').pop()?.toLowerCase()
-  if (['pdf'].includes(ext)) return '📄'
-  if (['doc','docx'].includes(ext)) return '📝'
-  if (['xls','xlsx','csv'].includes(ext)) return '📊'
-  if (['ppt','pptx'].includes(ext)) return '📋'
-  if (['zip','rar','7z','tar','gz'].includes(ext)) return '🗜️'
-  if (['mp4','mov','avi','mkv'].includes(ext)) return '🎬'
-  if (['mp3','wav','ogg'].includes(ext)) return '🎵'
-  if (['txt','md'].includes(ext)) return '📃'
-  return '📎'
-}
-
-function FileAttachment({ url, name }) {
-  if (!url) return null
-  if (isImageFile(url)) {
-    return (
-      <div className="mt-2">
-        <img src={url} alt={name || 'Attachment'} className="rounded-lg max-w-xs max-h-64 object-contain border border-white/10 cursor-pointer" onClick={() => window.open(url, '_blank')} />
-        {name && <p className="text-slate-500 text-xs mt-1">🖼️ {name}</p>}
-      </div>
-    )
-  }
-  const displayName = name || url.split('/').pop()
-  const icon = getFileIcon(displayName)
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      download={displayName}
-      className="mt-2 inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-sm text-blue-400 hover:text-blue-300 transition-colors group"
-    >
-      <span className="text-base">{icon}</span>
-      <span className="flex-1 truncate max-w-xs">{displayName}</span>
-      <span className="text-slate-500 group-hover:text-blue-300 text-xs">↓ Download</span>
-    </a>
-  )
 }
 
 export default function AdminDashboard({ isSuperAdmin = false }) {
