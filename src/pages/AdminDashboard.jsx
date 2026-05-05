@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
 import StatusBadge from '../components/StatusBadge'
 import AttendanceButton from '../components/AttendanceButton'
+import { playNotificationSound } from '../lib/sound'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -130,16 +131,16 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   }, [])
 
   useEffect(() => {
-    const onTicketUpdate = () => { fetchTickets(); fetchRequests() }
+    const onTicketUpdate = (e) => { playNotificationSound(); fetchTickets(); fetchRequests() }
     const onTicketReply = (e) => {
-      if (selectedTicketRef.current?.id === e.detail?.ticket_id) fetchReplies(selectedTicketRef.current.id)
+      if (selectedTicketRef.current?.id === e.detail?.ticket_id) { playNotificationSound(); fetchReplies(selectedTicketRef.current.id) }
     }
-    const onLeaveUpdate = () => fetchLeaveRequests()
+    const onLeaveUpdate = () => { playNotificationSound(); fetchLeaveRequests() }
     const onAttendanceUpdate = async () => {
       checkTodayLogin()
       try { setLoginTimes(await api.getAttendance(selectedDateRef.current)) } catch {}
     }
-    const onNotification = () => { fetchTickets(); fetchRequests(); fetchLeaveRequests() }
+    const onNotification = () => { playNotificationSound(); fetchTickets(); fetchRequests(); fetchLeaveRequests() }
     window.addEventListener('ws:ticket_update', onTicketUpdate)
     window.addEventListener('ws:ticket_reply', onTicketReply)
     window.addEventListener('ws:leave_update', onLeaveUpdate)

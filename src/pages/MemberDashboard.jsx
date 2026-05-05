@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
+import { playNotificationSound } from '../lib/sound'
 import Navbar from '../components/Navbar'
 import StatusBadge from '../components/StatusBadge'
 import AttendanceButton from '../components/AttendanceButton'
@@ -102,13 +103,13 @@ export default function MemberDashboard() {
   }, [user])
 
   useEffect(() => {
-    const onTicketUpdate = () => { fetchTickets(); fetchMyRequests() }
+    const onTicketUpdate = () => { playNotificationSound(); fetchTickets(); fetchMyRequests() }
     const onTicketReply = (e) => {
-      if (selectedTicketRef.current?.id === e.detail?.ticket_id) fetchReplies(selectedTicketRef.current.id)
+      if (selectedTicketRef.current?.id === e.detail?.ticket_id) { playNotificationSound(); fetchReplies(selectedTicketRef.current.id) }
     }
-    const onLeaveUpdate = () => fetchLeaveRequests()
+    const onLeaveUpdate = () => { playNotificationSound(); fetchLeaveRequests() }
     const onAttendanceUpdate = () => checkTodayLogin()
-    const onNotification = () => fetchNotifications()
+    const onNotification = () => { playNotificationSound(); fetchNotifications() }
     window.addEventListener('ws:ticket_update', onTicketUpdate)
     window.addEventListener('ws:ticket_reply', onTicketReply)
     window.addEventListener('ws:leave_update', onLeaveUpdate)
