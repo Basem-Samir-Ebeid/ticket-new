@@ -10,6 +10,7 @@
     "start": "NODE_ENV=production PORT=5000 tsx server/index.ts",
     "db:push": "drizzle-kit push",
     "sync:github": "bash scripts/github-sync.sh",
+    "sync:status": "cat .github-sync-status 2>/dev/null || echo 'No sync status recorded yet.'",
     "hooks:setup": "bash scripts/setup-git-hooks.sh"
   },
   "dependencies": {
