@@ -1,5 +1,30 @@
 const BASE = "/api"
 
+async function compressImage(file) {
+  if (!file.type.startsWith('image/')) return file
+  return new Promise((resolve) => {
+    const MAX_PX = 1200
+    const QUALITY = 0.75
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      let { width, height } = img
+      if (width > MAX_PX || height > MAX_PX) {
+        if (width > height) { height = Math.round(height * MAX_PX / width); width = MAX_PX }
+        else { width = Math.round(width * MAX_PX / height); height = MAX_PX }
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+      canvas.toBlob(blob => resolve(blob || file), 'image/jpeg', QUALITY)
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file) }
+    img.src = url
+  })
+}
+
 function getToken() {
   return localStorage.getItem('auth_token')
 }
@@ -76,8 +101,9 @@ export const api = {
 
   // Upload
   uploadFile: async (file) => {
+    const compressed = await compressImage(file)
     const form = new FormData()
-    form.append('file', file)
+    form.append('file', compressed, file.name)
     const res = await fetch(`${BASE}/upload`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${getToken()}` },
