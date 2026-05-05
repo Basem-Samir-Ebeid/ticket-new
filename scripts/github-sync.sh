@@ -63,9 +63,44 @@ PUSH_EXIT=$?
 
 rm -f "$HELPER_SCRIPT"
 
+notify_failure() {
+  local branch="$1"
+  local error_msg="$2"
+  local secret="${INTERNAL_NOTIFY_SECRET}"
+  local port="${PORT:-3000}"
+
+  if [ -z "$secret" ]; then
+    echo "[github-sync] WARN: INTERNAL_NOTIFY_SECRET is not set — super_admins will not be notified of this failure." >&2
+    return
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "[github-sync] WARN: jq is not installed — cannot send admin failure notification." >&2
+    return
+  fi
+
+  local payload
+  payload=$(jq -n \
+    --arg branch "$branch" \
+    --arg error "${error_msg:0:200}" \
+    '{branch: $branch, error: $error}')
+
+  local http_code
+  http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST "http://localhost:${port}/api/internal/github-sync/notify-failure" \
+    -H "Content-Type: application/json" \
+    -H "x-internal-secret: ${secret}" \
+    -d "$payload" 2>/dev/null) || http_code="000"
+
+  if [ "$http_code" != "200" ]; then
+    echo "[github-sync] WARN: Failed to notify admins of sync failure (HTTP ${http_code})." >&2
+  fi
+}
+
 if [ $PUSH_EXIT -ne 0 ]; then
   echo "[github-sync] ERROR: Push failed (exit ${PUSH_EXIT}): ${PUSH_ERROR}" >&2
   write_status "FAILED" "Push of '${BRANCH}' failed (exit ${PUSH_EXIT}): ${PUSH_ERROR}"
+  notify_failure "${BRANCH}" "${PUSH_ERROR}"
   exit $PUSH_EXIT
 fi
 

@@ -11,6 +11,7 @@ import notificationRoutes from './routes/notifications'
 import uploadRoutes from './routes/uploads'
 import pushRoutes from './routes/push'
 import settingsRoutes from './routes/settings'
+import githubSyncRoutes from './routes/github-sync'
 
 const app = express()
 
@@ -28,6 +29,7 @@ app.use('/api/notifications', notificationRoutes)
 app.use('/api/upload', uploadRoutes)
 app.use('/api/push', pushRoutes)
 app.use('/api/settings', settingsRoutes)
+app.use('/api/internal/github-sync', githubSyncRoutes)
 
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(process.cwd(), 'public')))
