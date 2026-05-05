@@ -55,6 +55,8 @@ Every Replit checkpoint commit automatically pushes to GitHub via a post-commit 
 - Reinstall hook: `npm run hooks:setup`
 - Requires `GITHUB_TOKEN` secret (GitHub PAT with `repo` scope)
 
+> **Important:** The sync uses `--force` push, meaning **Replit is the sole source of truth** for the synced branch. Do not push commits directly to GitHub — they will be overwritten on the next Replit checkpoint. All changes must go through Replit.
+
 ## Environment Variables
 - `DATABASE_URL` — PostgreSQL connection string (Replit managed)
 - `JWT_SECRET` — Secret for signing JWT tokens (set in shared env vars)

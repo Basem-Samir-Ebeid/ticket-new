@@ -31,7 +31,7 @@ HELPER
 echo "[github-sync] Pushing branch '${BRANCH}' to origin (${REMOTE_URL})..."
 git \
   -c "credential.helper=${HELPER_SCRIPT}" \
-  push origin "${BRANCH}:${BRANCH}" --force-with-lease --quiet
+  push origin "${BRANCH}:${BRANCH}" --force --quiet
 
 rm -f "$HELPER_SCRIPT"
 echo "[github-sync] Done."
