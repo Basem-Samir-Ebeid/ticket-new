@@ -63,10 +63,17 @@ Every Replit checkpoint commit automatically pushes to GitHub via a post-commit 
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_EMAIL` — For Web Push notifications (optional)
 - `GITHUB_TOKEN` — GitHub Personal Access Token for auto-sync (repo scope required)
 
+## Vercel Deployment
+- `vercel.json`: Routes `/api/(.*)` → `api/index.ts` (Express serverless), everything else → `index.html`
+- `api/index.ts`: Vercel entry point — exports Express app without WebSocket (WS not supported in serverless)
+- Make sure to set `DATABASE_URL` and `JWT_SECRET` in Vercel environment variables
+
 ## Default Credentials
-- Super Admin: `admin@company.com` / `Admin@123`
+- Super Admin: `superadmin@company.com` / `admin123`
 
 ## Key Configuration
 - `vite.config.js`: Proxies `/api`, `/ws`, `/uploads` to Express on port 3000
-- `server/officeConfig.ts`: Office geolocation config stored in `server/office-config.json`
+- `server/officeConfig.ts`: Office geolocation config stored in DB (settingsLog) as primary, file as fallback
+- `server/app.ts`: Express app setup (shared between local dev and Vercel)
+- `api/index.ts`: Vercel serverless entry point — exports the Express app
 - `public/sw.js`: Service worker for Web Push notifications

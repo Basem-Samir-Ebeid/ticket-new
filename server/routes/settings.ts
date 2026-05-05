@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../auth'
-import { getOfficeConfig, saveOfficeConfig } from '../officeConfig'
+import { getOfficeConfig, saveOfficeConfigToFile } from '../officeConfig'
 import { db } from '../db'
 import { settingsLog } from '../../shared/schema'
 import { desc } from 'drizzle-orm'
@@ -12,7 +12,7 @@ const isAdmin = (role: string) => role === 'admin' || role === 'super_admin'
 router.get('/office-location', requireAuth as any, async (req: any, res) => {
   try {
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
-    res.json(getOfficeConfig())
+    res.json(await getOfficeConfig())
   } catch (err: any) {
     console.error('GET /office-location error:', err)
     res.status(500).json({ error: err?.message || 'Failed to load office location' })
@@ -21,7 +21,6 @@ router.get('/office-location', requireAuth as any, async (req: any, res) => {
 
 router.post('/office-location', requireAuth as any, async (req: any, res) => {
   try {
-    console.log('[settings] POST /office-location — body:', req.body, '| user role:', req.profile?.role)
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
     const { latitude, longitude, radius_meters } = req.body
     if (latitude == null || longitude == null || radius_meters == null) {
@@ -30,18 +29,12 @@ router.post('/office-location', requireAuth as any, async (req: any, res) => {
     const lat = Number(latitude)
     const lng = Number(longitude)
     const radius = Number(radius_meters)
-    console.log('[settings] parsed values — lat:', lat, 'lng:', lng, 'radius:', radius)
     if (isNaN(lat) || isNaN(lng) || isNaN(radius) || radius <= 0) {
       return res.status(400).json({ error: 'Invalid values: radius must be a positive number' })
     }
 
-    const prev = getOfficeConfig()
+    const prev = await getOfficeConfig()
     const config = { latitude: lat, longitude: lng, radius_meters: radius }
-
-    const saved = saveOfficeConfig(config)
-    if (!saved) {
-      return res.status(500).json({ error: 'Failed to save office config to disk' })
-    }
 
     await db.insert(settingsLog).values({
       changed_by: req.user.id,
@@ -53,6 +46,8 @@ router.post('/office-location', requireAuth as any, async (req: any, res) => {
       to_lng: lng,
       to_radius: radius,
     })
+
+    saveOfficeConfigToFile(config)
 
     res.json(config)
   } catch (err: any) {

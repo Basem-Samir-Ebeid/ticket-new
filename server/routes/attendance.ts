@@ -77,7 +77,7 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
       return res.status(400).json({ error: 'Location is required to check in' })
     }
 
-    const cfg = getOfficeConfig()
+    const cfg = await getOfficeConfig()
     const distance = haversineDistance(Number(latitude), Number(longitude), cfg.latitude, cfg.longitude)
     if (distance > cfg.radius_meters) {
       return res.status(403).json({
@@ -114,7 +114,7 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
       return res.status(400).json({ error: 'Location is required to check out' })
     }
 
-    const cfg = getOfficeConfig()
+    const cfg = await getOfficeConfig()
     const distance = haversineDistance(Number(latitude), Number(longitude), cfg.latitude, cfg.longitude)
     if (distance > cfg.radius_meters) {
       return res.status(403).json({

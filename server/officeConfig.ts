@@ -1,5 +1,8 @@
 import fs from 'fs'
 import path from 'path'
+import { db } from './db'
+import { settingsLog } from '../shared/schema'
+import { desc } from 'drizzle-orm'
 
 const CONFIG_FILE = path.join(process.cwd(), 'server', 'office-config.json')
 
@@ -15,7 +18,21 @@ const DEFAULT_CONFIG: OfficeConfig = {
   radius_meters: 30,
 }
 
-export function getOfficeConfig(): OfficeConfig {
+export async function getOfficeConfig(): Promise<OfficeConfig> {
+  try {
+    const [latest] = await db
+      .select()
+      .from(settingsLog)
+      .orderBy(desc(settingsLog.created_at))
+      .limit(1)
+    if (latest) {
+      return {
+        latitude: latest.to_lat,
+        longitude: latest.to_lng,
+        radius_meters: latest.to_radius,
+      }
+    }
+  } catch {}
   try {
     if (fs.existsSync(CONFIG_FILE)) {
       const raw = fs.readFileSync(CONFIG_FILE, 'utf-8')
@@ -25,12 +42,8 @@ export function getOfficeConfig(): OfficeConfig {
   return { ...DEFAULT_CONFIG }
 }
 
-export function saveOfficeConfig(config: OfficeConfig): boolean {
+export function saveOfficeConfigToFile(config: OfficeConfig): void {
   try {
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8')
-    return true
-  } catch (err) {
-    console.error('Failed to write office-config.json:', err)
-    return false
-  }
+  } catch {}
 }
