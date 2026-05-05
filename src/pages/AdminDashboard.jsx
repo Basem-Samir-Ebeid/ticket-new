@@ -139,7 +139,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       checkTodayLogin()
       try { setLoginTimes(await api.getAttendance(selectedDateRef.current)) } catch {}
     }
-    const onNotification = () => {}
+    const onNotification = () => { fetchTickets(); fetchRequests(); fetchLeaveRequests() }
     window.addEventListener('ws:ticket_update', onTicketUpdate)
     window.addEventListener('ws:ticket_reply', onTicketReply)
     window.addEventListener('ws:leave_update', onLeaveUpdate)

@@ -89,30 +89,99 @@ export const api = {
   getSettingsLog: () => request('GET', '/settings/log'),
 }
 
-// WebSocket client
+// ─── WebSocket client with heartbeat & auto-reconnect ───────────────────────
 let ws = null
-const listeners = new Map()
+let wsOnEvent = null
+let reconnectTimer = null
+let heartbeatTimer = null
+let reconnectDelay = 2000
+
+function clearTimers() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null }
+}
+
+function startHeartbeat() {
+  clearInterval(heartbeatTimer)
+  heartbeatTimer = setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ event: 'ping' }))
+    } else {
+      scheduleReconnect()
+    }
+  }, 25000)
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer) return
+  const token = getToken()
+  if (!token || !wsOnEvent) return
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    connectWS(token, wsOnEvent)
+  }, reconnectDelay)
+  reconnectDelay = Math.min(reconnectDelay * 1.5, 30000)
+}
 
 export function connectWS(token, onEvent) {
-  if (ws) ws.close()
+  clearTimers()
+  if (ws) { ws.onclose = null; ws.close(); ws = null }
+
+  wsOnEvent = onEvent
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
   ws = new WebSocket(`${protocol}//${host}/ws?token=${token}`)
+
+  ws.onopen = () => {
+    reconnectDelay = 2000
+    startHeartbeat()
+  }
+
   ws.onmessage = (e) => {
     try {
       const { event, data } = JSON.parse(e.data)
+      if (event === 'pong' || event === 'ping') return
       onEvent(event, data)
     } catch {}
   }
+
   ws.onclose = () => {
-    setTimeout(() => {
-      const t = getToken()
-      if (t) connectWS(t, onEvent)
-    }, 3000)
+    clearTimers()
+    scheduleReconnect()
+  }
+
+  ws.onerror = () => {
+    clearTimers()
+    scheduleReconnect()
   }
 }
 
 export function disconnectWS() {
-  if (ws) { ws.close(); ws = null }
+  clearTimers()
+  wsOnEvent = null
+  if (ws) { ws.onclose = null; ws.close(); ws = null }
 }
 
+export function isWSOpen() {
+  return ws && ws.readyState === WebSocket.OPEN
+}
+
+// Reconnect when the tab becomes visible again
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    const token = getToken()
+    if (token && wsOnEvent && !isWSOpen()) {
+      reconnectTimer = null
+      connectWS(token, wsOnEvent)
+    }
+  }
+})
+
+// Reconnect on window focus if WS is down
+window.addEventListener('focus', () => {
+  const token = getToken()
+  if (token && wsOnEvent && !isWSOpen()) {
+    reconnectTimer = null
+    connectWS(token, wsOnEvent)
+  }
+})
