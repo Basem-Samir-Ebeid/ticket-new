@@ -64,13 +64,14 @@ Every Replit checkpoint commit automatically pushes to GitHub via a post-commit 
 - `GITHUB_TOKEN` — GitHub Personal Access Token for auto-sync (repo scope required)
 - `GITHUB_SYNC_BRANCH` — (optional) When set, only the named branch (e.g. `main`) is pushed to GitHub; commits on any other branch are skipped silently
 
-## Vercel Deployment
-- `vercel.json`: Routes `/api/(.*)` → `api/index.ts` (Express serverless), everything else → `index.html`
-- `api/index.ts`: Vercel entry point — exports Express app without WebSocket (WS not supported in serverless)
-- Make sure to set `DATABASE_URL` and `JWT_SECRET` in Vercel environment variables
+## Replit Deployment
+- Run button starts both Vite (port 5000) and Express (port 3000) via `npm run dev`
+- Production deploy: `npm run build` then `npm run start` (PORT=5000, serves built frontend)
+- Database: Replit managed PostgreSQL (DATABASE_URL auto-provisioned)
+- Schema migrations: run `npm run db:push` after schema changes in `shared/schema.ts`
 
 ## Default Credentials
-- Super Admin: `superadmin@company.com` / `admin123`
+- Super Admin: `admin@system.com` / `Admin@1234` (created during Replit migration)
 
 ## Key Configuration
 - `vite.config.js`: Proxies `/api`, `/ws`, `/uploads` to Express on port 3000
