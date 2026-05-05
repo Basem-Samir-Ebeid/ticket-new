@@ -1,6 +1,12 @@
 #!/bin/bash
 # Pushes the current branch to GitHub using GITHUB_TOKEN or GITHUB_PERSONAL_ACCESS_TOKEN.
 # Called automatically by the post-commit hook after every Replit checkpoint commit.
+#
+# Optional environment variable:
+#   GITHUB_SYNC_BRANCH — when set, only that branch is synced to GitHub.
+#                        If the current HEAD branch does not match, the push
+#                        is skipped silently. When unset, the current branch
+#                        is always synced (original behaviour).
 
 set -e
 
@@ -13,6 +19,12 @@ if [ -z "$TOKEN" ]; then
 fi
 
 BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "main")
+
+# If a specific branch is configured, skip silently when HEAD is on a different branch
+if [ -n "$GITHUB_SYNC_BRANCH" ] && [ "$BRANCH" != "$GITHUB_SYNC_BRANCH" ]; then
+  exit 0
+fi
+
 REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo "")
 
 if [ -z "$REMOTE_URL" ]; then

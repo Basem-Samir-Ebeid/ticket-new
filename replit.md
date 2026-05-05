@@ -49,7 +49,7 @@ A full-stack IT Ticket Management System with role-based access control. Built w
 Every Replit checkpoint commit automatically pushes to GitHub via a post-commit git hook.
 
 - Hook: `.git/hooks/post-commit` (installed by `scripts/setup-git-hooks.sh`)
-- Push script: `scripts/github-sync.sh` (force-pushes current branch to GitHub)
+- Push script: `scripts/github-sync.sh` (force-pushes the current branch to GitHub; when `GITHUB_SYNC_BRANCH` is set, only that branch is synced and all others are skipped silently)
 - Post-merge: `scripts/post-merge.sh` reinstalls the hook after task merges
 - Manual sync: `npm run sync:github`
 - Reinstall hook: `npm run hooks:setup`
@@ -62,6 +62,7 @@ Every Replit checkpoint commit automatically pushes to GitHub via a post-commit 
 - `JWT_SECRET` — Secret for signing JWT tokens (set in shared env vars)
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_EMAIL` — For Web Push notifications (optional)
 - `GITHUB_TOKEN` — GitHub Personal Access Token for auto-sync (repo scope required)
+- `GITHUB_SYNC_BRANCH` — (optional) When set, only the named branch (e.g. `main`) is pushed to GitHub; commits on any other branch are skipped silently
 
 ## Vercel Deployment
 - `vercel.json`: Routes `/api/(.*)` → `api/index.ts` (Express serverless), everything else → `index.html`
