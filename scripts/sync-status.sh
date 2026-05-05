@@ -2,7 +2,7 @@
 # Prints the effective sync configuration without performing any push.
 # Shows which branch would be synced and whether GITHUB_SYNC_BRANCH is set.
 
-CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "(detached HEAD)")
+CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "main")
 
 echo "[github-sync] Dry-run status check"
 echo "-----------------------------------"
