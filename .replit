@@ -52,8 +52,8 @@ externalPort = 80
 
 [userenv.shared]
 JWT_SECRET = "it-ticket-secret-key-replit-2024"
+VAPID_PUBLIC_KEY = "BJvQV3fAwoLAu5sg0sk4m2ByiVk9IiFkQfSiMGtBbVjYOToQdvxzBdF-wp27tAm4UIngUbrfEKNX-DiH8fGLp6I"
 VAPID_EMAIL = "mailto:admin@ticketsystem.com"
-VAPID_PUBLIC_KEY = "BO75VuweXjk0o-DoHaFOslHXuMt1N7_JCeF_szW7o4jeGloFGgbETDLCbvhX2Eq7Osz26a7rc_eTH2aIMAZHn48"
 
 [deployment]
 deploymentTarget = "autoscale"
