@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
-import { playNotificationSound } from '../lib/sound'
+import { playNotificationSound, showBrowserNotification } from '../lib/sound'
 import Navbar from '../components/Navbar'
 import StatusBadge from '../components/StatusBadge'
 import AttendanceButton from '../components/AttendanceButton'
@@ -102,12 +102,24 @@ export default function EmployeeDashboard() {
   }, [user])
 
   useEffect(() => {
-    const onTicketUpdate = () => { playNotificationSound(); fetchTickets(); fetchMyRequests() }
+    const onTicketUpdate = () => {
+      playNotificationSound()
+      showBrowserNotification('Finest — تحديث التيكت', 'تم تحديث أحد التيكتات')
+      fetchTickets(); fetchMyRequests()
+    }
     const onTicketReply = (e) => {
-      if (selectedTicketRef.current?.id === e.detail?.ticket_id) { playNotificationSound(); fetchReplies(selectedTicketRef.current.id) }
+      if (selectedTicketRef.current?.id === e.detail?.ticket_id) {
+        playNotificationSound()
+        showBrowserNotification('Finest — رد جديد', 'رد جديد على التيكت المفتوح')
+        fetchReplies(selectedTicketRef.current.id)
+      }
     }
     const onAttendanceUpdate = () => checkTodayLogin()
-    const onLeaveUpdate = () => { playNotificationSound(); fetchLeaveRequests() }
+    const onLeaveUpdate = () => {
+      playNotificationSound()
+      showBrowserNotification('Finest — إجازة', 'تم تحديث طلب الإجازة')
+      fetchLeaveRequests()
+    }
     window.addEventListener('ws:ticket_update', onTicketUpdate)
     window.addEventListener('ws:ticket_reply', onTicketReply)
     window.addEventListener('ws:attendance_update', onAttendanceUpdate)

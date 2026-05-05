@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { api, connectWS, disconnectWS } from '../lib/api'
+import { requestNotificationPermission } from '../lib/sound'
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4)
@@ -64,6 +65,7 @@ export function AuthProvider({ children }) {
       setUser({ id: prof.id })
       setProfile(prof)
       connectWS(token, handleWsEvent)
+      requestNotificationPermission()
     } catch {
       localStorage.removeItem('auth_token')
     }
@@ -79,7 +81,6 @@ export function AuthProvider({ children }) {
 
   useEffect(() => { loadUser() }, [])
 
-  // Re-check profile every 15s and on focus
   useEffect(() => {
     if (!user) return
     const check = async () => {
@@ -110,7 +111,7 @@ export function AuthProvider({ children }) {
       setUser({ id: prof.id })
       setProfile(prof)
       connectWS(token, handleWsEvent)
-      // Register push subscription for admins and super_admins
+      requestNotificationPermission()
       if (prof.role === 'admin' || prof.role === 'super_admin') {
         registerPushSubscription()
       }

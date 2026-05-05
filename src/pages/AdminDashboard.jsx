@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
 import StatusBadge from '../components/StatusBadge'
 import AttendanceButton from '../components/AttendanceButton'
-import { playNotificationSound } from '../lib/sound'
+import { playNotificationSound, showBrowserNotification } from '../lib/sound'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -131,16 +131,32 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   }, [])
 
   useEffect(() => {
-    const onTicketUpdate = (e) => { playNotificationSound(); fetchTickets(); fetchRequests() }
-    const onTicketReply = (e) => {
-      if (selectedTicketRef.current?.id === e.detail?.ticket_id) { playNotificationSound(); fetchReplies(selectedTicketRef.current.id) }
+    const onTicketUpdate = (e) => {
+      playNotificationSound()
+      showBrowserNotification('Finest — تيكت جديد', 'تم استلام تيكت جديد يحتاج مراجعة')
+      fetchTickets(); fetchRequests()
     }
-    const onLeaveUpdate = () => { playNotificationSound(); fetchLeaveRequests() }
+    const onTicketReply = (e) => {
+      if (selectedTicketRef.current?.id === e.detail?.ticket_id) {
+        playNotificationSound()
+        showBrowserNotification('Finest — رد جديد', 'رد جديد على التيكت المفتوح')
+        fetchReplies(selectedTicketRef.current.id)
+      }
+    }
+    const onLeaveUpdate = () => {
+      playNotificationSound()
+      showBrowserNotification('Finest — طلب إجازة', 'تم استلام طلب إجازة جديد')
+      fetchLeaveRequests()
+    }
     const onAttendanceUpdate = async () => {
       checkTodayLogin()
       try { setLoginTimes(await api.getAttendance(selectedDateRef.current)) } catch {}
     }
-    const onNotification = () => { playNotificationSound(); fetchTickets(); fetchRequests(); fetchLeaveRequests() }
+    const onNotification = () => {
+      playNotificationSound()
+      showBrowserNotification('Finest — إشعار جديد', 'لديك إشعار جديد')
+      fetchTickets(); fetchRequests(); fetchLeaveRequests()
+    }
     window.addEventListener('ws:ticket_update', onTicketUpdate)
     window.addEventListener('ws:ticket_reply', onTicketReply)
     window.addEventListener('ws:leave_update', onLeaveUpdate)
