@@ -11,7 +11,8 @@
     "db:push": "drizzle-kit push",
     "sync:github": "bash scripts/github-sync.sh",
     "sync:status": "bash scripts/sync-status.sh",
-    "hooks:setup": "bash scripts/setup-git-hooks.sh"
+    "hooks:setup": "bash scripts/setup-git-hooks.sh",
+    "postinstall": "bash scripts/setup-git-hooks.sh"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
