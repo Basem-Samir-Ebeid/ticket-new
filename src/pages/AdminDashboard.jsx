@@ -117,6 +117,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [replyFile, setReplyFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [replyError, setReplyError] = useState('')
+  const [githubSyncStatus, setGithubSyncStatus] = useState(null)
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
@@ -130,6 +131,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     fetchLoginTimes()
     checkTodayLogin()
     fetchLeaveRequests()
+    if (isSuperAdmin) fetchGithubSyncStatus()
   }, [])
 
   useEffect(() => {
@@ -247,6 +249,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   }
   async function fetchLeaveRequests() {
     try { setLeaveRequests(await api.getLeaves()) } catch {}
+  }
+  async function fetchGithubSyncStatus() {
+    try { setGithubSyncStatus(await api.getGithubSyncStatus()) } catch { setGithubSyncStatus({ result: null, timestamp: null, message: 'Unable to fetch sync status' }) }
   }
   async function fetchLoginTimes() {
     try { setLoginTimes(await api.getAttendance(selectedDate)) } catch (e) {
@@ -755,6 +760,41 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 </div>
               </div>
             </div>
+
+            {isSuperAdmin && (
+              <div className="glass rounded-xl p-5 animate-fadeIn">
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-white font-medium flex items-center gap-2">
+                    <span>🔗</span> GitHub Sync Status
+                  </h3>
+                  <button onClick={fetchGithubSyncStatus} className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-white/10 transition-colors">↻ Refresh</button>
+                </div>
+                {githubSyncStatus === null ? (
+                  <p className="text-slate-500 text-sm">Loading...</p>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-3 mt-2">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                      githubSyncStatus.result === 'SUCCESS' ? 'bg-green-900/40 text-green-400 border border-green-500/30'
+                      : githubSyncStatus.result === 'FAILED' ? 'bg-red-900/40 text-red-400 border border-red-500/30'
+                      : githubSyncStatus.result === 'SKIPPED' ? 'bg-yellow-900/40 text-yellow-400 border border-yellow-500/30'
+                      : 'bg-white/10 text-slate-400 border border-white/10'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        githubSyncStatus.result === 'SUCCESS' ? 'bg-green-400'
+                        : githubSyncStatus.result === 'FAILED' ? 'bg-red-400'
+                        : githubSyncStatus.result === 'SKIPPED' ? 'bg-yellow-400'
+                        : 'bg-slate-400'
+                      }`}></span>
+                      {githubSyncStatus.result || 'Unknown'}
+                    </span>
+                    {githubSyncStatus.timestamp && (
+                      <span className="text-slate-400 text-xs">{githubSyncStatus.timestamp}</span>
+                    )}
+                    <span className="text-slate-300 text-xs">{githubSyncStatus.message}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="glass rounded-xl p-5">
               <h3 className="text-white font-medium mb-4">🕐 Recent Tickets</h3>

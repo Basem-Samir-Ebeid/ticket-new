@@ -97,6 +97,9 @@ export const api = {
   getOfficeLocation: () => request('GET', '/settings/office-location'),
   saveOfficeLocation: (data) => request('POST', '/settings/office-location', data),
   getSettingsLog: () => request('GET', '/settings/log'),
+
+  // GitHub sync status
+  getGithubSyncStatus: () => request('GET', '/github-sync-status'),
 }
 
 // ─── WebSocket client with heartbeat & auto-reconnect ───────────────────────
