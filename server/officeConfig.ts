@@ -25,6 +25,12 @@ export function getOfficeConfig(): OfficeConfig {
   return { ...DEFAULT_CONFIG }
 }
 
-export function saveOfficeConfig(config: OfficeConfig): void {
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8')
+export function saveOfficeConfig(config: OfficeConfig): boolean {
+  try {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8')
+    return true
+  } catch (err) {
+    console.error('Failed to write office-config.json:', err)
+    return false
+  }
 }
