@@ -8,10 +8,13 @@ import FileAttachment from '../components/FileAttachment'
 import { playNotificationSound, showBrowserNotification } from '../lib/sound'
 
 function getLocalDateString(date = new Date()) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
+}
+
+function addDays(dateStr, days) {
+  const d = new Date(dateStr + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  return getLocalDateString(d)
 }
 
 export default function AdminDashboard({ isSuperAdmin = false }) {
@@ -1251,23 +1254,68 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Attendance Tab */}
         {tab === 'attendance' && (
           <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-white font-medium">Attendance</h2>
-              <input type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} className="bg-white/5 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" />
+            <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
+              <h2 className="text-white font-medium">📍 Attendance</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedDate(d => addDays(d, -1))}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-white/10 text-slate-400 hover:text-white hover:border-white/20 hover:bg-white/5 transition-all"
+                  title="اليوم السابق"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                </button>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  max={getLocalDateString()}
+                  onChange={e => { if (e.target.value <= getLocalDateString()) setSelectedDate(e.target.value) }}
+                  className="bg-white/5 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  onClick={() => setSelectedDate(d => { const next = addDays(d, 1); return next <= getLocalDateString() ? next : d })}
+                  disabled={selectedDate >= getLocalDateString()}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-white/10 text-slate-400 hover:text-white hover:border-white/20 hover:bg-white/5 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="اليوم التالي"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                </button>
+                {selectedDate !== getLocalDateString() && (
+                  <button
+                    onClick={() => setSelectedDate(getLocalDateString())}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+                  >
+                    اليوم
+                  </button>
+                )}
+              </div>
             </div>
+
+            {selectedDate !== getLocalDateString() && (
+              <div className="mb-4 px-4 py-2.5 rounded-lg bg-amber-900/20 border border-amber-500/20 text-amber-400 text-xs flex items-center gap-2">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5" /></svg>
+                عرض سجل حضور يوم {new Date(selectedDate + 'T00:00:00').toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </div>
+            )}
 
             <div className="glass rounded-2xl overflow-hidden">
               <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/8">
-                    {['Name','Email','Role','Login Time','Sign Off','Worked','Date','Actions'].map(h => (
+                    {['Name','Email','Role','Login Time','Sign Off','Worked','Actions'].map(h => (
                       <th key={h} className="text-left text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {loginTimes.length === 0 && <tr><td colSpan={8} className="text-center text-slate-500 py-8">No attendance recorded for {new Date(selectedDate).toLocaleDateString()}</td></tr>}
+                  {loginTimes.length === 0 && (
+                    <tr><td colSpan={7} className="text-center text-slate-500 py-10">
+                      <div className="flex flex-col items-center gap-2">
+                        <svg className="w-8 h-8 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5" /></svg>
+                        <span>لا يوجد حضور مسجل ليوم {new Date(selectedDate + 'T00:00:00').toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                      </div>
+                    </td></tr>
+                  )}
                   {loginTimes.map(lt => (
                     <tr key={lt.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                       <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{lt.full_name||'—'}</td>
@@ -1275,11 +1323,15 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${lt.role==='super_admin' ? 'bg-amber-900/30 text-amber-400' : lt.role==='admin' ? 'bg-purple-900/30 text-purple-400' : lt.role==='employee' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-900/30 text-slate-400'}`}>{lt.role==='super_admin' ? '👑 Super Admin' : lt.role}</span>
                       </td>
-                      <td className="px-4 py-3 text-white font-mono whitespace-nowrap">{new Date(lt.login_time).toLocaleTimeString()}</td>
-                      <td className="px-4 py-3 text-slate-300 font-mono whitespace-nowrap">{lt.logout_time ? new Date(lt.logout_time).toLocaleTimeString() : 'Still working'}</td>
-                      <td className="px-4 py-3 text-green-400 text-xs font-medium whitespace-nowrap">{lt.logout_time ? calculateDuration(lt.login_time, lt.logout_time) : 'In progress'}</td>
-                      <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{new Date(lt.date).toLocaleDateString()}</td>
-                      <td className="px-4 py-3 whitespace-nowrap"><button onClick={()=>deleteAttendance(lt.id)} disabled={loading} className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50">Delete</button></td>
+                      <td className="px-4 py-3 text-white font-mono whitespace-nowrap">{new Date(lt.login_time).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {lt.logout_time
+                          ? <span className="text-slate-300 font-mono">{new Date(lt.logout_time).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</span>
+                          : <span className="text-green-400 text-xs font-medium flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block"></span>لا يزال في العمل</span>
+                        }
+                      </td>
+                      <td className="px-4 py-3 text-green-400 text-xs font-medium whitespace-nowrap">{lt.logout_time ? calculateDuration(lt.login_time, lt.logout_time) : '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap"><button onClick={()=>deleteAttendance(lt.id)} disabled={loading} className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50">حذف</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -1288,9 +1340,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
             </div>
 
             <div className="grid grid-cols-3 gap-4 mt-6">
-              <div className="glass rounded-xl p-4"><p className="text-xs text-slate-400 mb-1">Total Logins</p><p className="text-2xl font-semibold text-white">{loginTimes.length}</p></div>
-              <div className="glass rounded-xl p-4"><p className="text-xs text-slate-400 mb-1">Signed Off</p><p className="text-2xl font-semibold text-amber-400">{loginTimes.filter(lt=>lt.logout_time).length}</p></div>
-              <div className="glass rounded-xl p-4"><p className="text-xs text-slate-400 mb-1">Still Working</p><p className="text-2xl font-semibold text-green-400">{loginTimes.filter(lt=>!lt.logout_time).length}</p></div>
+              <div className="glass rounded-xl p-4"><p className="text-xs text-slate-400 mb-1">إجمالي الحضور</p><p className="text-2xl font-semibold text-white">{loginTimes.length}</p></div>
+              <div className="glass rounded-xl p-4"><p className="text-xs text-slate-400 mb-1">انصرفوا</p><p className="text-2xl font-semibold text-amber-400">{loginTimes.filter(lt=>lt.logout_time).length}</p></div>
+              <div className="glass rounded-xl p-4"><p className="text-xs text-slate-400 mb-1">لا يزالون في العمل</p><p className="text-2xl font-semibold text-green-400">{loginTimes.filter(lt=>!lt.logout_time).length}</p></div>
             </div>
           </div>
         )}
