@@ -3,14 +3,12 @@
 # Run this script once to activate automatic GitHub sync on every commit.
 # It is also called automatically by scripts/post-merge.sh after each task merge.
 
-set -e
-
 HOOKS_DIR=".git/hooks"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [ ! -d "$HOOKS_DIR" ]; then
-  echo "[setup-git-hooks] .git/hooks directory not found — are you in the repo root?" >&2
-  exit 1
+  echo "[setup-git-hooks] .git/hooks directory not found — skipping (not a git repo or CI environment)." >&2
+  exit 0
 fi
 
 cat > "$HOOKS_DIR/post-commit" << 'EOF'
