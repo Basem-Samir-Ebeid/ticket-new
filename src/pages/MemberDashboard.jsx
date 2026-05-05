@@ -266,7 +266,12 @@ export default function MemberDashboard() {
       <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
         <Navbar title="Finest" />
         <div className="max-w-4xl mx-auto p-6">
-          <button onClick={()=>setSelectedTicket(null)} className="text-slate-400 hover:text-white text-sm mb-4">← Back</button>
+          <button onClick={()=>setSelectedTicket(null)} className="group flex items-center gap-2 text-slate-400 hover:text-white text-sm mb-6 transition-colors">
+            <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            Back to Tickets
+          </button>
 
           <div className="glass rounded-xl p-5 mb-5">
             <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -308,45 +313,79 @@ export default function MemberDashboard() {
 
           <div className="glass rounded-xl p-5 mb-5">
             <h3 className="text-white font-medium mb-4">Replies ({replies.length})</h3>
-            <div className="space-y-3 max-h-96 overflow-y-auto mb-5 pr-1">
-              {replies.length === 0 && <p className="text-slate-500 text-sm">No replies yet</p>}
-              {replies.map(r => (
-                <div key={r.id} className={`rounded-lg p-3 ${r.user_id === user?.id ? 'bg-blue-900/20 border border-blue-500/15 ml-4' : 'bg-white/5 border border-white/5'}`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-white text-sm font-medium">{r.profiles?.full_name || 'User'}</span>
-                    {r.user_id === user?.id && <span className="text-xs text-blue-400">(You)</span>}
-                    <span className="text-slate-500 text-xs">{new Date(r.created_at).toLocaleString()}</span>
+            <div className="space-y-4 max-h-96 overflow-y-auto mb-5 pr-1" style={{scrollbarWidth:'thin',scrollbarColor:'rgba(255,255,255,0.08) transparent'}}>
+              {replies.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                    <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                    </svg>
                   </div>
-                  {r.message && <p className="text-slate-300 text-sm">{r.message}</p>}
-                  <FileAttachment url={r.image_url} name={r.attachment_name} />
+                  <p className="text-slate-500 text-sm">No replies yet</p>
                 </div>
-              ))}
+              )}
+              {replies.map(r => {
+                const isMe = r.user_id === user?.id
+                const initials = (r.profiles?.full_name || 'U')[0].toUpperCase()
+                return (
+                  <div key={r.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                      style={{background: isMe ? 'linear-gradient(135deg,#4f46e5,#7c3aed)' : 'linear-gradient(135deg,#1e3a5f,#2563eb)'}}>
+                      {initials}
+                    </div>
+                    <div className={`flex-1 min-w-0 flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                      <div className={`flex items-center gap-2 mb-1.5 ${isMe ? 'flex-row-reverse' : ''}`}>
+                        <span className="text-white text-xs font-semibold">{r.profiles?.full_name || 'User'}</span>
+                        {isMe && <span className="text-indigo-400 text-[10px]">You</span>}
+                        <span className="text-slate-600 text-[10px]">{new Date(r.created_at).toLocaleString()}</span>
+                      </div>
+                      <div className={`rounded-2xl px-4 py-2.5 max-w-[85%] ${isMe ? 'rounded-tr-sm' : 'rounded-tl-sm'}`}
+                        style={{background: isMe ? 'rgba(79,70,229,0.18)' : 'rgba(255,255,255,0.06)', border: isMe ? '1px solid rgba(99,102,241,0.2)' : '1px solid rgba(255,255,255,0.06)'}}>
+                        {r.message && <p className="text-slate-200 text-sm leading-relaxed">{r.message}</p>}
+                        <FileAttachment url={r.image_url} name={r.attachment_name} />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-            <form onSubmit={submitReply} className="space-y-3 border-t border-white/10 pt-4">
+            <form onSubmit={submitReply} className="border-t border-white/8 pt-4 space-y-3">
               {replyError && (
-                <div className="bg-red-900/30 border border-red-500/20 text-red-400 text-sm rounded-lg px-3 py-2">{replyError}</div>
+                <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-xl px-3 py-2">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+                  {replyError}
+                </div>
               )}
               <textarea
                 value={replyText}
                 onChange={e=>{ setReplyText(e.target.value); setReplyError('') }}
                 placeholder="Type your reply..."
                 rows={3}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none"
+                className="w-full rounded-xl px-4 py-3 text-white text-sm outline-none resize-none transition-all border"
+                style={{background:'rgba(255,255,255,0.04)', borderColor:'rgba(255,255,255,0.08)'}}
+                onFocus={e=>{e.target.style.borderColor='rgba(99,102,241,0.5)';e.target.style.boxShadow='0 0 0 3px rgba(99,102,241,0.08)'}}
+                onBlur={e=>{e.target.style.borderColor='rgba(255,255,255,0.08)';e.target.style.boxShadow='none'}}
               />
               <div className="flex items-center gap-3 flex-wrap">
-                <label className="cursor-pointer bg-white/5 border border-white/10 text-slate-400 hover:text-white text-sm px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
-                  📎 {replyFile ? replyFile.name : 'Attach File or Image'}
+                <label className="cursor-pointer flex items-center gap-2 text-sm px-4 py-2 rounded-xl border border-white/10 text-slate-400 hover:text-white hover:border-white/20 transition-all" style={{background:'rgba(255,255,255,0.04)'}}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" /></svg>
+                  {replyFile ? <span className="text-indigo-400 max-w-[120px] truncate">{replyFile.name}</span> : 'Attach File'}
                   <input type="file" accept="*/*" className="hidden" onChange={e=>{ setReplyFile(e.target.files[0]); setReplyError('') }} />
                 </label>
                 {replyFile && (
-                  <button type="button" onClick={()=>setReplyFile(null)} className="text-slate-500 hover:text-red-400 text-xs">✕ Remove</button>
+                  <button type="button" onClick={()=>setReplyFile(null)} className="text-slate-500 hover:text-red-400 text-xs transition-colors">✕ Remove</button>
                 )}
                 <button
                   type="submit"
                   disabled={uploading || (!replyText.trim() && !replyFile)}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-5 py-2 rounded-lg font-medium"
+                  className="ml-auto flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  style={{background:'linear-gradient(135deg,#4f46e5,#7c3aed)', boxShadow:'0 4px 14px rgba(79,70,229,0.3)'}}
                 >
-                  {uploading ? 'Sending...' : 'Send Reply'}
+                  {uploading ? (
+                    <><svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Sending...</>
+                  ) : (
+                    <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" /></svg>Send Reply</>
+                  )}
                 </button>
               </div>
             </form>
@@ -411,16 +450,16 @@ export default function MemberDashboard() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 overflow-x-auto pb-1 border-b border-white/10">
+        <div className="flex gap-1 mb-6 p-1 rounded-xl overflow-x-auto border border-white/8" style={{background:'rgba(255,255,255,0.02)'}}>
           {tabs.map(t => (
             <button
               key={t}
               onClick={()=>setActiveTab(t)}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${activeTab===t ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${activeTab===t ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
             >
               {tabLabels[t]}
               {t === 'myTickets' && myRequests.length > 0 && (
-                <span className="ml-2 bg-yellow-500/20 text-yellow-400 text-xs px-1.5 py-0.5 rounded-full">{myRequests.length}</span>
+                <span className="ml-2 bg-amber-500/20 text-amber-400 text-xs px-1.5 py-0.5 rounded-full">{myRequests.length}</span>
               )}
             </button>
           ))}
@@ -431,14 +470,14 @@ export default function MemberDashboard() {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
               {[
-                { label: 'Total', val: assignedTickets.length, color: 'text-white', icon: '📊' },
-                { label: 'Opened', val: assignedTickets.filter(t=>t.status==='opened').length, color: 'text-blue-400', icon: '🔵' },
-                { label: 'Pending', val: assignedTickets.filter(t=>t.status==='pending').length, color: 'text-yellow-400', icon: '🟡' },
-                { label: 'Solved', val: assignedTickets.filter(t=>t.status==='solved').length, color: 'text-green-400', icon: '✅' },
+                { label: 'Total',   val: assignedTickets.length,                                          color: 'text-slate-200', acc: 'rgba(148,163,184,0.08)', bd: 'rgba(148,163,184,0.15)' },
+                { label: 'Opened',  val: assignedTickets.filter(t=>t.status==='opened').length,           color: 'text-blue-400',  acc: 'rgba(59,130,246,0.08)',  bd: 'rgba(59,130,246,0.2)' },
+                { label: 'Pending', val: assignedTickets.filter(t=>t.status==='pending').length,          color: 'text-amber-400', acc: 'rgba(245,158,11,0.08)',  bd: 'rgba(245,158,11,0.2)' },
+                { label: 'Solved',  val: assignedTickets.filter(t=>t.status==='solved').length,           color: 'text-emerald-400',acc:'rgba(52,211,153,0.08)',  bd: 'rgba(52,211,153,0.2)' },
               ].map(s => (
-                <div key={s.label} className="glass rounded-xl p-4">
-                  <p className="text-xs text-slate-400 mb-1 flex items-center gap-2"><span>{s.icon}</span>{s.label}</p>
-                  <p className={`text-2xl font-semibold ${s.color}`}>{s.val}</p>
+                <div key={s.label} className="rounded-xl p-4 border" style={{background:s.acc, borderColor:s.bd}}>
+                  <p className="text-xs text-slate-500 mb-2 uppercase tracking-wider font-medium">{s.label}</p>
+                  <p className={`text-2xl font-bold ${s.color}`}>{s.val}</p>
                 </div>
               ))}
             </div>
@@ -462,14 +501,27 @@ export default function MemberDashboard() {
             </div>
             <div className="space-y-3">
               {filteredAssigned.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">{assignedTickets.length === 0 ? 'No tickets' : 'No tickets match your search'}</div>}
-              {filteredAssigned.map(t => (
-                <div key={t.id} className="glass rounded-xl p-4 cursor-pointer hover:border-white/15 transition-all" onClick={()=>setSelectedTicket(t)}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <StatusBadge status={t.status} />
-                    <span className="text-slate-500 text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
+              {filteredAssigned.map((t, i) => (
+                <div key={t.id}
+                  className="group rounded-xl p-4 cursor-pointer transition-all border border-white/6 hover:border-white/14 animate-fadeIn"
+                  style={{background:'rgba(255,255,255,0.03)', animationDelay:`${i*0.05}s`}}
+                  onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.055)'}
+                  onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
+                  onClick={()=>setSelectedTicket(t)}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <StatusBadge status={t.status} />
+                        <span className="text-slate-600 text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <h3 className="text-white text-sm font-medium group-hover:text-blue-200 transition-colors leading-snug">{t.title}</h3>
+                      {t.description && <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 leading-relaxed">{t.description}</p>}
+                    </div>
+                    <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 flex-shrink-0 mt-1 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                    </svg>
                   </div>
-                  <h3 className="text-white font-medium">{t.title}</h3>
-                  {t.description && <p className="text-slate-400 text-sm mt-1 line-clamp-2">{t.description}</p>}
                 </div>
               ))}
             </div>
@@ -571,18 +623,31 @@ export default function MemberDashboard() {
                   </div>
                 </div>
                 <div className="space-y-3">
-                  {filteredMy.map(t => (
-                    <div key={t.id} className="glass rounded-xl p-4 cursor-pointer hover:border-white/15 transition-all" onClick={()=>setSelectedTicket(t)}>
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <StatusBadge status={t.status} />
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-400 border border-blue-500/20">My Ticket</span>
-                        <span className="text-slate-500 text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
+                  {filteredMy.map((t, i) => (
+                    <div key={t.id}
+                      className="group rounded-xl p-4 cursor-pointer transition-all border border-white/6 hover:border-white/14 animate-fadeIn"
+                      style={{background:'rgba(255,255,255,0.03)', animationDelay:`${i*0.05}s`}}
+                      onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.055)'}
+                      onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
+                      onClick={()=>setSelectedTicket(t)}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <StatusBadge status={t.status} />
+                            <span className="text-[11px] px-2 py-0.5 rounded-full border" style={{background:'rgba(59,130,246,0.1)',color:'#60a5fa',borderColor:'rgba(59,130,246,0.2)'}}>My Ticket</span>
+                            <span className="text-slate-600 text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
+                          </div>
+                          <h3 className="text-white text-sm font-medium group-hover:text-blue-200 transition-colors leading-snug">{t.title}</h3>
+                          {t.description && <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 leading-relaxed">{t.description}</p>}
+                        </div>
+                        <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 flex-shrink-0 mt-1 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                        </svg>
                       </div>
-                      <h3 className="text-white font-medium">{t.title}</h3>
-                      {t.description && <p className="text-slate-400 text-sm mt-1 line-clamp-2">{t.description}</p>}
                     </div>
                   ))}
-                  {filteredMy.length === 0 && <div className="glass rounded-xl py-8 text-center text-slate-500 text-sm">No tickets with this status</div>}
+                  {filteredMy.length === 0 && <div className="rounded-xl py-8 text-center text-slate-500 text-sm border border-white/6" style={{background:'rgba(255,255,255,0.02)'}}>No tickets with this status</div>}
                 </div>
               </div>
             )}
