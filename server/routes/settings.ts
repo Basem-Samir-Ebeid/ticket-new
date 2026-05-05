@@ -21,6 +21,7 @@ router.get('/office-location', requireAuth as any, async (req: any, res) => {
 
 router.post('/office-location', requireAuth as any, async (req: any, res) => {
   try {
+    console.log('[settings] POST /office-location — body:', req.body, '| user role:', req.profile?.role)
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
     const { latitude, longitude, radius_meters } = req.body
     if (latitude == null || longitude == null || radius_meters == null) {
@@ -29,6 +30,7 @@ router.post('/office-location', requireAuth as any, async (req: any, res) => {
     const lat = Number(latitude)
     const lng = Number(longitude)
     const radius = Number(radius_meters)
+    console.log('[settings] parsed values — lat:', lat, 'lng:', lng, 'radius:', radius)
     if (isNaN(lat) || isNaN(lng) || isNaN(radius) || radius <= 0) {
       return res.status(400).json({ error: 'Invalid values: radius must be a positive number' })
     }

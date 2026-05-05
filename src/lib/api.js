@@ -14,9 +14,19 @@ function headers(extra = {}) {
 async function request(method, path, body) {
   const opts = { method, headers: headers() }
   if (body !== undefined) opts.body = JSON.stringify(body)
-  const res = await fetch(BASE + path, opts)
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw Object.assign(new Error(data.error || 'Request failed'), { data })
+  let res
+  try {
+    res = await fetch(BASE + path, opts)
+  } catch (networkErr) {
+    throw new Error('Network error — server unreachable. Check your connection.')
+  }
+  const text = await res.text()
+  let data = {}
+  try { data = JSON.parse(text) } catch {}
+  if (!res.ok) {
+    const msg = data.error || `Server error ${res.status}: ${text.slice(0, 200)}`
+    throw Object.assign(new Error(msg), { data, status: res.status })
+  }
   return data
 }
 
