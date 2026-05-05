@@ -74,6 +74,8 @@ export default function MemberDashboard() {
   const [requestForm, setRequestForm] = useState({ title: '', description: '', affected_person: '' })
   const [filter, setFilter] = useState('all')
   const [myFilter, setMyFilter] = useState('all')
+  const [ticketSearch, setTicketSearch] = useState('')
+  const [myTicketSearch, setMyTicketSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [requestMsg, setRequestMsg] = useState('')
   const [review, setReview] = useState('')
@@ -285,8 +287,16 @@ export default function MemberDashboard() {
   const isMyTicket = (t) => t.created_by === user?.id
   const assignedTickets = tickets.filter(t => !isMyTicket(t))
   const myOwnTickets = tickets.filter(t => isMyTicket(t))
-  const filteredAssigned = filter === 'all' ? assignedTickets : assignedTickets.filter(t => t.status === filter)
-  const filteredMy = myFilter === 'all' ? myOwnTickets : myOwnTickets.filter(t => t.status === myFilter)
+  const filteredAssigned = assignedTickets.filter(t => {
+    const q = ticketSearch.toLowerCase().trim()
+    const matchesSearch = !q || (t.title||'').toLowerCase().includes(q) || (t.description||'').toLowerCase().includes(q) || (t.affected_person||'').toLowerCase().includes(q)
+    return matchesSearch && (filter === 'all' || t.status === filter)
+  })
+  const filteredMy = myOwnTickets.filter(t => {
+    const q = myTicketSearch.toLowerCase().trim()
+    const matchesSearch = !q || (t.title||'').toLowerCase().includes(q) || (t.description||'').toLowerCase().includes(q)
+    return matchesSearch && (myFilter === 'all' || t.status === myFilter)
+  })
 
   const requestStatusInfo = (s) => {
     if (s === 'accepted') return { label: '✅ Accepted', cls: 'bg-green-900/30 text-green-400 border border-green-500/20' }
@@ -477,13 +487,26 @@ export default function MemberDashboard() {
                 </div>
               ))}
             </div>
-            <div className="flex gap-2 mb-4">
-              {['all','opened','pending','solved'].map(f => (
-                <button key={f} onClick={()=>setFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${filter===f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>{f}</button>
-              ))}
+            <div className="flex flex-col gap-2 mb-4">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+                <input
+                  value={ticketSearch}
+                  onChange={e => setTicketSearch(e.target.value)}
+                  placeholder="Search tickets..."
+                  className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500"
+                />
+              </div>
+              <div className="flex gap-2">
+                {['all','opened','pending','solved'].map(f => (
+                  <button key={f} onClick={()=>setFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${filter===f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>{f}</button>
+                ))}
+              </div>
             </div>
             <div className="space-y-3">
-              {filteredAssigned.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">No tickets</div>}
+              {filteredAssigned.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">{assignedTickets.length === 0 ? 'No tickets' : 'No tickets match your search'}</div>}
               {filteredAssigned.map(t => (
                 <div key={t.id} className="glass rounded-xl p-4 cursor-pointer hover:border-white/15 transition-all" onClick={()=>setSelectedTicket(t)}>
                   <div className="flex items-center gap-2 mb-1">
@@ -574,10 +597,23 @@ export default function MemberDashboard() {
                     </div>
                   ))}
                 </div>
-                <div className="flex gap-2 mb-3">
-                  {['all','opened','pending','solved'].map(f => (
-                    <button key={f} onClick={()=>setMyFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${myFilter===f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>{f}</button>
-                  ))}
+                <div className="flex flex-col gap-2 mb-3">
+                  <div className="relative">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                    </svg>
+                    <input
+                      value={myTicketSearch}
+                      onChange={e => setMyTicketSearch(e.target.value)}
+                      placeholder="Search my tickets..."
+                      className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    {['all','opened','pending','solved'].map(f => (
+                      <button key={f} onClick={()=>setMyFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${myFilter===f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>{f}</button>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-3">
                   {filteredMy.map(t => (

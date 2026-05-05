@@ -103,6 +103,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [profilePicFile, setProfilePicFile] = useState(null)
   const [uploadingPic, setUploadingPic] = useState(false)
   const [userSearch, setUserSearch] = useState('')
+  const [ticketSearch, setTicketSearch] = useState('')
+  const [ticketStatusFilter, setTicketStatusFilter] = useState('all')
   const [officeForm, setOfficeForm] = useState({ latitude: '', longitude: '', radius_meters: '' })
   const [officeMsg, setOfficeMsg] = useState('')
   const [savingOffice, setSavingOffice] = useState(false)
@@ -575,6 +577,13 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const pendingTickets = tickets.filter(t => t.status === 'pending').length
   const solvedTickets = tickets.filter(t => t.status === 'solved').length
 
+  const filteredTickets = tickets.filter(t => {
+    const q = ticketSearch.toLowerCase().trim()
+    const matchesSearch = !q || (t.title||'').toLowerCase().includes(q) || (t.description||'').toLowerCase().includes(q) || (t.affected_person||'').toLowerCase().includes(q)
+    const matchesStatus = ticketStatusFilter === 'all' || t.status === ticketStatusFilter
+    return matchesSearch && matchesStatus
+  })
+
   // ── Ticket detail view ──
   if (selectedTicket) {
     return (
@@ -813,9 +822,38 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </form>
             )}
 
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+              <div className="relative flex-1">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+                <input
+                  value={ticketSearch}
+                  onChange={e => setTicketSearch(e.target.value)}
+                  placeholder="Search by title, description, or affected person..."
+                  className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500"
+                />
+              </div>
+              <div className="flex gap-2 shrink-0">
+                {['all','opened','pending','solved'].map(f => (
+                  <button key={f} onClick={() => setTicketStatusFilter(f)}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium capitalize transition-all ${ticketStatusFilter === f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {(ticketSearch || ticketStatusFilter !== 'all') && (
+              <p className="text-slate-500 text-xs mb-3">
+                Showing {filteredTickets.length} of {tickets.length} tickets
+                {ticketSearch && <> matching "<span className="text-slate-300">{ticketSearch}</span>"</>}
+              </p>
+            )}
+
             <div className="space-y-3">
-              {tickets.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">No tickets yet</div>}
-              {tickets.map((t, i) => (
+              {filteredTickets.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">{tickets.length === 0 ? 'No tickets yet' : 'No tickets match your search'}</div>}
+              {filteredTickets.map((t, i) => (
                 <div key={t.id} className="glass rounded-xl p-4 hover:border-white/15 transition-all animate-fadeIn" style={{animationDelay:`${i*0.05}s`}}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 cursor-pointer" onClick={()=>setSelectedTicket(t)}>
