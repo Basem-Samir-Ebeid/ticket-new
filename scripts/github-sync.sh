@@ -1,11 +1,14 @@
 #!/bin/bash
-# Pushes the current branch to GitHub using GITHUB_TOKEN for authentication.
+# Pushes the current branch to GitHub using GITHUB_TOKEN or GITHUB_PERSONAL_ACCESS_TOKEN.
 # Called automatically by the post-commit hook after every Replit checkpoint commit.
 
 set -e
 
-if [ -z "$GITHUB_TOKEN" ]; then
-  echo "[github-sync] GITHUB_TOKEN is not set — skipping push to GitHub." >&2
+# Support both token names
+TOKEN="${GITHUB_TOKEN:-$GITHUB_PERSONAL_ACCESS_TOKEN}"
+
+if [ -z "$TOKEN" ]; then
+  echo "[github-sync] No GitHub token found (GITHUB_TOKEN or GITHUB_PERSONAL_ACCESS_TOKEN) — skipping push." >&2
   exit 0
 fi
 
@@ -17,14 +20,12 @@ if [ -z "$REMOTE_URL" ]; then
   exit 0
 fi
 
-# Inject the token via a transient credential helper so it never appears in
-# process arguments or git log output.
 HELPER_SCRIPT=$(mktemp /tmp/git-credential-XXXXXX)
 chmod 700 "$HELPER_SCRIPT"
 cat > "$HELPER_SCRIPT" << HELPER
 #!/bin/bash
 echo "username=x-token-auth"
-echo "password=${GITHUB_TOKEN}"
+echo "password=${TOKEN}"
 HELPER
 
 echo "[github-sync] Pushing branch '${BRANCH}' to origin (${REMOTE_URL})..."
