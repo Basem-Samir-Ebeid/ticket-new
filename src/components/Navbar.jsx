@@ -188,12 +188,12 @@ export default function Navbar({ title }) {
       {/* Centered Notification Panel */}
       {showNotifs && (
         <div
-          className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] max-h-[70vh] z-50 rounded-2xl shadow-2xl flex flex-col animate-scaleIn"
+          className="fixed top-16 left-1/2 -translate-x-1/2 w-[300px] max-h-[55vh] z-50 rounded-2xl shadow-2xl flex flex-col animate-scaleIn"
           style={{
             background: 'rgba(10,12,28,0.98)',
             backdropFilter: 'blur(28px)',
             border: '1px solid rgba(255,255,255,0.1)',
-            transformOrigin: 'center',
+            transformOrigin: 'top center',
           }}
         >
           {/* Header */}
