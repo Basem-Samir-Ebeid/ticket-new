@@ -19,7 +19,25 @@ export function setupWebSocket(wss: WebSocketServer) {
       } catch {}
     }
 
+    ws.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data.toString())
+        if (msg.event === 'ping') {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ event: 'pong' }))
+          }
+        }
+      } catch {}
+    })
+
     ws.on('close', () => {
+      if (userId) {
+        clients.get(userId)?.delete(ws)
+        if (clients.get(userId)?.size === 0) clients.delete(userId)
+      }
+    })
+
+    ws.on('error', () => {
       if (userId) {
         clients.get(userId)?.delete(ws)
         if (clients.get(userId)?.size === 0) clients.delete(userId)
