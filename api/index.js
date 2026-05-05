@@ -446,4 +446,66 @@ app.post('/api/upload', requireAuth, upload.single('file'), (req, res) => {
   res.json({ url })
 })
 
+// ── SETTINGS ROUTES ───────────────────────────────────────────────────────────
+const DEFAULT_OFFICE_CONFIG = { latitude: 30.0726, longitude: 31.3211, radius_meters: 30 }
+
+async function getOfficeConfig() {
+  try {
+    const { rows } = await getPool().query(
+      'SELECT to_lat, to_lng, to_radius FROM settings_log ORDER BY created_at DESC LIMIT 1'
+    )
+    if (rows[0]) {
+      return { latitude: rows[0].to_lat, longitude: rows[0].to_lng, radius_meters: rows[0].to_radius }
+    }
+  } catch {}
+  return { ...DEFAULT_OFFICE_CONFIG }
+}
+
+app.get('/api/settings/office-location', requireAuth, async (req, res) => {
+  if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+  try {
+    res.json(await getOfficeConfig())
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to load office location' })
+  }
+})
+
+app.post('/api/settings/office-location', requireAuth, async (req, res) => {
+  if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+  try {
+    const { latitude, longitude, radius_meters } = req.body
+    if (latitude == null || longitude == null || radius_meters == null) {
+      return res.status(400).json({ error: 'latitude, longitude, and radius_meters are required' })
+    }
+    const lat = Number(latitude)
+    const lng = Number(longitude)
+    const radius = Number(radius_meters)
+    if (isNaN(lat) || isNaN(lng) || isNaN(radius) || radius <= 0) {
+      return res.status(400).json({ error: 'Invalid values: radius must be a positive number' })
+    }
+    const prev = await getOfficeConfig()
+    const changedByName = req.profile.full_name || req.profile.email
+    await getPool().query(
+      `INSERT INTO settings_log (changed_by, changed_by_name, from_lat, from_lng, from_radius, to_lat, to_lng, to_radius)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [req.user.id, changedByName, prev.latitude, prev.longitude, prev.radius_meters, lat, lng, radius]
+    )
+    res.json({ latitude: lat, longitude: lng, radius_meters: radius })
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to save office location' })
+  }
+})
+
+app.get('/api/settings/log', requireAuth, async (req, res) => {
+  if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+  try {
+    const { rows } = await getPool().query(
+      'SELECT * FROM settings_log ORDER BY created_at DESC LIMIT 50'
+    )
+    res.json(rows)
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to load settings log' })
+  }
+})
+
 export default app
