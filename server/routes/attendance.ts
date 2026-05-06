@@ -70,10 +70,7 @@ async function checkGeofence(
 }
 
 function getLocalDateString(date = new Date()) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  return date.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 }
 
 router.get('/', requireAuth as any, async (req: any, res) => {
@@ -192,8 +189,10 @@ router.get('/monthly-report', requireAuth as any, async (req: any, res) => {
     const allowed = req.profile.role === 'admin' || req.profile.role === 'super_admin'
     if (!allowed) return res.status(403).json({ error: 'Admin only' })
 
-    const year = parseInt(req.query.year as string) || new Date().getFullYear()
-    const month = parseInt(req.query.month as string) || (new Date().getMonth() + 1)
+    const cairoNow = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+    const [cairoYear, cairoMonth] = cairoNow.split('-').map(Number)
+    const year = parseInt(req.query.year as string) || cairoYear
+    const month = parseInt(req.query.month as string) || cairoMonth
 
     const firstDay = `${year}-${String(month).padStart(2, '0')}-01`
     const lastDayDate = new Date(year, month, 0)
