@@ -103,3 +103,11 @@ export const settingsLog = pgTable('settings_log', {
   to_radius: doublePrecision('to_radius').notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const officeSettings = pgTable('office_settings', {
+  id: text('id').primaryKey().default('main'),
+  latitude: doublePrecision('latitude').notNull(),
+  longitude: doublePrecision('longitude').notNull(),
+  radius_meters: doublePrecision('radius_meters').notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})

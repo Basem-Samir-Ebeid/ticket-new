@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../auth'
-import { getOfficeConfig, saveOfficeConfigToFile } from '../officeConfig'
+import { getOfficeConfig, saveOfficeConfig } from '../officeConfig'
 import { getGitHubSyncConfig, saveGitHubSyncConfig } from '../githubSyncConfig'
 import { db } from '../db'
 import { settingsLog } from '../../shared/schema'
@@ -60,7 +60,7 @@ router.post('/office-location', requireAuth as any, async (req: any, res) => {
       to_radius: radius,
     })
 
-    saveOfficeConfigToFile(config)
+    await saveOfficeConfig(config)
 
     res.json(config)
   } catch (err: any) {

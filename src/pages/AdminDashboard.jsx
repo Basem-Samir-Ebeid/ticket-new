@@ -63,6 +63,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [officeForm, setOfficeForm] = useState({ latitude: '', longitude: '', radius_meters: '' })
   const [officeMsg, setOfficeMsg] = useState('')
   const [savingOffice, setSavingOffice] = useState(false)
+  const [autoSaveStatus, setAutoSaveStatus] = useState('idle')
   const [loadingSettings, setLoadingSettings] = useState(false)
   const [detectingLocation, setDetectingLocation] = useState(false)
   const [detectError, setDetectError] = useState('')
@@ -88,6 +89,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
+  const autoSaveTimerRef = useRef(null)
+  const officeSettingsLoadedRef = useRef(false)
   useEffect(() => { selectedTicketRef.current = selectedTicket }, [selectedTicket])
   useEffect(() => { selectedDateRef.current = selectedDate }, [selectedDate])
 
@@ -145,13 +148,31 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   useEffect(() => { if (selectedTicket) fetchReplies(selectedTicket.id) }, [selectedTicket])
   useEffect(() => { if (selectedDate) fetchLoginTimes() }, [selectedDate])
 
+  useEffect(() => {
+    if (!officeSettingsLoadedRef.current) return
+    const lat = parseFloat(officeForm.latitude)
+    const lng = parseFloat(officeForm.longitude)
+    const radius = parseFloat(officeForm.radius_meters)
+    if (!isFinite(lat) || !isFinite(lng) || !isFinite(radius) || radius <= 0) return
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    setAutoSaveStatus('idle')
+    autoSaveTimerRef.current = setTimeout(() => {
+      performSaveOffice(lat, lng, radius)
+    }, 1500)
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current) }
+  }, [officeForm])
+
   async function fetchOfficeSettings() {
+    officeSettingsLoadedRef.current = false
     setLoadingSettings(true)
+    setAutoSaveStatus('idle')
+    setOfficeMsg('')
     try {
       const data = await api.getOfficeLocation()
       setOfficeForm({ latitude: String(data.latitude), longitude: String(data.longitude), radius_meters: String(data.radius_meters) })
     } catch {}
     setLoadingSettings(false)
+    officeSettingsLoadedRef.current = true
   }
 
   async function fetchSettingsLog() {
@@ -160,22 +181,29 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     setLoadingLog(false)
   }
 
-  async function handleSaveOffice(e) {
-    e.preventDefault()
+  async function performSaveOffice(lat, lng, radius) {
     setSavingOffice(true)
+    setAutoSaveStatus('saving')
     setOfficeMsg('')
     try {
-      await api.saveOfficeLocation({
-        latitude: parseFloat(officeForm.latitude),
-        longitude: parseFloat(officeForm.longitude),
-        radius_meters: parseFloat(officeForm.radius_meters),
-      })
-      setOfficeMsg('Office location saved successfully.')
+      await api.saveOfficeLocation({ latitude: lat, longitude: lng, radius_meters: radius })
+      setAutoSaveStatus('saved')
       fetchSettingsLog()
+      setTimeout(() => setAutoSaveStatus('idle'), 3000)
     } catch (err) {
+      setAutoSaveStatus('error')
       setOfficeMsg('Error: ' + err.message)
     }
     setSavingOffice(false)
+  }
+
+  async function handleSaveOffice(e) {
+    e.preventDefault()
+    if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null }
+    const lat = parseFloat(officeForm.latitude)
+    const lng = parseFloat(officeForm.longitude)
+    const radius = parseFloat(officeForm.radius_meters)
+    await performSaveOffice(lat, lng, radius)
   }
 
   function handleDetectLocation() {
@@ -1846,7 +1874,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-3 pt-1">
+                  <div className="flex items-center gap-3 pt-1 flex-wrap">
                     <button type="submit" disabled={savingOffice}
                       className={`${btnPrimary} px-5 py-2.5 rounded-lg text-white text-sm font-medium transition-all disabled:opacity-60 flex items-center gap-2`}>
                       {savingOffice ? (
@@ -1855,14 +1883,44 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
                           </svg>
-                          Saving…
+                          جاري الحفظ…
                         </>
-                      ) : 'Save Settings'}
+                      ) : 'حفظ الإعدادات'}
                     </button>
                     <button type="button" onClick={fetchOfficeSettings}
                       className="px-4 py-2.5 text-slate-400 hover:text-white border border-white/10 hover:border-white/20 text-sm rounded-lg transition-all">
-                      Reset
+                      إعادة تحميل
                     </button>
+                    <div className="flex items-center gap-1.5 text-xs ml-auto">
+                      {autoSaveStatus === 'saving' && (
+                        <span className="flex items-center gap-1.5 text-slate-400">
+                          <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                          </svg>
+                          جاري الحفظ التلقائي…
+                        </span>
+                      )}
+                      {autoSaveStatus === 'saved' && (
+                        <span className="flex items-center gap-1.5 text-green-400">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                          تم الحفظ التلقائي
+                        </span>
+                      )}
+                      {autoSaveStatus === 'error' && (
+                        <span className="flex items-center gap-1.5 text-red-400">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                          </svg>
+                          فشل الحفظ
+                        </span>
+                      )}
+                      {autoSaveStatus === 'idle' && officeSettingsLoadedRef.current && (
+                        <span className="text-slate-600">يتم الحفظ تلقائياً عند التغيير</span>
+                      )}
+                    </div>
                   </div>
                 </form>
               )}
