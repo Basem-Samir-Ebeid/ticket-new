@@ -8,6 +8,8 @@ import { getOfficeConfig } from '../officeConfig'
 
 const router = Router()
 
+const MIN_ENFORCED_RADIUS = 50
+
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000
   const toRad = (d: number) => (d * Math.PI) / 180
@@ -18,6 +20,53 @@ function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
     Math.sin(dLng / 2) * Math.sin(dLng / 2)
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function validateCoords(lat: any, lng: any): { lat: number; lng: number } | null {
+  const latN = Number(lat)
+  const lngN = Number(lng)
+  if (!isFinite(latN) || !isFinite(lngN)) return null
+  if (isNaN(latN) || isNaN(lngN)) return null
+  if (latN === 0 && lngN === 0) return null
+  if (latN < -90 || latN > 90) return null
+  if (lngN < -180 || lngN > 180) return null
+  return { lat: latN, lng: lngN }
+}
+
+async function checkGeofence(
+  rawLat: any,
+  rawLng: any,
+  action: 'check-in' | 'check-out'
+): Promise<{ allowed: boolean; error?: string; distance?: number; effectiveRadius?: number }> {
+  const coords = validateCoords(rawLat, rawLng)
+  if (!coords) {
+    console.warn(`[Attendance][${action}] رُفض: إحداثيات غير صالحة — lat=${rawLat}, lng=${rawLng}`)
+    return { allowed: false, error: 'إحداثيات غير صالحة أو مرفوضة. تأكد من تفعيل GPS.' }
+  }
+
+  const cfg = await getOfficeConfig()
+  const effectiveRadius = Math.max(cfg.radius_meters, MIN_ENFORCED_RADIUS)
+  const distance = haversineDistance(coords.lat, coords.lng, cfg.latitude, cfg.longitude)
+
+  console.log(
+    `[Attendance][${action}] ` +
+    `المستخدم=(${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}) | ` +
+    `المكتب=(${cfg.latitude.toFixed(6)}, ${cfg.longitude.toFixed(6)}) | ` +
+    `المسافة=${distance.toFixed(1)}م | ` +
+    `الحد المسموح=${effectiveRadius}م (مضبوط=${cfg.radius_meters}م) | ` +
+    `النتيجة=${distance <= effectiveRadius ? 'مسموح ✓' : 'مرفوض ✗'}`
+  )
+
+  if (!isFinite(distance) || distance > effectiveRadius) {
+    return {
+      allowed: false,
+      error: `أنت خارج نطاق الشركة ولا يمكن تسجيل الحضور أو الانصراف. المسافة الحالية: ${Math.round(distance)} متر، الحد المسموح: ${effectiveRadius} متر.`,
+      distance,
+      effectiveRadius,
+    }
+  }
+
+  return { allowed: true, distance, effectiveRadius }
 }
 
 function getLocalDateString(date = new Date()) {
@@ -71,25 +120,17 @@ router.get('/today', requireAuth as any, async (req: any, res) => {
 router.post('/login', requireAuth as any, async (req: any, res) => {
   try {
     const { latitude, longitude } = req.body
-    const today = getLocalDateString()
 
     if (latitude == null || longitude == null) {
-      return res.status(400).json({ error: 'Location is required to check in' })
+      return res.status(400).json({ error: 'يجب إرسال الإحداثيات لتسجيل الحضور.' })
     }
 
-    const cfg = await getOfficeConfig()
-    const lat = Number(latitude)
-    const lng = Number(longitude)
-    if (!isFinite(lat) || !isFinite(lng)) {
-      return res.status(400).json({ error: 'إحداثيات غير صالحة.' })
-    }
-    const distance = haversineDistance(lat, lng, cfg.latitude, cfg.longitude)
-    if (!isFinite(distance) || distance > cfg.radius_meters) {
-      return res.status(403).json({
-        error: 'أنت خارج نطاق المكتب ولا يمكنك تسجيل الحضور أو الانصراف.'
-      })
+    const geo = await checkGeofence(latitude, longitude, 'check-in')
+    if (!geo.allowed) {
+      return res.status(403).json({ error: geo.error })
     }
 
+    const today = getLocalDateString()
     const existing = await db.select().from(loginTimes)
       .where(and(eq(loginTimes.user_id, req.user.id), eq(loginTimes.date, today)))
 
@@ -98,10 +139,11 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
     const [record] = await db.insert(loginTimes).values({
       user_id: req.user.id,
       date: today,
-      latitude: latitude || null,
-      longitude: longitude || null,
+      latitude: Number(latitude),
+      longitude: Number(longitude),
     }).returning()
 
+    console.log(`[Attendance][check-in] تم تسجيل حضور المستخدم ${req.user.id} بنجاح — المسافة=${Math.round(geo.distance!)}م`)
     broadcastAll('attendance_update', { action: 'login', user_id: req.user.id, date: today })
     res.json(record)
   } catch (err: any) {
@@ -113,25 +155,17 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
 router.post('/logout', requireAuth as any, async (req: any, res) => {
   try {
     const { latitude, longitude } = req.body
-    const today = getLocalDateString()
 
     if (latitude == null || longitude == null) {
-      return res.status(400).json({ error: 'Location is required to check out' })
+      return res.status(400).json({ error: 'يجب إرسال الإحداثيات لتسجيل الانصراف.' })
     }
 
-    const cfg = await getOfficeConfig()
-    const lat = Number(latitude)
-    const lng = Number(longitude)
-    if (!isFinite(lat) || !isFinite(lng)) {
-      return res.status(400).json({ error: 'إحداثيات غير صالحة.' })
-    }
-    const distance = haversineDistance(lat, lng, cfg.latitude, cfg.longitude)
-    if (!isFinite(distance) || distance > cfg.radius_meters) {
-      return res.status(403).json({
-        error: 'أنت خارج نطاق المكتب ولا يمكنك تسجيل الحضور أو الانصراف.'
-      })
+    const geo = await checkGeofence(latitude, longitude, 'check-out')
+    if (!geo.allowed) {
+      return res.status(403).json({ error: geo.error })
     }
 
+    const today = getLocalDateString()
     const [existing] = await db.select().from(loginTimes)
       .where(and(eq(loginTimes.user_id, req.user.id), eq(loginTimes.date, today)))
 
@@ -140,10 +174,11 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
 
     const [record] = await db.update(loginTimes).set({
       logout_time: new Date(),
-      logout_latitude: latitude || null,
-      logout_longitude: longitude || null,
+      logout_latitude: Number(latitude),
+      logout_longitude: Number(longitude),
     }).where(and(eq(loginTimes.user_id, req.user.id), eq(loginTimes.date, today))).returning()
 
+    console.log(`[Attendance][check-out] تم تسجيل انصراف المستخدم ${req.user.id} بنجاح — المسافة=${Math.round(geo.distance!)}م`)
     broadcastAll('attendance_update', { action: 'logout', user_id: req.user.id, date: today })
     res.json(record)
   } catch (err: any) {
@@ -164,7 +199,6 @@ router.get('/monthly-report', requireAuth as any, async (req: any, res) => {
     const lastDayDate = new Date(year, month, 0)
     const lastDay = `${year}-${String(month).padStart(2, '0')}-${String(lastDayDate.getDate()).padStart(2, '0')}`
 
-    // Count working days (Mon–Fri) in the month
     let workingDays = 0
     for (let d = new Date(year, month - 1, 1); d <= lastDayDate; d.setDate(d.getDate() + 1)) {
       const dow = d.getDay()

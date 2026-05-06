@@ -39,6 +39,7 @@ export default function MemberDashboard() {
   const [todayLogin, setTodayLogin] = useState(null)
   const [loggingIn, setLoggingIn] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [attendanceError, setAttendanceError] = useState('')
   const [attendanceRecords, setAttendanceRecords] = useState([])
   const [attendanceDate, setAttendanceDate] = useState(getLocalDateString())
   const [leaveRequests, setLeaveRequests] = useState([])
@@ -109,23 +110,84 @@ export default function MemberDashboard() {
     try { setTodayLogin(await api.getTodayAttendance()) } catch {}
   }
 
+  function validateCoords(lat, lng) {
+    const latN = Number(lat)
+    const lngN = Number(lng)
+    if (!isFinite(latN) || !isFinite(lngN) || isNaN(latN) || isNaN(lngN)) return false
+    if (latN === 0 && lngN === 0) return false
+    if (latN < -90 || latN > 90 || lngN < -180 || lngN > 180) return false
+    return true
+  }
+
   async function registerLogin() {
     setLoggingIn(true)
-    if (!navigator.geolocation) { alert('الموقع الجغرافي غير مدعوم في هذا المتصفح'); setLoggingIn(false); return }
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      try { await api.registerLogin(pos.coords.latitude, pos.coords.longitude); await checkTodayLogin() } catch (e) { alert(e.message) }
+    setAttendanceError('')
+    if (!navigator.geolocation) {
+      setAttendanceError('الموقع الجغرافي غير مدعوم في هذا المتصفح.')
       setLoggingIn(false)
-    }, () => { alert('يجب منح إذن الموقع لتسجيل الحضور'); setLoggingIn(false) }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords
+        console.log(`[GPS][check-in] lat=${latitude}, lng=${longitude}, accuracy=${accuracy}m`)
+        if (!validateCoords(latitude, longitude)) {
+          setAttendanceError('تعذّر الحصول على إحداثيات صالحة. تأكد من تفعيل GPS وأعد المحاولة.')
+          setLoggingIn(false)
+          return
+        }
+        try {
+          await api.registerLogin(latitude, longitude)
+          await checkTodayLogin()
+          setAttendanceError('')
+        } catch (e) {
+          setAttendanceError(e.message)
+        }
+        setLoggingIn(false)
+      },
+      (err) => {
+        console.error('[GPS][check-in] خطأ في الموقع:', err)
+        setAttendanceError('يجب منح إذن الموقع لتسجيل الحضور. تأكد من تفعيل GPS والسماح للمتصفح بالوصول إليه.')
+        setLoggingIn(false)
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    )
   }
 
   async function registerLogout() {
     if (!todayLogin || todayLogin.logout_time) return
     setLoggingOut(true)
-    if (!navigator.geolocation) { alert('الموقع الجغرافي غير مدعوم في هذا المتصفح'); setLoggingOut(false); return }
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      try { await api.registerLogout(pos.coords.latitude, pos.coords.longitude); await checkTodayLogin() } catch (e) { alert(e.message) }
+    setAttendanceError('')
+    if (!navigator.geolocation) {
+      setAttendanceError('الموقع الجغرافي غير مدعوم في هذا المتصفح.')
       setLoggingOut(false)
-    }, () => { alert('يجب منح إذن الموقع لتسجيل الانصراف'); setLoggingOut(false) }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords
+        console.log(`[GPS][check-out] lat=${latitude}, lng=${longitude}, accuracy=${accuracy}m`)
+        if (!validateCoords(latitude, longitude)) {
+          setAttendanceError('تعذّر الحصول على إحداثيات صالحة. تأكد من تفعيل GPS وأعد المحاولة.')
+          setLoggingOut(false)
+          return
+        }
+        try {
+          await api.registerLogout(latitude, longitude)
+          await checkTodayLogin()
+          setAttendanceError('')
+        } catch (e) {
+          setAttendanceError(e.message)
+        }
+        setLoggingOut(false)
+      },
+      (err) => {
+        console.error('[GPS][check-out] خطأ في الموقع:', err)
+        setAttendanceError('يجب منح إذن الموقع لتسجيل الانصراف. تأكد من تفعيل GPS والسماح للمتصفح بالوصول إليه.')
+        setLoggingOut(false)
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    )
   }
 
   async function fetchAttendanceRecords() {
@@ -434,6 +496,14 @@ export default function MemberDashboard() {
             </div>
             <AttendanceButton todayLogin={todayLogin} loggingIn={loggingIn} loggingOut={loggingOut} onLogin={registerLogin} onLogout={registerLogout} />
           </div>
+          {attendanceError && (
+            <div className="mt-3 flex items-start gap-2 bg-red-500/10 border border-red-500/25 text-red-400 text-sm rounded-xl px-4 py-3">
+              <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              <span dir="rtl">{attendanceError}</span>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
