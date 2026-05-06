@@ -1399,6 +1399,43 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   >
                     {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
+                  {monthlyReport && (
+                    <button
+                      onClick={() => {
+                        const monthPad = String(reportMonth).padStart(2, '0')
+                        const filename = `attendance-report-${reportYear}-${monthPad}.csv`
+                        const headers = ['الاسم', 'البريد الإلكتروني', 'أيام الحضور', 'أيام الغياب', 'أيام العمل', 'نسبة الحضور (%)', 'إجمالي الساعات', 'متوسط ساعات يومي']
+                        const rows = monthlyReport.employees.map(emp => [
+                          emp.full_name || '',
+                          emp.email || '',
+                          emp.days_present,
+                          emp.days_absent,
+                          emp.working_days,
+                          emp.attendance_rate,
+                          (emp.total_minutes / 60).toFixed(1),
+                          emp.days_present > 0 ? (emp.avg_minutes_per_day / 60).toFixed(1) : '0',
+                        ])
+                        const sanitize = (val) => {
+                          const s = String(val)
+                          return /^[=+\-@\t]/.test(s) ? "'" + s : s
+                        }
+                        const csvContent = [headers, ...rows]
+                          .map(row => row.map(cell => `"${sanitize(cell).replace(/"/g, '""')}"`).join(','))
+                          .join('\n')
+                        const bom = '\uFEFF'
+                        const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = filename
+                        a.click()
+                        URL.revokeObjectURL(url)
+                      }}
+                      className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-medium transition-all bg-emerald-600 hover:bg-emerald-500 text-white"
+                    >
+                      ⬇️ تصدير CSV
+                    </button>
+                  )}
                   <button
                     onClick={() => fetchMonthlyReport(reportYear, reportMonth)}
                     className={`flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-medium transition-all ${isSuperAdmin ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'} text-white`}
