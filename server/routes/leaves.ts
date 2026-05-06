@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db'
 import { leaveRequests, profiles, notifications } from '../../shared/schema'
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 
@@ -46,7 +46,8 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       status: 'pending',
     }).returning()
 
-    const admins = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.role, 'admin'))
+    const admins = await db.select({ id: profiles.id }).from(profiles)
+      .where(or(eq(profiles.role, 'admin'), eq(profiles.role, 'super_admin')))
     const senderName = req.profile.full_name || req.profile.email
     for (const admin of admins) {
       const [notif] = await db.insert(notifications).values({
