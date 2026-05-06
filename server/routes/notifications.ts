@@ -7,15 +7,25 @@ import { requireAuth } from '../auth'
 const router = Router()
 
 router.get('/', requireAuth as any, async (req: any, res) => {
-  const rows = await db.select().from(notifications)
-    .where(and(eq(notifications.user_id, req.user.id), eq(notifications.read, false)))
-    .orderBy(desc(notifications.created_at))
-  res.json(rows)
+  try {
+    const rows = await db.select().from(notifications)
+      .where(and(eq(notifications.user_id, req.user.id), eq(notifications.read, false)))
+      .orderBy(desc(notifications.created_at))
+    res.json(rows)
+  } catch (err: any) {
+    console.error('GET /notifications error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get notifications' })
+  }
 })
 
 router.patch('/:id/read', requireAuth as any, async (req: any, res) => {
-  await db.update(notifications).set({ read: true }).where(eq(notifications.id, req.params.id))
-  res.json({ success: true })
+  try {
+    await db.update(notifications).set({ read: true }).where(eq(notifications.id, req.params.id))
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('PATCH /notifications/:id/read error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to mark notification as read' })
+  }
 })
 
 export default router

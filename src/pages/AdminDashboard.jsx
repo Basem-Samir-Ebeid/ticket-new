@@ -391,7 +391,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       let profile_picture_url = userForm.profile_picture_url
       if (profilePicFile) {
         setUploadingPic(true)
-        try { profile_picture_url = await api.uploadFile(profilePicFile) } catch {}
+        try { const r = await api.uploadFile(profilePicFile); profile_picture_url = r.url } catch {}
         setUploadingPic(false)
       }
       await api.updateUser(editingUser.id, {
@@ -421,7 +421,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       let profile_picture_url = null
       if (profilePicFile) {
         setUploadingPic(true)
-        try { profile_picture_url = await api.uploadFile(profilePicFile) } catch {}
+        try { const r = await api.uploadFile(profilePicFile); profile_picture_url = r.url } catch {}
         setUploadingPic(false)
       }
       await api.createUser({ ...userForm, profile_picture_url })

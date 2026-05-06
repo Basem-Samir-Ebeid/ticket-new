@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, Request, Response, NextFunction } from 'express'
 import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
@@ -9,6 +9,17 @@ const router = Router()
 const uploadDir = path.join(process.cwd(), 'uploads')
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })
 
+const ALLOWED_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+  'application/zip',
+])
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => {
@@ -17,12 +28,33 @@ const storage = multer.diskStorage({
   },
 })
 
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } })
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIME.has(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error(`نوع الملف غير مسموح به: ${file.mimetype}`))
+    }
+  },
+})
 
-router.post('/', requireAuth as any, upload.single('file'), (req: any, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
-  const url = `/uploads/${req.file.filename}`
-  res.json({ url, name: req.file.originalname })
+router.post('/', requireAuth as any, (req: any, res: Response, next: NextFunction) => {
+  upload.single('file')(req, res, (err: any) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'حجم الملف يتجاوز الحد المسموح (5MB)' })
+      }
+      return res.status(400).json({ error: err.message })
+    }
+    if (err) {
+      return res.status(400).json({ error: err.message || 'فشل رفع الملف' })
+    }
+    if (!req.file) return res.status(400).json({ error: 'لم يتم إرسال أي ملف' })
+    const url = `/uploads/${req.file.filename}`
+    res.json({ url, name: req.file.originalname })
+  })
 })
 
 export default router

@@ -23,25 +23,35 @@ function initVapid() {
 }
 
 router.post('/subscribe', requireAuth as any, async (req: any, res) => {
-  const { endpoint, keys } = req.body
-  if (!endpoint || !keys?.p256dh || !keys?.auth) {
-    return res.status(400).json({ error: 'Invalid subscription' })
+  try {
+    const { endpoint, keys } = req.body
+    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+      return res.status(400).json({ error: 'Invalid subscription' })
+    }
+    await db.insert(pushSubscriptions).values({
+      user_id: req.user.id,
+      endpoint,
+      p256dh: keys.p256dh,
+      auth: keys.auth,
+    }).onConflictDoNothing()
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('POST /push/subscribe error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to save push subscription' })
   }
-  await db.insert(pushSubscriptions).values({
-    user_id: req.user.id,
-    endpoint,
-    p256dh: keys.p256dh,
-    auth: keys.auth,
-  }).onConflictDoNothing()
-  res.json({ success: true })
 })
 
 router.delete('/unsubscribe', requireAuth as any, async (req: any, res) => {
-  const { endpoint } = req.body
-  if (endpoint) {
-    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint))
+  try {
+    const { endpoint } = req.body
+    if (endpoint) {
+      await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint))
+    }
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('DELETE /push/unsubscribe error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to remove push subscription' })
   }
-  res.json({ success: true })
 })
 
 router.get('/vapid-public-key', (_req, res) => {
