@@ -301,7 +301,8 @@ export default function EmployeeDashboard() {
   }
 
   if (selectedTicket) {
-    const canChangeStatus = isMyTicket(selectedTicket) || selectedTicket.assigned_to === user?.id
+    const isAssignee = selectedTicket.assigned_to === user?.id
+    const canChangeStatus = (isMyTicket(selectedTicket) || isAssignee) && selectedTicket.status !== 'solved'
     const statuses = ['opened', 'pending', 'solved']
     return (
       <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
@@ -330,28 +331,39 @@ export default function EmployeeDashboard() {
               </div>
             </div>
 
-            {canChangeStatus && (
+            {(isMyTicket(selectedTicket) || isAssignee) && (
               <div className="mt-4 pt-4 border-t border-white/10">
-                <p className="text-slate-400 text-xs uppercase tracking-wider mb-3">Change Status</p>
-                <div className="flex gap-2 flex-wrap">
-                  {statuses.map(s => (
-                    <button
-                      key={s}
-                      onClick={() => updateStatus(selectedTicket.id, s)}
-                      disabled={selectedTicket.status === s}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all border ${
-                        selectedTicket.status === s
-                          ? s === 'opened' ? 'bg-blue-600/30 text-blue-400 border-blue-500/40 cursor-default'
-                            : s === 'pending' ? 'bg-yellow-600/30 text-yellow-400 border-yellow-500/40 cursor-default'
-                            : 'bg-green-600/30 text-green-400 border-green-500/40 cursor-default'
-                          : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      {s === 'opened' ? '🔵 Opened' : s === 'pending' ? '🟡 Pending' : '✅ Solved'}
-                      {selectedTicket.status === s && ' ✓'}
-                    </button>
-                  ))}
-                </div>
+                {selectedTicket.status === 'solved' ? (
+                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-900/20 border border-green-500/20 w-fit">
+                    <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                    <span className="text-green-400 text-sm font-medium">✅ تم حل التيكت — الحالة مُقفلة</span>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-slate-400 text-xs uppercase tracking-wider mb-3">Change Status</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {statuses.map(s => (
+                        <button
+                          key={s}
+                          onClick={() => updateStatus(selectedTicket.id, s)}
+                          disabled={selectedTicket.status === s}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all border ${
+                            selectedTicket.status === s
+                              ? s === 'opened' ? 'bg-blue-600/30 text-blue-400 border-blue-500/40 cursor-default'
+                                : s === 'pending' ? 'bg-yellow-600/30 text-yellow-400 border-yellow-500/40 cursor-default'
+                                : 'bg-green-600/30 text-green-400 border-green-500/40 cursor-default'
+                              : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
+                          }`}
+                        >
+                          {s === 'opened' ? '🔵 Opened' : s === 'pending' ? '🟡 Pending' : '✅ Solved'}
+                          {selectedTicket.status === s && ' ✓'}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

@@ -107,6 +107,13 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
     const { status, request_status, assigned_to, is_request, opened_at, review } = req.body
     const updates: any = {}
     if (status !== undefined) {
+      const isAdmin = req.profile?.role === 'admin' || req.profile?.role === 'super_admin'
+      if (!isAdmin) {
+        const [existing] = await db.select({ status: tickets.status }).from(tickets).where(eq(tickets.id, req.params.id)).limit(1)
+        if (existing?.status === 'solved') {
+          return res.status(403).json({ error: 'لا يمكن تغيير حالة التيكت بعد حلّه.' })
+        }
+      }
       updates.status = status
       if (status === 'pending') updates.pending_at = new Date()
       if (status === 'solved') updates.solved_at = new Date()
