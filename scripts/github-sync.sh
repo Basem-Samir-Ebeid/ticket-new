@@ -9,6 +9,7 @@
 #                        is always synced (original behaviour).
 
 STATUS_FILE="$(git rev-parse --show-toplevel 2>/dev/null)/.github-sync-status"
+CONFIG_FILE="$(git rev-parse --show-toplevel 2>/dev/null)/server/github-sync-config.json"
 
 write_status() {
   local result="$1"
@@ -18,20 +19,37 @@ write_status() {
   printf '[%s] %s: %s\n' "$ts" "$result" "$message" > "$STATUS_FILE"
 }
 
-# Support both token names
-TOKEN="${GITHUB_TOKEN:-$GITHUB_PERSONAL_ACCESS_TOKEN}"
+# Read config file values as fallback.
+# Uses jq when available; falls back to grep+sed for environments without jq.
+CONFIG_TOKEN=""
+CONFIG_BRANCH=""
+if [ -f "$CONFIG_FILE" ]; then
+  if command -v jq >/dev/null 2>&1; then
+    CONFIG_TOKEN=$(jq -r '.token // empty' "$CONFIG_FILE" 2>/dev/null || true)
+    CONFIG_BRANCH=$(jq -r '.branch // empty' "$CONFIG_FILE" 2>/dev/null || true)
+  else
+    CONFIG_TOKEN=$(grep '"token"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | head -1 || true)
+    CONFIG_BRANCH=$(grep '"branch"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"branch"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | head -1 || true)
+  fi
+fi
+
+# Support both env token names, then fall back to config file token
+TOKEN="${GITHUB_TOKEN:-${GITHUB_PERSONAL_ACCESS_TOKEN:-$CONFIG_TOKEN}}"
 
 if [ -z "$TOKEN" ]; then
-  echo "[github-sync] No GitHub token found (GITHUB_TOKEN or GITHUB_PERSONAL_ACCESS_TOKEN) — skipping push." >&2
+  echo "[github-sync] No GitHub token found (GITHUB_TOKEN, GITHUB_PERSONAL_ACCESS_TOKEN, or config file) — skipping push." >&2
   write_status "SKIPPED" "No GitHub token configured"
   exit 0
 fi
 
 BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "main")
 
+# Determine the configured sync branch: env var takes priority, then config file
+EFFECTIVE_SYNC_BRANCH="${GITHUB_SYNC_BRANCH:-$CONFIG_BRANCH}"
+
 # If a specific branch is configured, skip silently when HEAD is on a different branch
-if [ -n "$GITHUB_SYNC_BRANCH" ] && [ "$BRANCH" != "$GITHUB_SYNC_BRANCH" ]; then
-  write_status "SKIPPED" "Branch '${BRANCH}' does not match GITHUB_SYNC_BRANCH='${GITHUB_SYNC_BRANCH}'"
+if [ -n "$EFFECTIVE_SYNC_BRANCH" ] && [ "$BRANCH" != "$EFFECTIVE_SYNC_BRANCH" ]; then
+  write_status "SKIPPED" "Branch '${BRANCH}' does not match configured sync branch '${EFFECTIVE_SYNC_BRANCH}'"
   exit 0
 fi
 

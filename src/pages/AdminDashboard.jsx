@@ -73,6 +73,13 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [uploading, setUploading] = useState(false)
   const [replyError, setReplyError] = useState('')
   const [githubSyncStatus, setGithubSyncStatus] = useState(null)
+  const [githubSyncForm, setGithubSyncForm] = useState({ repo_url: '', branch: 'main', token: '' })
+  const [githubSyncHasToken, setGithubSyncHasToken] = useState(false)
+  const [githubSyncMsg, setGithubSyncMsg] = useState('')
+  const [savingGithubSync, setSavingGithubSync] = useState(false)
+  const [testingGithubSync, setTestingGithubSync] = useState(false)
+  const [githubSyncTestResult, setGithubSyncTestResult] = useState(null)
+  const [githubSyncLoaded, setGithubSyncLoaded] = useState(false)
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
@@ -207,6 +214,56 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   }
   async function fetchGithubSyncStatus() {
     try { setGithubSyncStatus(await api.getGithubSyncStatus()) } catch { setGithubSyncStatus({ result: null, timestamp: null, message: 'Unable to fetch sync status' }) }
+  }
+
+  async function fetchGithubSyncSettings() {
+    if (!isSuperAdmin) return
+    try {
+      const data = await api.getGithubSyncSettings()
+      setGithubSyncForm({ repo_url: data.repo_url || '', branch: data.branch || 'main', token: '' })
+      setGithubSyncHasToken(data.has_token)
+    } catch (err) {
+      setGithubSyncMsg('Error loading GitHub sync settings: ' + (err.message || 'Unknown error'))
+    } finally {
+      setGithubSyncLoaded(true)
+    }
+  }
+
+  async function handleSaveGithubSync(e) {
+    e.preventDefault()
+    setSavingGithubSync(true)
+    setGithubSyncMsg('')
+    setGithubSyncTestResult(null)
+    try {
+      const payload = { repo_url: githubSyncForm.repo_url, branch: githubSyncForm.branch }
+      if (githubSyncForm.token) payload.token = githubSyncForm.token
+      const data = await api.saveGithubSyncSettings(payload)
+      setGithubSyncHasToken(data.has_token)
+      setGithubSyncForm(f => ({ ...f, token: '' }))
+      if (data.warning) {
+        setGithubSyncMsg('Warning: ' + data.warning)
+      } else {
+        setGithubSyncMsg('GitHub sync settings saved successfully.')
+      }
+    } catch (err) {
+      setGithubSyncMsg('Error: ' + err.message)
+    }
+    setSavingGithubSync(false)
+  }
+
+  async function handleTestGithubSync() {
+    setTestingGithubSync(true)
+    setGithubSyncTestResult(null)
+    setGithubSyncMsg('')
+    try {
+      const payload = { repo_url: githubSyncForm.repo_url }
+      if (githubSyncForm.token) payload.token = githubSyncForm.token
+      const data = await api.testGithubSyncConnection(payload)
+      setGithubSyncTestResult({ ok: true, message: data.message })
+    } catch (err) {
+      setGithubSyncTestResult({ ok: false, message: err.message })
+    }
+    setTestingGithubSync(false)
   }
   async function fetchLoginTimes() {
     try { setLoginTimes(await api.getAttendance(selectedDate)) } catch (e) {
@@ -678,7 +735,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
           {['dashboard', 'tickets', 'requests', 'leave', 'users', 'attendance', 'performance', 'settings'].map(t => (
             <button key={t} onClick={() => {
               setTab(t); setSelectedTicket(null)
-              if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog() }
+              if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings() }
             }}
               className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all whitespace-nowrap flex-shrink-0 ${tab === t ? `${tabActiveCls} shadow-lg` : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
               {t === 'performance' ? '⭐ Performance'
@@ -1573,6 +1630,130 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 ))}
               </div>
             </div>
+
+            {/* GitHub Sync Settings — super admin only */}
+            {isSuperAdmin && (
+              <div className="glass rounded-xl p-6 animate-fadeIn border border-amber-500/10">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 rounded-xl bg-amber-600/20 border border-amber-500/30 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-white font-semibold text-lg">GitHub Sync</h2>
+                    <p className="text-slate-400 text-xs">Configure the GitHub repository and token used for automatic code sync</p>
+                  </div>
+                </div>
+
+                {!githubSyncLoaded ? (
+                  <div className="flex items-center gap-3 py-4">
+                    <svg className="w-5 h-5 text-amber-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                    <span className="text-slate-400 text-sm">Loading settings…</span>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSaveGithubSync} className="space-y-5">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Repository URL</label>
+                      <input
+                        type="url"
+                        required
+                        value={githubSyncForm.repo_url}
+                        onChange={e => setGithubSyncForm(f => ({ ...f, repo_url: e.target.value }))}
+                        placeholder="https://github.com/your-org/your-repo.git"
+                        className="w-full bg-white/5 border border-white/10 focus:border-amber-500 focus:outline-none text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-500"
+                      />
+                      <p className="text-slate-500 text-xs mt-1">HTTPS format recommended (e.g. https://github.com/owner/repo.git)</p>
+                    </div>
+
+                    <div className="max-w-xs">
+                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Branch to sync</label>
+                      <input
+                        type="text"
+                        required
+                        value={githubSyncForm.branch}
+                        onChange={e => setGithubSyncForm(f => ({ ...f, branch: e.target.value }))}
+                        placeholder="main"
+                        className="w-full bg-white/5 border border-white/10 focus:border-amber-500 focus:outline-none text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">
+                        GitHub Personal Access Token
+                        {githubSyncHasToken && <span className="ml-2 text-green-400 normal-case tracking-normal">(token saved — leave blank to keep existing)</span>}
+                      </label>
+                      <input
+                        type="password"
+                        value={githubSyncForm.token}
+                        onChange={e => setGithubSyncForm(f => ({ ...f, token: e.target.value }))}
+                        placeholder={githubSyncHasToken ? '••••••••••••••••••••••••••••••••••••••••' : 'ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}
+                        autoComplete="new-password"
+                        className="w-full bg-white/5 border border-white/10 focus:border-amber-500 focus:outline-none text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-500 font-mono"
+                      />
+                      <p className="text-slate-500 text-xs mt-1">Needs <code className="bg-white/10 px-1 rounded">repo</code> scope. Create at GitHub → Settings → Developer settings → Personal access tokens.</p>
+                    </div>
+
+                    {githubSyncTestResult && (
+                      <div className={`px-4 py-3 rounded-lg text-sm flex items-start gap-2 ${githubSyncTestResult.ok ? 'bg-green-900/30 text-green-400 border border-green-500/20' : 'bg-red-900/30 text-red-400 border border-red-500/20'}`}>
+                        <span>{githubSyncTestResult.ok ? '✓' : '✗'}</span>
+                        <span>{githubSyncTestResult.message}</span>
+                      </div>
+                    )}
+
+                    {githubSyncMsg && (
+                      <div className={`px-4 py-3 rounded-lg text-sm ${githubSyncMsg.startsWith('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'}`}>
+                        {githubSyncMsg}
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-3 flex-wrap pt-1">
+                      <button
+                        type="submit"
+                        disabled={savingGithubSync}
+                        className="bg-amber-600 hover:bg-amber-500 disabled:opacity-60 px-5 py-2.5 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2"
+                      >
+                        {savingGithubSync ? (
+                          <>
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                            </svg>
+                            Saving…
+                          </>
+                        ) : 'Save Settings'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleTestGithubSync}
+                        disabled={testingGithubSync || !githubSyncForm.repo_url}
+                        className="border border-amber-500/30 hover:border-amber-400/50 bg-amber-600/10 hover:bg-amber-600/20 disabled:opacity-50 text-amber-300 hover:text-amber-200 px-5 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
+                      >
+                        {testingGithubSync ? (
+                          <>
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                            </svg>
+                            Testing…
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Test Connection
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
 
             {/* Audit Log */}
             <div className="glass rounded-xl overflow-hidden">

@@ -126,6 +126,11 @@ export const api = {
 
   // GitHub sync status
   getGithubSyncStatus: () => request('GET', '/github-sync-status'),
+
+  // GitHub sync settings (super admin only)
+  getGithubSyncSettings: () => request('GET', '/settings/github-sync'),
+  saveGithubSyncSettings: (data) => request('POST', '/settings/github-sync', data),
+  testGithubSyncConnection: (data) => request('POST', '/settings/github-sync/test', data),
 }
 
 // ─── WebSocket client with heartbeat & auto-reconnect ───────────────────────

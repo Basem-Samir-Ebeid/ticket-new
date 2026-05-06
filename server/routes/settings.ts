@@ -1,13 +1,26 @@
 import { Router } from 'express'
 import { requireAuth } from '../auth'
 import { getOfficeConfig, saveOfficeConfigToFile } from '../officeConfig'
+import { getGitHubSyncConfig, saveGitHubSyncConfig } from '../githubSyncConfig'
 import { db } from '../db'
 import { settingsLog } from '../../shared/schema'
 import { desc } from 'drizzle-orm'
+import { execFileSync } from 'child_process'
+import https from 'https'
 
 const router = Router()
 
 const isAdmin = (role: string) => role === 'admin' || role === 'super_admin'
+const isSuperAdmin = (role: string) => role === 'super_admin'
+
+const ALLOWED_GITHUB_URL = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(\.git)?$/
+
+function validateRepoUrl(url: string): string | null {
+  if (!ALLOWED_GITHUB_URL.test(url)) {
+    return 'Repository URL must be an HTTPS GitHub URL (e.g. https://github.com/owner/repo.git)'
+  }
+  return null
+}
 
 router.get('/office-location', requireAuth as any, async (req: any, res) => {
   try {
@@ -64,6 +77,146 @@ router.get('/log', requireAuth as any, async (req: any, res) => {
   } catch (err: any) {
     console.error('GET /log error:', err)
     res.status(500).json({ error: err?.message || 'Failed to load settings log' })
+  }
+})
+
+router.get('/github-sync', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isSuperAdmin(req.profile.role)) return res.status(403).json({ error: 'Super admin only' })
+    const config = getGitHubSyncConfig()
+    res.json({
+      repo_url: config.repo_url,
+      branch: config.branch,
+      has_token: Boolean(config.token),
+    })
+  } catch (err: any) {
+    console.error('GET /github-sync error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to load GitHub sync settings' })
+  }
+})
+
+router.post('/github-sync', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isSuperAdmin(req.profile.role)) return res.status(403).json({ error: 'Super admin only' })
+
+    const { repo_url, branch, token } = req.body
+    if (!repo_url || !branch) {
+      return res.status(400).json({ error: 'repo_url and branch are required' })
+    }
+
+    const cleanUrl = String(repo_url).trim()
+    const cleanBranch = String(branch).trim()
+
+    const urlError = validateRepoUrl(cleanUrl)
+    if (urlError) return res.status(400).json({ error: urlError })
+
+    if (!/^[A-Za-z0-9/_.-]+$/.test(cleanBranch)) {
+      return res.status(400).json({ error: 'Branch name contains invalid characters' })
+    }
+
+    const existing = getGitHubSyncConfig()
+    const newToken = token !== undefined ? String(token) : existing.token
+
+    const config = { repo_url: cleanUrl, branch: cleanBranch, token: newToken }
+    saveGitHubSyncConfig(config)
+
+    let gitRemoteError: string | null = null
+    try {
+      const remotes = execFileSync('git', ['remote'], { encoding: 'utf-8', timeout: 5000 }).trim()
+      if (remotes.split('\n').includes('origin')) {
+        execFileSync('git', ['remote', 'set-url', 'origin', cleanUrl], { encoding: 'utf-8', timeout: 5000 })
+      } else {
+        execFileSync('git', ['remote', 'add', 'origin', cleanUrl], { encoding: 'utf-8', timeout: 5000 })
+      }
+    } catch (gitErr: any) {
+      gitRemoteError = gitErr?.stderr || gitErr?.message || 'Unknown git error'
+      console.error('[github-sync] Could not update git remote:', gitRemoteError)
+    }
+
+    if (gitRemoteError) {
+      return res.status(207).json({
+        ok: false,
+        repo_url: config.repo_url,
+        branch: config.branch,
+        has_token: Boolean(config.token),
+        warning: 'Settings saved to config file, but updating the git remote failed: ' + gitRemoteError,
+      })
+    }
+
+    res.json({ ok: true, repo_url: config.repo_url, branch: config.branch, has_token: Boolean(config.token) })
+  } catch (err: any) {
+    console.error('POST /github-sync error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to save GitHub sync settings' })
+  }
+})
+
+router.post('/github-sync/test', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isSuperAdmin(req.profile.role)) return res.status(403).json({ error: 'Super admin only' })
+
+    const config = getGitHubSyncConfig()
+    const token = req.body.token !== undefined ? String(req.body.token) : config.token
+    const repo_url = String(req.body.repo_url || config.repo_url || '').trim()
+
+    if (!token) {
+      return res.status(400).json({ error: 'No token configured. Save a token first.' })
+    }
+    if (!repo_url) {
+      return res.status(400).json({ error: 'No repository URL configured.' })
+    }
+
+    const urlError = validateRepoUrl(repo_url)
+    if (urlError) return res.status(400).json({ error: urlError })
+
+    const repoMatch = repo_url.match(/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/)
+    if (!repoMatch) {
+      return res.status(400).json({ error: 'Could not parse GitHub owner/repo from URL.' })
+    }
+
+    const [, owner, repo] = repoMatch
+
+    const result = await new Promise<{ ok: boolean; status: number; body: any }>((resolve) => {
+      const options = {
+        hostname: 'api.github.com',
+        path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'User-Agent': 'finest-github-sync/1.0',
+          Accept: 'application/vnd.github+json',
+        },
+      }
+      const req2 = https.request(options, (r) => {
+        let data = ''
+        r.on('data', (chunk) => { data += chunk })
+        r.on('end', () => {
+          let body: any = {}
+          try { body = JSON.parse(data) } catch {}
+          resolve({ ok: r.statusCode === 200, status: r.statusCode!, body })
+        })
+      })
+      req2.on('error', (e) => resolve({ ok: false, status: 0, body: { message: e.message } }))
+      req2.setTimeout(8000, () => { req2.destroy(); resolve({ ok: false, status: 0, body: { message: 'Request timed out' } }) })
+      req2.end()
+    })
+
+    if (result.ok) {
+      return res.json({
+        ok: true,
+        message: `Connected successfully to ${result.body.full_name}. Repository is ${result.body.private ? 'private' : 'public'}.`,
+      })
+    }
+
+    if (result.status === 401) {
+      return res.status(400).json({ error: 'Authentication failed — token is invalid or expired.' })
+    }
+    if (result.status === 404) {
+      return res.status(400).json({ error: `Repository "${owner}/${repo}" not found or token lacks access.` })
+    }
+    return res.status(400).json({ error: result.body?.message || `GitHub API returned status ${result.status}` })
+  } catch (err: any) {
+    console.error('POST /github-sync/test error:', err)
+    res.status(500).json({ error: err?.message || 'Test connection failed' })
   }
 })
 
