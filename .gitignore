@@ -3,3 +3,4 @@ dist
 .env
 .env.local
 .github-sync-status
+server/github-sync-config.json
