@@ -87,6 +87,7 @@ export const api = {
   registerLogin: (latitude, longitude) => request('POST', '/attendance/login', { latitude, longitude }),
   registerLogout: (latitude, longitude) => request('POST', '/attendance/logout', { latitude, longitude }),
   deleteAttendance: (id) => request('DELETE', `/attendance/${id}`),
+  getMonthlyAttendanceReport: (year, month) => request('GET', `/attendance/monthly-report?year=${year}&month=${month}`),
 
   // Leaves
   getLeaves: () => request('GET', '/leaves'),

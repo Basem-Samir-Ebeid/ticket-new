@@ -80,6 +80,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [testingGithubSync, setTestingGithubSync] = useState(false)
   const [githubSyncTestResult, setGithubSyncTestResult] = useState(null)
   const [githubSyncLoaded, setGithubSyncLoaded] = useState(false)
+  const [reportYear, setReportYear] = useState(new Date().getFullYear())
+  const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1)
+  const [monthlyReport, setMonthlyReport] = useState(null)
+  const [loadingReport, setLoadingReport] = useState(false)
+  const [reportError, setReportError] = useState('')
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
@@ -265,6 +270,19 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     }
     setTestingGithubSync(false)
   }
+  async function fetchMonthlyReport(year, month) {
+    setLoadingReport(true)
+    setReportError('')
+    try {
+      const data = await api.getMonthlyAttendanceReport(year, month)
+      setMonthlyReport(data)
+    } catch (e) {
+      setReportError('تعذر تحميل التقرير: ' + e.message)
+      setMonthlyReport(null)
+    }
+    setLoadingReport(false)
+  }
+
   async function fetchLoginTimes() {
     try { setLoginTimes(await api.getAttendance(selectedDate)) } catch (e) {
       setMsg('Error: ' + e.message); setLoginTimes([])
@@ -321,7 +339,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
   async function registerLogin() {
     setLoggingIn(true)
-    if (!navigator.geolocation) { alert('Geolocation not supported'); setLoggingIn(false); return }
+    if (!navigator.geolocation) { alert('الموقع الجغرافي غير مدعوم في هذا المتصفح'); setLoggingIn(false); return }
     navigator.geolocation.getCurrentPosition(async (pos) => {
       try {
         await api.registerLogin(pos.coords.latitude, pos.coords.longitude)
@@ -329,13 +347,13 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         if (selectedDate === getLocalDateString()) await fetchLoginTimes()
       } catch (e) { alert(e.message) }
       setLoggingIn(false)
-    }, () => { alert('Location permission is required'); setLoggingIn(false) })
+    }, () => { alert('يجب منح إذن الموقع لتسجيل الحضور'); setLoggingIn(false) }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
   }
 
   async function registerLogout() {
     if (!todayLogin || todayLogin.logout_time) return
     setLoggingOut(true)
-    if (!navigator.geolocation) { alert('Geolocation not supported'); setLoggingOut(false); return }
+    if (!navigator.geolocation) { alert('الموقع الجغرافي غير مدعوم في هذا المتصفح'); setLoggingOut(false); return }
     navigator.geolocation.getCurrentPosition(async (pos) => {
       try {
         await api.registerLogout(pos.coords.latitude, pos.coords.longitude)
@@ -343,7 +361,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         if (selectedDate === getLocalDateString()) await fetchLoginTimes()
       } catch (e) { alert(e.message) }
       setLoggingOut(false)
-    }, () => { alert('Location permission is required'); setLoggingOut(false) })
+    }, () => { alert('يجب منح إذن الموقع لتسجيل الانصراف'); setLoggingOut(false) }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
   }
 
   async function acceptRequest(request) {
@@ -732,13 +750,15 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 p-1 rounded-xl overflow-x-auto border border-white/8" style={{background:'rgba(255,255,255,0.02)'}}>
-          {['dashboard', 'tickets', 'requests', 'leave', 'users', 'attendance', 'performance', 'settings'].map(t => (
+          {['dashboard', 'tickets', 'requests', 'leave', 'users', 'attendance', 'monthlyReport', 'performance', 'settings'].map(t => (
             <button key={t} onClick={() => {
               setTab(t); setSelectedTicket(null)
               if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings() }
+              if (t === 'monthlyReport') { fetchMonthlyReport(reportYear, reportMonth) }
             }}
               className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all whitespace-nowrap flex-shrink-0 ${tab === t ? `${tabActiveCls} shadow-lg` : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
               {t === 'performance' ? '⭐ Performance'
+                : t === 'monthlyReport' ? '📅 تقرير شهري'
                 : t === 'requests'
                   ? <>📋 Requests{requests.filter(r=>r.request_status==='pending_review').length > 0 && <span className="ml-1.5 bg-amber-500/20 text-amber-400 text-xs px-1.5 py-0.5 rounded-full">{requests.filter(r=>r.request_status==='pending_review').length}</span>}</>
                 : t === 'leave'
@@ -1349,6 +1369,203 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               <div className="glass rounded-xl p-4"><p className="text-xs text-slate-400 mb-1">Signed Off</p><p className="text-2xl font-semibold text-amber-400">{loginTimes.filter(lt=>lt.logout_time).length}</p></div>
               <div className="glass rounded-xl p-4"><p className="text-xs text-slate-400 mb-1">Still Working</p><p className="text-2xl font-semibold text-green-400">{loginTimes.filter(lt=>!lt.logout_time).length}</p></div>
             </div>
+          </div>
+        )}
+
+        {/* Monthly Attendance Report Tab */}
+        {tab === 'monthlyReport' && (
+          <div className="space-y-6 animate-fadeIn" dir="rtl">
+            {/* Header */}
+            <div className="glass rounded-xl p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">📅 تقرير الحضور الشهري</h2>
+                  <p className="text-slate-400 text-sm mt-1">إحصائيات تفصيلية لحضور الموظفين خلال الشهر المحدد</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={reportMonth}
+                    onChange={e => { const m = Number(e.target.value); setReportMonth(m); fetchMonthlyReport(reportYear, m) }}
+                    className="bg-white/5 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                  >
+                    {['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'].map((name,i) => (
+                      <option key={i+1} value={i+1}>{name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={reportYear}
+                    onChange={e => { const y = Number(e.target.value); setReportYear(y); fetchMonthlyReport(y, reportMonth) }}
+                    className="bg-white/5 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                  >
+                    {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                  <button
+                    onClick={() => fetchMonthlyReport(reportYear, reportMonth)}
+                    className={`flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-medium transition-all ${isSuperAdmin ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'} text-white`}
+                  >
+                    {loadingReport ? (
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                    ) : '🔄'} تحديث
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Error */}
+            {reportError && <div className="bg-red-900/30 border border-red-500/30 text-red-400 rounded-xl px-4 py-3 text-sm">{reportError}</div>}
+
+            {/* Loading skeleton */}
+            {loadingReport && (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {[1,2,3].map(i => (
+                  <div key={i} className="glass rounded-xl p-5 animate-pulse">
+                    <div className="h-4 bg-white/10 rounded w-1/2 mb-3"/>
+                    <div className="h-8 bg-white/10 rounded w-1/3 mb-4"/>
+                    <div className="h-2 bg-white/10 rounded w-full mb-2"/>
+                    <div className="grid grid-cols-3 gap-2 mt-4">
+                      <div className="h-10 bg-white/10 rounded"/>
+                      <div className="h-10 bg-white/10 rounded"/>
+                      <div className="h-10 bg-white/10 rounded"/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Summary cards */}
+            {!loadingReport && monthlyReport && (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {[
+                    { label: 'أيام العمل', value: monthlyReport.working_days, color: 'text-blue-400', icon: '📆' },
+                    { label: 'إجمالي الموظفين', value: monthlyReport.employees.length, color: 'text-purple-400', icon: '👥' },
+                    { label: 'متوسط الحضور', value: monthlyReport.employees.length > 0 ? Math.round(monthlyReport.employees.reduce((s,e)=>s+e.attendance_rate,0)/monthlyReport.employees.length) + '%' : '—', color: 'text-green-400', icon: '📊' },
+                    { label: 'حضور كامل', value: monthlyReport.employees.filter(e=>e.attendance_rate>=100).length, color: 'text-amber-400', icon: '🏆' },
+                  ].map(({label,value,color,icon}) => (
+                    <div key={label} className="glass rounded-xl p-4 text-center">
+                      <p className="text-2xl mb-1">{icon}</p>
+                      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+                      <p className="text-xs text-slate-400 mt-1">{label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Employee cards */}
+                {monthlyReport.employees.length === 0 ? (
+                  <div className="glass rounded-xl p-12 text-center text-slate-500">لا يوجد موظفون مسجلون</div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {monthlyReport.employees.map((emp, idx) => {
+                      const rate = emp.attendance_rate
+                      const barColor = rate >= 80 ? 'bg-green-500' : rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                      const rateColor = rate >= 80 ? 'text-green-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'
+                      const totalHours = (emp.total_minutes / 60).toFixed(1)
+                      const avgHours = (emp.avg_minutes_per_day / 60).toFixed(1)
+                      const rankBadge = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`
+                      return (
+                        <div key={emp.id} className="glass rounded-xl p-5 hover-lift transition-all">
+                          {/* Name + rank */}
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white font-semibold text-sm truncate">{emp.full_name || '—'}</p>
+                              <p className="text-slate-500 text-xs truncate mt-0.5">{emp.email}</p>
+                            </div>
+                            <span className="text-xl mr-2 flex-shrink-0">{rankBadge}</span>
+                          </div>
+
+                          {/* Attendance rate bar */}
+                          <div className="mb-4">
+                            <div className="flex justify-between items-center mb-1.5">
+                              <span className="text-xs text-slate-400">نسبة الحضور</span>
+                              <span className={`text-sm font-bold ${rateColor}`}>{rate}%</span>
+                            </div>
+                            <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full transition-all ${barColor}`} style={{width:`${Math.min(rate,100)}%`}}/>
+                            </div>
+                          </div>
+
+                          {/* Stats grid */}
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="bg-white/5 rounded-lg p-2">
+                              <p className="text-green-400 font-bold text-lg">{emp.days_present}</p>
+                              <p className="text-slate-500 text-xs mt-0.5">حضور</p>
+                            </div>
+                            <div className="bg-white/5 rounded-lg p-2">
+                              <p className="text-red-400 font-bold text-lg">{emp.days_absent}</p>
+                              <p className="text-slate-500 text-xs mt-0.5">غياب</p>
+                            </div>
+                            <div className="bg-white/5 rounded-lg p-2">
+                              <p className="text-blue-400 font-bold text-lg">{totalHours}</p>
+                              <p className="text-slate-500 text-xs mt-0.5">ساعة</p>
+                            </div>
+                          </div>
+
+                          {/* Avg hours */}
+                          {emp.days_present > 0 && (
+                            <div className="mt-3 pt-3 border-t border-white/8 flex justify-between text-xs text-slate-400">
+                              <span>متوسط يومي</span>
+                              <span className="text-white font-medium">{avgHours} ساعة</span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Table summary */}
+                <div className="glass rounded-xl overflow-hidden">
+                  <div className="p-4 border-b border-white/10">
+                    <h3 className="text-white font-medium text-sm">📋 ملخص تفصيلي</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm" dir="rtl">
+                      <thead>
+                        <tr className="border-b border-white/8 bg-white/5">
+                          {['الترتيب','الاسم','البريد','أيام الحضور',`الغياب / ${monthlyReport.working_days}`,  'نسبة الحضور','إجمالي الساعات','متوسط يومي'].map(h => (
+                            <th key={h} className="text-right text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {monthlyReport.employees.map((emp, idx) => {
+                          const rate = emp.attendance_rate
+                          const rateColor = rate >= 80 ? 'text-green-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'
+                          return (
+                            <tr key={emp.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
+                              <td className="px-4 py-3 text-slate-400 font-mono text-xs">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`}</td>
+                              <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{emp.full_name || '—'}</td>
+                              <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{emp.email}</td>
+                              <td className="px-4 py-3 text-center"><span className="text-green-400 font-bold">{emp.days_present}</span></td>
+                              <td className="px-4 py-3 text-center"><span className="text-red-400 font-bold">{emp.days_absent}</span></td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full ${rate>=80?'bg-green-500':rate>=50?'bg-amber-500':'bg-red-500'}`} style={{width:`${Math.min(rate,100)}%`}}/>
+                                  </div>
+                                  <span className={`font-bold text-xs ${rateColor}`}>{rate}%</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-blue-400 font-medium text-center whitespace-nowrap">{(emp.total_minutes/60).toFixed(1)} ساعة</td>
+                              <td className="px-4 py-3 text-slate-300 text-center whitespace-nowrap">{emp.days_present > 0 ? (emp.avg_minutes_per_day/60).toFixed(1) + ' ساعة' : '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Empty state before loading */}
+            {!loadingReport && !monthlyReport && !reportError && (
+              <div className="glass rounded-xl p-16 text-center">
+                <p className="text-4xl mb-4">📅</p>
+                <p className="text-slate-300 font-medium">اضغط تحديث لعرض التقرير</p>
+                <p className="text-slate-500 text-sm mt-2">اختر الشهر والسنة ثم اضغط تحديث</p>
+              </div>
+            )}
           </div>
         )}
 

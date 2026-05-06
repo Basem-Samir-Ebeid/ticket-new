@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db'
 import { loginTimes, profiles } from '../../shared/schema'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, gte, lte } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcastAll } from '../ws'
 import { getOfficeConfig } from '../officeConfig'
@@ -139,6 +139,71 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
   } catch (err: any) {
     console.error('POST /attendance/logout error:', err)
     res.status(500).json({ error: err?.message || 'Failed to check out' })
+  }
+})
+
+router.get('/monthly-report', requireAuth as any, async (req: any, res) => {
+  try {
+    const allowed = req.profile.role === 'admin' || req.profile.role === 'super_admin'
+    if (!allowed) return res.status(403).json({ error: 'Admin only' })
+
+    const year = parseInt(req.query.year as string) || new Date().getFullYear()
+    const month = parseInt(req.query.month as string) || (new Date().getMonth() + 1)
+
+    const firstDay = `${year}-${String(month).padStart(2, '0')}-01`
+    const lastDayDate = new Date(year, month, 0)
+    const lastDay = `${year}-${String(month).padStart(2, '0')}-${String(lastDayDate.getDate()).padStart(2, '0')}`
+
+    // Count working days (Mon–Fri) in the month
+    let workingDays = 0
+    for (let d = new Date(year, month - 1, 1); d <= lastDayDate; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay()
+      if (dow !== 0 && dow !== 6) workingDays++
+    }
+
+    const rows = await db.select().from(loginTimes)
+      .where(and(gte(loginTimes.date, firstDay), lte(loginTimes.date, lastDay)))
+
+    const allProfiles = await db.select({
+      id: profiles.id, full_name: profiles.full_name, email: profiles.email, role: profiles.role
+    }).from(profiles)
+
+    const statsMap = new Map<string, { profile: any; days: string[]; totalMinutes: number }>()
+
+    for (const p of allProfiles) {
+      if (p.role === 'admin' || p.role === 'super_admin') continue
+      statsMap.set(p.id, { profile: p, days: [], totalMinutes: 0 })
+    }
+
+    for (const r of rows) {
+      if (!statsMap.has(r.user_id)) continue
+      const entry = statsMap.get(r.user_id)!
+      if (!entry.days.includes(r.date)) entry.days.push(r.date)
+      if (r.login_time && r.logout_time) {
+        const mins = (new Date(r.logout_time).getTime() - new Date(r.login_time).getTime()) / 60000
+        if (mins > 0) entry.totalMinutes += mins
+      }
+    }
+
+    const report = Array.from(statsMap.values()).map(({ profile, days, totalMinutes }) => ({
+      id: profile.id,
+      full_name: profile.full_name,
+      email: profile.email,
+      role: profile.role,
+      days_present: days.length,
+      days_absent: Math.max(0, workingDays - days.length),
+      working_days: workingDays,
+      attendance_rate: workingDays > 0 ? Math.round((days.length / workingDays) * 100) : 0,
+      total_minutes: Math.round(totalMinutes),
+      avg_minutes_per_day: days.length > 0 ? Math.round(totalMinutes / days.length) : 0,
+    }))
+
+    report.sort((a, b) => b.attendance_rate - a.attendance_rate)
+
+    res.json({ year, month, working_days: workingDays, employees: report })
+  } catch (err: any) {
+    console.error('GET /attendance/monthly-report error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to generate report' })
   }
 })
 
