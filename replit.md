@@ -1,72 +1,71 @@
-# IT Ticket System (Finest)
+# Finest — IT Ticket Management System
 
-A role-based IT Ticket Management System for managing support tickets, attendance, leave requests, and real-time notifications.
+A full-stack web app for managing IT support tickets with role-based access, attendance tracking, leave requests, real-time notifications, and web push.
 
 ## Run & Operate
 
-- `npm run dev` — starts Vite (port 5000) + Express (port 3000) concurrently
-- `npm run build` — builds frontend to `dist/`
-- `npm run start` — production server (PORT=5000, serves built frontend)
-- `npm run db:push` — push schema changes to database
+- **Dev**: `npm run dev` — starts backend (port 3000) + Vite frontend (port 5000) concurrently
+- **Production**: `npm run start` — `NODE_ENV=production PORT=5000 tsx server/index.ts`
+- **Build**: `npm run build` — Vite builds frontend to `dist/`
+- **DB push**: `npm run db:push` — apply schema changes via Drizzle Kit
 
-Required env vars: `DATABASE_URL` (Replit managed), `JWT_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_EMAIL`
+Required env vars:
+- `DATABASE_URL` — PostgreSQL connection string (Replit DB integration)
+- `JWT_SECRET` — Secret for signing JWTs (set in `.replit` userenv)
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_EMAIL` — Web Push credentials (set in `.replit` userenv)
 
 ## Stack
 
-- **Frontend**: React 18, React Router v6, Vite, TailwindCSS
-- **Backend**: Node.js, Express, TypeScript (via tsx)
-- **Database**: PostgreSQL via Drizzle ORM + `pg`
-- **Auth**: JWT (`jsonwebtoken` + `bcryptjs`) — custom, no external auth provider
-- **Real-time**: WebSocket (`ws` library) at `/ws`
-- **Notifications**: Web Push (VAPID via `web-push`)
-- **Uploads**: `multer`
+- **Frontend**: React 18 + Vite 5, Tailwind CSS, React Router v6
+- **Backend**: Express 4, TypeScript via `tsx`, Node.js 20
+- **Database**: PostgreSQL via `pg` + Drizzle ORM
+- **Real-time**: WebSocket (`ws`) server attached to HTTP server at `/ws`
+- **Auth**: Custom JWT (bcryptjs hashing, 7-day tokens)
+- **Push**: `web-push` (VAPID) + service worker (`public/sw.js`)
+- **File uploads**: `multer` → stored in `uploads/` directory
 
 ## Where things live
 
-- `src/` — React frontend
-  - `src/pages/` — Login, AdminDashboard, EmployeeDashboard, MemberDashboard, SuperAdminDashboard
-  - `src/context/AuthContext.jsx` — auth state, WS connect, push subscription
-  - `src/lib/api.js` — all API calls + WebSocket client
-- `server/` — Express backend
-  - `server/index.ts` — HTTP server + WebSocket server
-  - `server/app.ts` — Express app + route wiring
-  - `server/routes/` — auth, users, tickets, attendance, leaves, notifications, uploads, push, settings
-  - `server/db.ts` — Drizzle setup
-  - `server/auth.ts` — JWT sign/verify, requireAuth middleware
-- `shared/schema.ts` — Drizzle table definitions (source of truth for DB schema)
-- `drizzle.config.ts` — Drizzle Kit config
-- `vite.config.js` — Vite config; proxies `/api`, `/ws`, `/uploads` to port 3000
-- `public/sw.js` — Service worker for Web Push
+- `server/index.ts` — HTTP + WebSocket server entry
+- `server/app.ts` — Express app, route wiring, static serving
+- `server/auth.ts` — JWT sign/verify, `requireAuth` middleware
+- `server/routes/` — All API route handlers
+- `server/db.ts` — Drizzle + pg pool setup
+- `shared/schema.ts` — **Source of truth** for all DB table definitions
+- `src/main.jsx` — React entry, wraps with BrowserRouter + AuthProvider
+- `src/context/AuthContext.jsx` — JWT state, WebSocket lifecycle, push registration
+- `src/lib/api.js` — REST + WebSocket client
+- `vite.config.js` — Dev server config, proxy rules (`/api`, `/ws`, `/uploads` → port 3000)
 
 ## Architecture decisions
 
-- Vite dev server (port 5000) proxies all `/api`, `/ws`, `/uploads` requests to Express (port 3000) — single origin for browser
-- JWT stored in `localStorage`; WebSocket auth via `?token=` querystring
-- WebSocket uses `window.location.host` for URL construction — works correctly through Replit's proxy
-- Production: Express serves built frontend from `public/`; dev: Vite handles frontend separately
+- Frontend and backend run on separate ports in dev (5000 / 3000); Vite proxies API calls
+- In production, the Express server serves the built frontend from `public/` (single server on port 5000)
+- WebSocket auth uses JWT query param (`/ws?token=...`) validated server-side
+- JWT stored in `localStorage` as `auth_token`; session revocation via `session_revocations` table + WebSocket push
+- File uploads stored locally in `uploads/` — not cloud-backed
 
 ## Product
 
-- **Roles**: super_admin, admin, employee, member — each gets a different dashboard
-- **Tickets**: create, assign, status updates, replies with file/image attachments
-- **Ticket Requests**: members/employees submit; admins accept/refuse
-- **Attendance**: geolocation check-in/out within configurable office radius
-- **Leave Requests**: submit, approve/reject with notes
-- **Notifications**: real-time via WebSocket + Web Push for admins
-- **File uploads**: profile pictures, ticket reply attachments
+- **Tickets**: Create, assign, track status (opened/pending/solved), reply with images/attachments, ticket request/approval flow
+- **Users**: Role-based (employee, admin, super_admin) with profile management and forced password change on first login
+- **Attendance**: GPS-verified login/logout tracking, admin view of attendance records
+- **Leave requests**: Submit, approve/reject with admin notes
+- **Notifications**: In-app (stored) + real-time WebSocket events + Web Push for admins
+- **Settings**: Geofencing configuration for attendance validation
 
 ## User preferences
 
-_Populate as you build_
+- Keep existing JWT-based auth (not replaced with Replit Auth)
 
 ## Gotchas
 
-- Default super admin: `admin@system.com` / `Admin@1234` (created on migration)
-- Run `npm run db:push` after any schema changes in `shared/schema.ts`
-- GitHub auto-sync uses a post-commit hook; requires `GITHUB_TOKEN` secret
+- `npm run db:push` must be run after any schema changes in `shared/schema.ts`
+- The `postinstall` script runs `scripts/setup-git-hooks.sh` automatically on `npm install`
+- `fuser` is used in the `dev` script to kill ports 3000/5000 before starting — requires `fuser` to be available
 
 ## Pointers
 
 - DB schema: `shared/schema.ts`
-- API client: `src/lib/api.js`
-- Drizzle config: `drizzle.config.ts`
+- API routes: `server/app.ts`
+- Vite proxy config: `vite.config.js`
