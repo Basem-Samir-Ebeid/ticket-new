@@ -78,8 +78,13 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
     }
 
     const cfg = await getOfficeConfig()
-    const distance = haversineDistance(Number(latitude), Number(longitude), cfg.latitude, cfg.longitude)
-    if (distance > cfg.radius_meters) {
+    const lat = Number(latitude)
+    const lng = Number(longitude)
+    if (!isFinite(lat) || !isFinite(lng)) {
+      return res.status(400).json({ error: 'إحداثيات غير صالحة.' })
+    }
+    const distance = haversineDistance(lat, lng, cfg.latitude, cfg.longitude)
+    if (!isFinite(distance) || distance > cfg.radius_meters) {
       return res.status(403).json({
         error: 'أنت خارج نطاق المكتب ولا يمكنك تسجيل الحضور أو الانصراف.'
       })
@@ -115,8 +120,13 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
     }
 
     const cfg = await getOfficeConfig()
-    const distance = haversineDistance(Number(latitude), Number(longitude), cfg.latitude, cfg.longitude)
-    if (distance > cfg.radius_meters) {
+    const lat = Number(latitude)
+    const lng = Number(longitude)
+    if (!isFinite(lat) || !isFinite(lng)) {
+      return res.status(400).json({ error: 'إحداثيات غير صالحة.' })
+    }
+    const distance = haversineDistance(lat, lng, cfg.latitude, cfg.longitude)
+    if (!isFinite(distance) || distance > cfg.radius_meters) {
       return res.status(403).json({
         error: 'أنت خارج نطاق المكتب ولا يمكنك تسجيل الحضور أو الانصراف.'
       })

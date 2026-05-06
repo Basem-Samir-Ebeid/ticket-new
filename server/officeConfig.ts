@@ -18,6 +18,16 @@ const DEFAULT_CONFIG: OfficeConfig = {
   radius_meters: 20,
 }
 
+function isValidConfig(cfg: any): cfg is OfficeConfig {
+  return (
+    cfg !== null &&
+    typeof cfg === 'object' &&
+    typeof cfg.latitude === 'number' && isFinite(cfg.latitude) && cfg.latitude !== 0 &&
+    typeof cfg.longitude === 'number' && isFinite(cfg.longitude) && cfg.longitude !== 0 &&
+    typeof cfg.radius_meters === 'number' && isFinite(cfg.radius_meters) && cfg.radius_meters > 0
+  )
+}
+
 export async function getOfficeConfig(): Promise<OfficeConfig> {
   try {
     const [latest] = await db
@@ -26,19 +36,24 @@ export async function getOfficeConfig(): Promise<OfficeConfig> {
       .orderBy(desc(settingsLog.created_at))
       .limit(1)
     if (latest) {
-      return {
-        latitude: latest.to_lat,
-        longitude: latest.to_lng,
-        radius_meters: latest.to_radius,
+      const cfg = {
+        latitude: Number(latest.to_lat),
+        longitude: Number(latest.to_lng),
+        radius_meters: Number(latest.to_radius),
       }
+      if (isValidConfig(cfg)) return cfg
     }
   } catch {}
+
   try {
     if (fs.existsSync(CONFIG_FILE)) {
       const raw = fs.readFileSync(CONFIG_FILE, 'utf-8')
-      return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }
+      const parsed = JSON.parse(raw)
+      const cfg = { ...DEFAULT_CONFIG, ...parsed }
+      if (isValidConfig(cfg)) return cfg
     }
   } catch {}
+
   return { ...DEFAULT_CONFIG }
 }
 
