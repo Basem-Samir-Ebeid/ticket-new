@@ -43,13 +43,30 @@ async function request(method, path, body) {
   try {
     res = await fetch(BASE + path, opts)
   } catch (networkErr) {
-    throw new Error('Network error — server unreachable. Check your connection.')
+    throw new Error('تعذّر الاتصال بالخادم. تحقق من اتصالك بالإنترنت.')
   }
+  const contentType = res.headers.get('content-type') || ''
+  const isJson = contentType.includes('application/json')
   const text = await res.text()
   let data = {}
-  try { data = JSON.parse(text) } catch {}
+  if (isJson) {
+    try { data = JSON.parse(text) } catch {}
+  }
   if (!res.ok) {
-    const msg = data.error || `Server error ${res.status}: ${text.slice(0, 200)}`
+    let msg
+    if (data.error) {
+      msg = data.error
+    } else if (!isJson) {
+      const STATUS_MSGS = {
+        404: 'تعذر تحميل البيانات: المسار غير موجود (404).',
+        403: 'غير مصرح لك بهذا الإجراء (403).',
+        401: 'انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجددًا (401).',
+        500: 'خطأ داخلي في الخادم (500).',
+      }
+      msg = STATUS_MSGS[res.status] || `خطأ من الخادم (${res.status}).`
+    } else {
+      msg = `خطأ (${res.status}).`
+    }
     throw Object.assign(new Error(msg), { data, status: res.status })
   }
   return data
