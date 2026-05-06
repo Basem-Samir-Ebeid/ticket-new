@@ -81,7 +81,7 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
     const distance = haversineDistance(Number(latitude), Number(longitude), cfg.latitude, cfg.longitude)
     if (distance > cfg.radius_meters) {
       return res.status(403).json({
-        error: `You are ${Math.round(distance)} m away from the office. Check-in is only allowed within ${cfg.radius_meters} m.`
+        error: 'أنت خارج نطاق المكتب ولا يمكنك تسجيل الحضور أو الانصراف.'
       })
     }
 
@@ -118,7 +118,7 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
     const distance = haversineDistance(Number(latitude), Number(longitude), cfg.latitude, cfg.longitude)
     if (distance > cfg.radius_meters) {
       return res.status(403).json({
-        error: `You are ${Math.round(distance)} m away from the office. Check-out is only allowed within ${cfg.radius_meters} m.`
+        error: 'أنت خارج نطاق المكتب ولا يمكنك تسجيل الحضور أو الانصراف.'
       })
     }
 

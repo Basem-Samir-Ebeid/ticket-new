@@ -103,21 +103,21 @@ export default function EmployeeDashboard() {
 
   async function registerLogin() {
     setLoggingIn(true)
-    if (!navigator.geolocation) { alert('Geolocation not supported'); setLoggingIn(false); return }
+    if (!navigator.geolocation) { alert('الموقع الجغرافي غير مدعوم في هذا المتصفح'); setLoggingIn(false); return }
     navigator.geolocation.getCurrentPosition(async (pos) => {
       try { await api.registerLogin(pos.coords.latitude, pos.coords.longitude); await checkTodayLogin() } catch (e) { alert(e.message) }
       setLoggingIn(false)
-    }, () => { alert('Location permission is required'); setLoggingIn(false) })
+    }, () => { alert('يجب منح إذن الموقع لتسجيل الحضور'); setLoggingIn(false) }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
   }
 
   async function registerLogout() {
     if (!todayLogin || todayLogin.logout_time) return
     setLoggingOut(true)
-    if (!navigator.geolocation) { alert('Geolocation not supported'); setLoggingOut(false); return }
+    if (!navigator.geolocation) { alert('الموقع الجغرافي غير مدعوم في هذا المتصفح'); setLoggingOut(false); return }
     navigator.geolocation.getCurrentPosition(async (pos) => {
       try { await api.registerLogout(pos.coords.latitude, pos.coords.longitude); await checkTodayLogin() } catch (e) { alert(e.message) }
       setLoggingOut(false)
-    }, () => { alert('Location permission is required'); setLoggingOut(false) })
+    }, () => { alert('يجب منح إذن الموقع لتسجيل الانصراف'); setLoggingOut(false) }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
   }
 
   async function fetchAttendanceRecords() {

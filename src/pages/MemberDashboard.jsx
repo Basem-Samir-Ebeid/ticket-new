@@ -111,21 +111,21 @@ export default function MemberDashboard() {
 
   async function registerLogin() {
     setLoggingIn(true)
-    if (!navigator.geolocation) { alert('Geolocation not supported'); setLoggingIn(false); return }
+    if (!navigator.geolocation) { alert('الموقع الجغرافي غير مدعوم في هذا المتصفح'); setLoggingIn(false); return }
     navigator.geolocation.getCurrentPosition(async (pos) => {
       try { await api.registerLogin(pos.coords.latitude, pos.coords.longitude); await checkTodayLogin() } catch (e) { alert(e.message) }
       setLoggingIn(false)
-    }, () => { alert('Location permission is required'); setLoggingIn(false) })
+    }, () => { alert('يجب منح إذن الموقع لتسجيل الحضور'); setLoggingIn(false) }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
   }
 
   async function registerLogout() {
     if (!todayLogin || todayLogin.logout_time) return
     setLoggingOut(true)
-    if (!navigator.geolocation) { alert('Geolocation not supported'); setLoggingOut(false); return }
+    if (!navigator.geolocation) { alert('الموقع الجغرافي غير مدعوم في هذا المتصفح'); setLoggingOut(false); return }
     navigator.geolocation.getCurrentPosition(async (pos) => {
       try { await api.registerLogout(pos.coords.latitude, pos.coords.longitude); await checkTodayLogin() } catch (e) { alert(e.message) }
       setLoggingOut(false)
-    }, () => { alert('Location permission is required'); setLoggingOut(false) })
+    }, () => { alert('يجب منح إذن الموقع لتسجيل الانصراف'); setLoggingOut(false) }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
   }
 
   async function fetchAttendanceRecords() {
@@ -435,19 +435,6 @@ export default function MemberDashboard() {
             <AttendanceButton todayLogin={todayLogin} loggingIn={loggingIn} loggingOut={loggingOut} onLogin={registerLogin} onLogout={registerLogout} />
           </div>
         </div>
-
-        {/* Notifications */}
-        {notifications.length > 0 && (
-          <div className="glass rounded-xl p-4 mb-6 space-y-2">
-            <h3 className="text-white text-sm font-medium mb-2">🔔 Notifications ({notifications.length})</h3>
-            {notifications.slice(0, 3).map(n => (
-              <div key={n.id} className="bg-white/5 rounded-lg p-3 flex justify-between items-start gap-3">
-                <p className="text-slate-300 text-sm flex-1">{n.message}</p>
-                <button onClick={()=>markAsRead(n.id)} className="text-xs text-blue-400 hover:text-blue-300 whitespace-nowrap">Mark Read</button>
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 p-1 rounded-xl overflow-x-auto border border-white/8" style={{background:'rgba(255,255,255,0.02)'}}>

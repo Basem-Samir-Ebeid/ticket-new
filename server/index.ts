@@ -3,6 +3,14 @@ import { WebSocketServer } from 'ws'
 import { setupWebSocket } from './ws'
 import app from './app'
 
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException] Server error (staying alive):', err)
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection] Unhandled promise rejection (staying alive):', reason)
+})
+
 const server = createServer(app)
 const wss = new WebSocketServer({ server, path: '/ws' })
 

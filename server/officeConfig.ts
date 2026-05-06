@@ -13,9 +13,9 @@ export interface OfficeConfig {
 }
 
 const DEFAULT_CONFIG: OfficeConfig = {
-  latitude: 30.0726,
-  longitude: 31.3211,
-  radius_meters: 30,
+  latitude: 30.0803897,
+  longitude: 31.3524335,
+  radius_meters: 20,
 }
 
 export async function getOfficeConfig(): Promise<OfficeConfig> {
