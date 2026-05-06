@@ -298,17 +298,25 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     }
     setTestingGithubSync(false)
   }
-  async function fetchMonthlyReport(year, month) {
+  async function fetchMonthlyReport(year, month, attempt = 1) {
+    const MAX_ATTEMPTS = 3
+    const RETRY_DELAY_MS = 1200
     setLoadingReport(true)
     setReportError('')
     try {
       const data = await api.getMonthlyAttendanceReport(year, month)
       setMonthlyReport(data)
+      setLoadingReport(false)
     } catch (e) {
-      setReportError('تعذر تحميل التقرير: ' + e.message)
+      const isTransient = e.status === 404 || e.status === 502 || e.status === 503 || !e.status
+      if (isTransient && attempt < MAX_ATTEMPTS) {
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS))
+        return fetchMonthlyReport(year, month, attempt + 1)
+      }
+      setReportError(e.message || 'تعذر تحميل التقرير')
       setMonthlyReport(null)
+      setLoadingReport(false)
     }
-    setLoadingReport(false)
   }
 
   async function fetchLoginTimes() {
@@ -1477,7 +1485,20 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
             </div>
 
             {/* Error */}
-            {reportError && <div className="bg-red-900/30 border border-red-500/30 text-red-400 rounded-xl px-4 py-3 text-sm">{reportError}</div>}
+            {reportError && (
+              <div className="bg-red-900/30 border border-red-500/30 text-red-400 rounded-xl px-4 py-4 text-sm flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">⚠️</span>
+                  <span>{reportError}</span>
+                </div>
+                <button
+                  onClick={() => fetchMonthlyReport(reportYear, reportMonth)}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-300 transition-all whitespace-nowrap"
+                >
+                  🔄 إعادة المحاولة
+                </button>
+              </div>
+            )}
 
             {/* Loading skeleton */}
             {loadingReport && (
