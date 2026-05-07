@@ -502,7 +502,7 @@ app.post('/api/attendance/login', requireAuth, async (req, res) => {
 
   if (distance > office.radius_meters) {
     return res.status(403).json({
-      error: `You are too far from the office (${Math.round(distance)}m away, max allowed: ${office.radius_meters}m)`,
+      error: `أنت بعيد جداً عن المكتب (${Math.round(distance)}م، الحد الأقصى المسموح: ${office.radius_meters}م)`,
     })
   }
 
@@ -530,7 +530,7 @@ app.post('/api/attendance/logout', requireAuth, async (req, res) => {
 
   if (distance > office.radius_meters) {
     return res.status(403).json({
-      error: `You are too far from the office (${Math.round(distance)}m away, max allowed: ${office.radius_meters}m)`,
+      error: `أنت بعيد جداً عن المكتب (${Math.round(distance)}م، الحد الأقصى المسموح: ${office.radius_meters}م)`,
     })
   }
 
