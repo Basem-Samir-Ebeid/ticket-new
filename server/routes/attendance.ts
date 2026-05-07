@@ -182,9 +182,10 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
 })
 
 router.get('/monthly-report', requireAuth as any, async (req: any, res) => {
+  res.setHeader('Content-Type', 'application/json')
   try {
-    const allowed = req.profile.role === 'admin' || req.profile.role === 'super_admin'
-    if (!allowed) return res.status(403).json({ error: 'Admin only' })
+    const allowed = req.profile?.role === 'admin' || req.profile?.role === 'super_admin'
+    if (!allowed) return res.status(403).json({ error: 'غير مصرح لك بعرض التقرير الشهري.' })
 
     const cairoNow = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
     const [cairoYear, cairoMonth] = cairoNow.split('-').map(Number)

@@ -301,7 +301,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   }
   async function fetchMonthlyReport(year, month, attempt = 1) {
     const MAX_ATTEMPTS = 3
-    const RETRY_DELAY_MS = 1200
+    const RETRY_DELAY_MS = 1000
     setLoadingReport(true)
     setReportError('')
     try {
@@ -309,7 +309,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       setMonthlyReport(data)
       setLoadingReport(false)
     } catch (e) {
-      const isTransient = e.status === 404 || e.status === 502 || e.status === 503 || !e.status
+      const isTransient = e.status === 502 || e.status === 503 || !e.status
       if (isTransient && attempt < MAX_ATTEMPTS) {
         await new Promise(r => setTimeout(r, RETRY_DELAY_MS))
         return fetchMonthlyReport(year, month, attempt + 1)
@@ -815,7 +815,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
             { key: 'leave',         label: 'Leave',     badge: leaveRequests.filter(r=>r.status==='pending').length },
             { key: 'users',         label: 'Users' },
             { key: 'attendance',    label: 'Attendance' },
-            { key: 'monthlyReport', label: 'Report' },
+            { key: 'monthlyReport', label: '📅 تقرير شهري' },
             { key: 'performance',   label: 'Performance' },
             { key: 'settings',      label: 'Settings' },
           ].map(({ key: t, label, badge }) => (
