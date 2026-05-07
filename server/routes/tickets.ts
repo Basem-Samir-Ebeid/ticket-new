@@ -227,6 +227,7 @@ router.post('/:id/rate', requireAuth as any, async (req: any, res) => {
     if (!existing) return res.status(404).json({ error: 'Ticket not found' })
     if (existing.status !== 'solved') return res.status(400).json({ error: 'Can only rate solved tickets' })
     if (existing.created_by !== req.user.id) return res.status(403).json({ error: 'Only the ticket creator can rate' })
+    if (existing.rating != null) return res.status(409).json({ error: 'This ticket has already been rated' })
 
     const [ticket] = await db.update(tickets)
       .set({ rating: Number(rating), rating_comment: rating_comment?.trim() || null })
