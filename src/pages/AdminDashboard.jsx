@@ -82,11 +82,6 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [testingGithubSync, setTestingGithubSync] = useState(false)
   const [githubSyncTestResult, setGithubSyncTestResult] = useState(null)
   const [githubSyncLoaded, setGithubSyncLoaded] = useState(false)
-  const [reportYear, setReportYear] = useState(new Date().getFullYear())
-  const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1)
-  const [monthlyReport, setMonthlyReport] = useState(null)
-  const [loadingReport, setLoadingReport] = useState(false)
-  const [reportError, setReportError] = useState('')
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
@@ -299,27 +294,6 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     }
     setTestingGithubSync(false)
   }
-  async function fetchMonthlyReport(year, month, attempt = 1) {
-    const MAX_ATTEMPTS = 3
-    const RETRY_DELAY_MS = 1000
-    setLoadingReport(true)
-    setReportError('')
-    try {
-      const data = await api.getMonthlyAttendanceReport(year, month)
-      setMonthlyReport(data)
-      setLoadingReport(false)
-    } catch (e) {
-      const isTransient = e.status === 502 || e.status === 503 || !e.status
-      if (isTransient && attempt < MAX_ATTEMPTS) {
-        await new Promise(r => setTimeout(r, RETRY_DELAY_MS))
-        return fetchMonthlyReport(year, month, attempt + 1)
-      }
-      setReportError(e.message || 'تعذر تحميل التقرير')
-      setMonthlyReport(null)
-      setLoadingReport(false)
-    }
-  }
-
   async function fetchLoginTimes() {
     try { setLoginTimes(await api.getAttendance(selectedDate)) } catch (e) {
       setMsg('Error: ' + e.message); setLoginTimes([])
@@ -815,14 +789,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
             { key: 'leave',         label: 'Leave',     badge: leaveRequests.filter(r=>r.status==='pending').length },
             { key: 'users',         label: 'Users' },
             { key: 'attendance',    label: 'Attendance' },
-            { key: 'monthlyReport', label: '📅 تقرير شهري' },
             { key: 'performance',   label: 'Performance' },
             { key: 'settings',      label: 'Settings' },
           ].map(({ key: t, label, badge }) => (
             <button key={t} onClick={() => {
               setTab(t); setSelectedTicket(null)
               if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings() }
-              if (t === 'monthlyReport') { fetchMonthlyReport(reportYear, reportMonth) }
             }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${tab === t ? tabActiveCls : 'tab-inactive'}`}>
               {label}
@@ -1498,254 +1470,6 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Monthly Attendance Report Tab */}
-        {tab === 'monthlyReport' && (
-          <div className="space-y-6 animate-fadeIn" dir="rtl">
-            {/* Header */}
-            <div className="glass-card rounded-2xl p-6" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-white flex items-center gap-2">📅 تقرير الحضور الشهري</h2>
-                  <p className="text-slate-500 text-sm mt-1">إحصائيات تفصيلية لحضور الموظفين خلال الشهر المحدد</p>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <select
-                    value={reportMonth}
-                    onChange={e => { const m = Number(e.target.value); setReportMonth(m); fetchMonthlyReport(reportYear, m) }}
-                    className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 transition-all"
-                  >
-                    {['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'].map((name,i) => (
-                      <option key={i+1} value={i+1}>{name}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={reportYear}
-                    onChange={e => { const y = Number(e.target.value); setReportYear(y); fetchMonthlyReport(y, reportMonth) }}
-                    className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 transition-all"
-                  >
-                    {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                  {monthlyReport && (
-                    <button
-                      onClick={() => {
-                        const monthPad = String(reportMonth).padStart(2, '0')
-                        const filename = `attendance-report-${reportYear}-${monthPad}.csv`
-                        const headers = ['الاسم', 'البريد الإلكتروني', 'أيام الحضور', 'أيام الغياب', 'أيام العمل', 'نسبة الحضور (%)', 'إجمالي الساعات', 'متوسط ساعات يومي']
-                        const rows = monthlyReport.employees.map(emp => [
-                          emp.full_name || '',
-                          emp.email || '',
-                          emp.days_present,
-                          emp.days_absent,
-                          emp.working_days,
-                          emp.attendance_rate,
-                          (emp.total_minutes / 60).toFixed(1),
-                          emp.days_present > 0 ? (emp.avg_minutes_per_day / 60).toFixed(1) : '0',
-                        ])
-                        const sanitize = (val) => {
-                          const s = String(val)
-                          return /^[=+\-@\t]/.test(s) ? "'" + s : s
-                        }
-                        const csvContent = [headers, ...rows]
-                          .map(row => row.map(cell => `"${sanitize(cell).replace(/"/g, '""')}"`).join(','))
-                          .join('\n')
-                        const bom = '\uFEFF'
-                        const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' })
-                        const url = URL.createObjectURL(blob)
-                        const a = document.createElement('a')
-                        a.href = url
-                        a.download = filename
-                        a.click()
-                        URL.revokeObjectURL(url)
-                      }}
-                      className="flex items-center gap-2 text-sm px-4 py-2 rounded-xl font-medium transition-all bg-emerald-800/60 hover:bg-emerald-700/70 text-emerald-300 border border-emerald-600/20"
-                    >
-                      ⬇️ تصدير CSV
-                    </button>
-                  )}
-                  <button
-                    onClick={() => fetchMonthlyReport(reportYear, reportMonth)}
-                    className={`flex items-center gap-2 text-sm px-4 py-2 rounded-xl font-medium transition-all ${isSuperAdmin ? 'bg-amber-900/40 hover:bg-amber-800/60 text-amber-300 border border-amber-600/20' : 'btn-primary'}`}
-                  >
-                    {loadingReport ? (
-                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
-                    ) : '🔄'} تحديث
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Error */}
-            {reportError && (
-              <div className="bg-red-900/30 border border-red-500/30 text-red-400 rounded-xl px-4 py-4 text-sm flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">⚠️</span>
-                  <span>{reportError}</span>
-                </div>
-                <button
-                  onClick={() => fetchMonthlyReport(reportYear, reportMonth)}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-300 transition-all whitespace-nowrap"
-                >
-                  🔄 إعادة المحاولة
-                </button>
-              </div>
-            )}
-
-            {/* Loading skeleton */}
-            {loadingReport && (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {[1,2,3].map(i => (
-                  <div key={i} className="glass-card rounded-2xl p-5 animate-pulse" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
-                    <div className="h-4 bg-white/8 rounded-xl w-1/2 mb-3"/>
-                    <div className="h-8 bg-white/8 rounded-xl w-1/3 mb-4"/>
-                    <div className="h-2 bg-white/8 rounded-full w-full mb-2"/>
-                    <div className="grid grid-cols-3 gap-2 mt-4">
-                      <div className="h-10 bg-white/8 rounded-xl"/>
-                      <div className="h-10 bg-white/8 rounded-xl"/>
-                      <div className="h-10 bg-white/8 rounded-xl"/>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Summary cards */}
-            {!loadingReport && monthlyReport && (
-              <>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[
-                    { label: 'أيام العمل', value: monthlyReport.working_days, color: '#818cf8', bar:'rgba(99,102,241,0.5)', bg:'rgba(99,102,241,0.06)', bd:'rgba(99,102,241,0.15)', icon: '📆' },
-                    { label: 'إجمالي الموظفين', value: monthlyReport.employees.length, color: '#c084fc', bar:'#a855f7', bg:'rgba(168,85,247,0.06)', bd:'rgba(168,85,247,0.15)', icon: '👥' },
-                    { label: 'متوسط الحضور', value: monthlyReport.employees.length > 0 ? Math.round(monthlyReport.employees.reduce((s,e)=>s+e.attendance_rate,0)/monthlyReport.employees.length) + '%' : '—', color: '#34d399', bar:'#10b981', bg:'rgba(16,185,129,0.06)', bd:'rgba(16,185,129,0.15)', icon: '📊' },
-                    { label: 'حضور كامل', value: monthlyReport.employees.filter(e=>e.attendance_rate>=100).length, color: '#fbbf24', bar:'#f59e0b', bg:'rgba(245,158,11,0.06)', bd:'rgba(245,158,11,0.15)', icon: '🏆' },
-                  ].map(({label,value,color,bar,bg,bd,icon}) => (
-                    <div key={label} className="relative rounded-2xl p-4 text-center overflow-hidden glass-card" style={{background:bg, border:`1px solid ${bd}`}}>
-                      <div className="absolute top-0 left-0 w-0.5 h-full" style={{background:bar}} />
-                      <p className="text-2xl mb-1">{icon}</p>
-                      <p className="text-2xl font-black" style={{color}}>{value}</p>
-                      <p className="text-[11px] text-slate-500 mt-1">{label}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Employee cards */}
-                {monthlyReport.employees.length === 0 ? (
-                  <div className="glass-card rounded-2xl p-12 text-center text-slate-500" style={{border:'1px solid rgba(255,255,255,0.06)'}}>لا يوجد موظفون مسجلون</div>
-                ) : (
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {monthlyReport.employees.map((emp, idx) => {
-                      const rate = emp.attendance_rate
-                      const barColor = rate >= 80 ? '#10b981' : rate >= 50 ? '#f59e0b' : '#ef4444'
-                      const rateColor = rate >= 80 ? 'text-emerald-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'
-                      const totalHours = (emp.total_minutes / 60).toFixed(1)
-                      const avgHours = (emp.avg_minutes_per_day / 60).toFixed(1)
-                      const rankBadge = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`
-                      return (
-                        <div key={emp.id} className="glass-card rounded-2xl p-5 transition-all" style={{border:'1px solid rgba(255,255,255,0.08)'}}>
-                          {/* Name + rank */}
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-white font-semibold text-sm truncate">{emp.full_name || '—'}</p>
-                              <p className="text-slate-500 text-xs truncate mt-0.5">{emp.email}</p>
-                            </div>
-                            <span className="text-xl mr-2 flex-shrink-0">{rankBadge}</span>
-                          </div>
-
-                          {/* Attendance rate bar */}
-                          <div className="mb-4">
-                            <div className="flex justify-between items-center mb-1.5">
-                              <span className="text-xs text-slate-500">نسبة الحضور</span>
-                              <span className={`text-sm font-bold ${rateColor}`}>{rate}%</span>
-                            </div>
-                            <div className="w-full h-1.5 bg-white/8 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full transition-all" style={{width:`${Math.min(rate,100)}%`, background:barColor}}/>
-                            </div>
-                          </div>
-
-                          {/* Stats grid */}
-                          <div className="grid grid-cols-3 gap-2 text-center">
-                            <div className="rounded-xl p-2" style={{background:'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.15)'}}>
-                              <p className="text-emerald-400 font-bold text-lg">{emp.days_present}</p>
-                              <p className="text-slate-500 text-[10px] mt-0.5">حضور</p>
-                            </div>
-                            <div className="rounded-xl p-2" style={{background:'rgba(239,68,68,0.07)', border:'1px solid rgba(239,68,68,0.15)'}}>
-                              <p className="text-red-400 font-bold text-lg">{emp.days_absent}</p>
-                              <p className="text-slate-500 text-[10px] mt-0.5">غياب</p>
-                            </div>
-                            <div className="rounded-xl p-2" style={{background:'rgba(99,102,241,0.07)', border:'1px solid rgba(99,102,241,0.15)'}}>
-                              <p className="text-indigo-400 font-bold text-lg">{totalHours}</p>
-                              <p className="text-slate-500 text-[10px] mt-0.5">ساعة</p>
-                            </div>
-                          </div>
-
-                          {/* Avg hours */}
-                          {emp.days_present > 0 && (
-                            <div className="mt-3 pt-3 border-t border-white/8 flex justify-between text-xs text-slate-500">
-                              <span>متوسط يومي</span>
-                              <span className="text-slate-300 font-medium">{avgHours} ساعة</span>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {/* Table summary */}
-                <div className="glass-card rounded-2xl overflow-hidden" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
-                  <div className="p-4 border-b border-white/8">
-                    <h3 className="text-white font-semibold text-sm">📋 ملخص تفصيلي</h3>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm" dir="rtl">
-                      <thead>
-                        <tr className="border-b border-white/8 bg-white/5">
-                          {['الترتيب','الاسم','البريد','أيام الحضور',`الغياب / ${monthlyReport.working_days}`,  'نسبة الحضور','إجمالي الساعات','متوسط يومي'].map(h => (
-                            <th key={h} className="text-right text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium whitespace-nowrap">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {monthlyReport.employees.map((emp, idx) => {
-                          const rate = emp.attendance_rate
-                          const rateColor = rate >= 80 ? 'text-green-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'
-                          return (
-                            <tr key={emp.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
-                              <td className="px-4 py-3 text-slate-400 font-mono text-xs">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`}</td>
-                              <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{emp.full_name || '—'}</td>
-                              <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{emp.email}</td>
-                              <td className="px-4 py-3 text-center"><span className="text-green-400 font-bold">{emp.days_present}</span></td>
-                              <td className="px-4 py-3 text-center"><span className="text-red-400 font-bold">{emp.days_absent}</span></td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full ${rate>=80?'bg-green-500':rate>=50?'bg-amber-500':'bg-red-500'}`} style={{width:`${Math.min(rate,100)}%`}}/>
-                                  </div>
-                                  <span className={`font-bold text-xs ${rateColor}`}>{rate}%</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-blue-400 font-medium text-center whitespace-nowrap">{(emp.total_minutes/60).toFixed(1)} ساعة</td>
-                              <td className="px-4 py-3 text-slate-300 text-center whitespace-nowrap">{emp.days_present > 0 ? (emp.avg_minutes_per_day/60).toFixed(1) + ' ساعة' : '—'}</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Empty state before loading */}
-            {!loadingReport && !monthlyReport && !reportError && (
-              <div className="glass-card rounded-2xl p-16 text-center" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
-                <p className="text-4xl mb-4">📅</p>
-                <p className="text-slate-300 font-semibold">اضغط تحديث لعرض التقرير</p>
-                <p className="text-slate-500 text-sm mt-2">اختر الشهر والسنة ثم اضغط تحديث</p>
-              </div>
-            )}
           </div>
         )}
 
