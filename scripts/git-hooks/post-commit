@@ -1,0 +1,9 @@
+#!/bin/bash
+# Tracked post-commit hook (source: scripts/git-hooks/post-commit).
+# Activated via: git config core.hooksPath scripts/git-hooks
+# Pushes to GitHub after every commit (including Replit checkpoints).
+
+SYNC_LOG="/tmp/github-sync.log"
+{
+  bash "$(git rev-parse --show-toplevel)/scripts/github-sync.sh"
+} >> "$SYNC_LOG" 2>&1 &
