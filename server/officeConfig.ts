@@ -15,7 +15,7 @@ export interface OfficeConfig {
 const DEFAULT_CONFIG: OfficeConfig = {
   latitude: 30.0803897,
   longitude: 31.3524335,
-  radius_meters: 100,
+  radius_meters: 20,
 }
 
 function isValidConfig(cfg: any): cfg is OfficeConfig {

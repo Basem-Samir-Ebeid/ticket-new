@@ -376,29 +376,49 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
   async function registerLogin() {
     setLoggingIn(true)
-    if (!navigator.geolocation) { alert('الموقع الجغرافي غير مدعوم في هذا المتصفح'); setLoggingIn(false); return }
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      try {
-        await api.registerLogin(pos.coords.latitude, pos.coords.longitude)
-        await checkTodayLogin()
-        if (selectedDate === getLocalDateString()) await fetchLoginTimes()
-      } catch (e) { alert(e.message) }
+    setMsg('')
+    if (!navigator.geolocation) {
+      setMsg('Error: الموقع الجغرافي غير مدعوم في هذا المتصفح')
       setLoggingIn(false)
-    }, () => { alert('يجب منح إذن الموقع لتسجيل الحضور'); setLoggingIn(false) }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords
+        try {
+          await api.registerLogin(latitude, longitude)
+          await checkTodayLogin()
+          if (selectedDate === getLocalDateString()) await fetchLoginTimes()
+        } catch (e) { setMsg('Error: ' + e.message) }
+        setLoggingIn(false)
+      },
+      () => { setMsg('Error: يجب منح إذن الموقع لتسجيل الحضور. تأكد من تفعيل GPS والسماح للمتصفح بالوصول إليه.'); setLoggingIn(false) },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    )
   }
 
   async function registerLogout() {
     if (!todayLogin || todayLogin.logout_time) return
     setLoggingOut(true)
-    if (!navigator.geolocation) { alert('الموقع الجغرافي غير مدعوم في هذا المتصفح'); setLoggingOut(false); return }
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      try {
-        await api.registerLogout(pos.coords.latitude, pos.coords.longitude)
-        await checkTodayLogin()
-        if (selectedDate === getLocalDateString()) await fetchLoginTimes()
-      } catch (e) { alert(e.message) }
+    setMsg('')
+    if (!navigator.geolocation) {
+      setMsg('Error: الموقع الجغرافي غير مدعوم في هذا المتصفح')
       setLoggingOut(false)
-    }, () => { alert('يجب منح إذن الموقع لتسجيل الانصراف'); setLoggingOut(false) }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords
+        try {
+          await api.registerLogout(latitude, longitude)
+          await checkTodayLogin()
+          if (selectedDate === getLocalDateString()) await fetchLoginTimes()
+        } catch (e) { setMsg('Error: ' + e.message) }
+        setLoggingOut(false)
+      },
+      () => { setMsg('Error: يجب منح إذن الموقع لتسجيل الانصراف. تأكد من تفعيل GPS والسماح للمتصفح بالوصول إليه.'); setLoggingOut(false) },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    )
   }
 
   async function acceptRequest(request) {

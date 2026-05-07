@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 
-const DEFAULT_LAT = 25.2048
-const DEFAULT_LNG = 55.2708
+const DEFAULT_LAT = 30.0803897
+const DEFAULT_LNG = 31.3524335
 
 export default function DraggableOfficeMap({ lat, lng, radius, onChange }) {
   const containerRef = useRef(null)

@@ -8,8 +8,6 @@ import { getOfficeConfig } from '../officeConfig'
 
 const router = Router()
 
-const MIN_ENFORCED_RADIUS = 50
-
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000
   const toRad = (d: number) => (d * Math.PI) / 180
@@ -45,7 +43,6 @@ async function checkGeofence(
   }
 
   const cfg = await getOfficeConfig()
-  const effectiveRadius = Math.max(cfg.radius_meters, MIN_ENFORCED_RADIUS)
   const distance = haversineDistance(coords.lat, coords.lng, cfg.latitude, cfg.longitude)
 
   console.log(
@@ -53,20 +50,20 @@ async function checkGeofence(
     `المستخدم=(${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}) | ` +
     `المكتب=(${cfg.latitude.toFixed(6)}, ${cfg.longitude.toFixed(6)}) | ` +
     `المسافة=${distance.toFixed(1)}م | ` +
-    `الحد المسموح=${effectiveRadius}م (مضبوط=${cfg.radius_meters}م) | ` +
-    `النتيجة=${distance <= effectiveRadius ? 'مسموح ✓' : 'مرفوض ✗'}`
+    `الحد المسموح=${cfg.radius_meters}م | ` +
+    `النتيجة=${distance <= cfg.radius_meters ? 'مسموح ✓' : 'مرفوض ✗'}`
   )
 
-  if (!isFinite(distance) || distance > effectiveRadius) {
+  if (!isFinite(distance) || distance > cfg.radius_meters) {
     return {
       allowed: false,
-      error: `أنت خارج نطاق الشركة ولا يمكن تسجيل الحضور أو الانصراف. المسافة الحالية: ${Math.round(distance)} متر، الحد المسموح: ${effectiveRadius} متر.`,
+      error: `أنت خارج نطاق الشركة ولا يمكن تسجيل الحضور أو الانصراف. المسافة الحالية: ${Math.round(distance)} متر، الحد المسموح: ${cfg.radius_meters} متر.`,
       distance,
-      effectiveRadius,
+      effectiveRadius: cfg.radius_meters,
     }
   }
 
-  return { allowed: true, distance, effectiveRadius }
+  return { allowed: true, distance, effectiveRadius: cfg.radius_meters }
 }
 
 function getLocalDateString(date = new Date()) {

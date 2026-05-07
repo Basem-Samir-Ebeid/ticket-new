@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken'
 import { Request, Response, NextFunction } from 'express'
 import { db } from './db'
-import { profiles } from '../shared/schema'
+import { profiles, sessionRevocations } from '../shared/schema'
 import { eq } from 'drizzle-orm'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'it-ticket-secret-key-2024'
@@ -20,9 +20,24 @@ export async function requireAuth(req: Request & { user?: any; profile?: any }, 
     return res.status(401).json({ error: 'No token provided' })
   }
   try {
-    const { userId } = verifyToken(auth.replace('Bearer ', ''))
+    const decoded = verifyToken(auth.replace('Bearer ', ''))
+    const { userId } = decoded
     const [profile] = await db.select().from(profiles).where(eq(profiles.id, userId))
     if (!profile) return res.status(401).json({ error: 'User not found' })
+
+    const iat = (decoded as any).iat
+    if (iat) {
+      const issuedAt = new Date(iat * 1000)
+      const [revocation] = await db
+        .select()
+        .from(sessionRevocations)
+        .where(eq(sessionRevocations.user_id, userId))
+        .limit(1)
+      if (revocation && new Date(revocation.created_at) > issuedAt) {
+        return res.status(401).json({ error: 'Session revoked. Please sign in again.' })
+      }
+    }
+
     req.user = { id: userId }
     req.profile = profile
     next()
