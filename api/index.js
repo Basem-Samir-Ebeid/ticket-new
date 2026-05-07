@@ -25,7 +25,7 @@ function getPool() {
   return pool
 }
 
-// ── SCHEMA INIT (creates tables if they don't exist) ─────────────────────────
+// ── SCHEMA INIT ───────────────────────────────────────────────────────────────
 let schemaInitialized = false
 async function ensureSchema() {
   if (schemaInitialized) return
@@ -123,6 +123,14 @@ async function ensureSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS office_settings (
+      id TEXT PRIMARY KEY,
+      latitude DOUBLE PRECISION NOT NULL,
+      longitude DOUBLE PRECISION NOT NULL,
+      radius_meters DOUBLE PRECISION NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS settings_log (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       changed_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
@@ -135,14 +143,17 @@ async function ensureSchema() {
       to_radius DOUBLE PRECISION NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    INSERT INTO office_settings (id, latitude, longitude, radius_meters)
+    VALUES ('main', 30.0803897, 31.3524335, 20)
+    ON CONFLICT (id) DO NOTHING;
   `)
   schemaInitialized = true
 }
 
-// Run schema init immediately on module load (non-blocking)
 ensureSchema().catch(err => console.error('[schema-init] Failed:', err))
 
-// ── AUTH HELPERS ─────────────────────────────────────────────────────────────
+// ── AUTH HELPERS ──────────────────────────────────────────────────────────────
 const JWT_SECRET = process.env.JWT_SECRET || 'it-ticket-secret-key-2024'
 function signToken(userId) { return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' }) }
 function verifyToken(token) { return jwt.verify(token, JWT_SECRET) }
@@ -151,7 +162,19 @@ async function requireAuth(req, res, next) {
   const auth = req.headers.authorization
   if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'No token provided' })
   try {
-    const { userId } = verifyToken(auth.replace('Bearer ', ''))
+    const decoded = verifyToken(auth.replace('Bearer ', ''))
+    const { userId, iat } = decoded
+
+    // Check session revocation
+    const { rows: revocations } = await getPool().query(
+      'SELECT created_at FROM session_revocations WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    )
+    if (revocations.length > 0) {
+      const revokedAt = new Date(revocations[0].created_at).getTime() / 1000
+      if (iat <= revokedAt) return res.status(401).json({ error: 'Session revoked' })
+    }
+
     const { rows } = await getPool().query('SELECT * FROM profiles WHERE id = $1', [userId])
     if (!rows[0]) return res.status(401).json({ error: 'User not found' })
     req.user = { id: userId }
@@ -170,6 +193,29 @@ const isAdminRole = (role) => role === 'admin' || role === 'super_admin'
 
 function getLocalDateString(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+// ── GEOFENCE HELPER ───────────────────────────────────────────────────────────
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000
+  const toRad = deg => (deg * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+async function getOfficeConfig() {
+  try {
+    const { rows } = await getPool().query(
+      'SELECT latitude, longitude, radius_meters FROM office_settings WHERE id = $1',
+      ['main']
+    )
+    if (rows[0]) return rows[0]
+  } catch {}
+  return { latitude: 30.0803897, longitude: 31.3524335, radius_meters: 20 }
 }
 
 // ── PUSH HELPER ───────────────────────────────────────────────────────────────
@@ -227,14 +273,17 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
   if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
   if (!await bcrypt.compare(currentPassword, req.profile.password_hash)) return res.status(401).json({ error: 'Current password incorrect' })
   const password_hash = await bcrypt.hash(newPassword, 10)
-  await getPool().query('UPDATE profiles SET password_hash = $1 WHERE id = $2', [password_hash, req.user.id])
+  await getPool().query(
+    'UPDATE profiles SET password_hash=$1, must_change_password=false, plain_password=$2 WHERE id=$3',
+    [password_hash, newPassword, req.user.id]
+  )
   res.json({ success: true })
 })
 
 // ── USERS ROUTES ──────────────────────────────────────────────────────────────
 app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
   const { rows } = await getPool().query(
-    'SELECT id, email, full_name, role, can_view_attendance, profile_picture_url, created_at FROM profiles ORDER BY created_at DESC'
+    'SELECT id, email, full_name, role, can_view_attendance, profile_picture_url, must_change_password, created_at FROM profiles ORDER BY created_at DESC'
   )
   res.json(rows)
 })
@@ -248,9 +297,9 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
   if (existing.length) return res.status(400).json({ error: 'Email already in use' })
   const password_hash = await bcrypt.hash(password, 10)
   const { rows } = await db.query(
-    `INSERT INTO profiles (email, password_hash, full_name, role, can_view_attendance, profile_picture_url)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, email, full_name, role, can_view_attendance, profile_picture_url, created_at`,
-    [email.toLowerCase(), password_hash, full_name || null, role || 'employee', can_view_attendance || false, profile_picture_url || null]
+    `INSERT INTO profiles (email, password_hash, plain_password, full_name, role, can_view_attendance, profile_picture_url, must_change_password)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,true) RETURNING id, email, full_name, role, can_view_attendance, profile_picture_url, must_change_password, created_at`,
+    [email.toLowerCase(), password_hash, password, full_name || null, role || 'employee', can_view_attendance || false, profile_picture_url || null]
   )
   res.json(rows[0])
 })
@@ -259,7 +308,7 @@ app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
   const { full_name, role, can_view_attendance, profile_picture_url } = req.body
   const { rows } = await getPool().query(
     `UPDATE profiles SET full_name=$1, role=$2, can_view_attendance=$3, profile_picture_url=$4
-     WHERE id=$5 RETURNING id, email, full_name, role, can_view_attendance, profile_picture_url, created_at`,
+     WHERE id=$5 RETURNING id, email, full_name, role, can_view_attendance, profile_picture_url, must_change_password, created_at`,
     [full_name, role, can_view_attendance, profile_picture_url, req.params.id]
   )
   if (!rows[0]) return res.status(404).json({ error: 'User not found' })
@@ -270,7 +319,19 @@ app.post('/api/users/:id/reset-password', requireAuth, requireAdmin, async (req,
   const { newPassword } = req.body
   if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
   const password_hash = await bcrypt.hash(newPassword, 10)
-  const { rows } = await getPool().query('UPDATE profiles SET password_hash=$1 WHERE id=$2 RETURNING id', [password_hash, req.params.id])
+  const { rows } = await getPool().query(
+    'UPDATE profiles SET password_hash=$1, plain_password=$2, must_change_password=true WHERE id=$3 RETURNING id',
+    [password_hash, newPassword, req.params.id]
+  )
+  if (!rows[0]) return res.status(404).json({ error: 'User not found' })
+  res.json({ success: true })
+})
+
+app.post('/api/users/:id/force-change-password', requireAuth, requireAdmin, async (req, res) => {
+  const { rows } = await getPool().query(
+    'UPDATE profiles SET must_change_password=true WHERE id=$1 RETURNING id',
+    [req.params.id]
+  )
   if (!rows[0]) return res.status(404).json({ error: 'User not found' })
   res.json({ success: true })
 })
@@ -431,27 +492,57 @@ app.get('/api/attendance/today', requireAuth, async (req, res) => {
 
 app.post('/api/attendance/login', requireAuth, async (req, res) => {
   const { latitude, longitude } = req.body
+
+  if (latitude == null || longitude == null) {
+    return res.status(400).json({ error: 'Location is required to check in' })
+  }
+
+  const office = await getOfficeConfig()
+  const distance = haversineDistance(Number(latitude), Number(longitude), office.latitude, office.longitude)
+
+  if (distance > office.radius_meters) {
+    return res.status(403).json({
+      error: `You are too far from the office (${Math.round(distance)}m away, max allowed: ${office.radius_meters}m)`,
+    })
+  }
+
   const today = getLocalDateString()
   const db = getPool()
   const { rows: existing } = await db.query('SELECT id FROM login_times WHERE user_id=$1 AND date=$2', [req.user.id, today])
   if (existing.length) return res.status(400).json({ error: 'Already logged in today' })
+
   const { rows } = await db.query(
     'INSERT INTO login_times (user_id, date, latitude, longitude) VALUES ($1,$2,$3,$4) RETURNING *',
-    [req.user.id, today, latitude||null, longitude||null]
+    [req.user.id, today, latitude, longitude]
   )
   res.json(rows[0])
 })
 
 app.post('/api/attendance/logout', requireAuth, async (req, res) => {
   const { latitude, longitude } = req.body
+
+  if (latitude == null || longitude == null) {
+    return res.status(400).json({ error: 'Location is required to check out' })
+  }
+
+  const office = await getOfficeConfig()
+  const distance = haversineDistance(Number(latitude), Number(longitude), office.latitude, office.longitude)
+
+  if (distance > office.radius_meters) {
+    return res.status(403).json({
+      error: `You are too far from the office (${Math.round(distance)}m away, max allowed: ${office.radius_meters}m)`,
+    })
+  }
+
   const today = getLocalDateString()
   const db = getPool()
   const { rows: existing } = await db.query('SELECT * FROM login_times WHERE user_id=$1 AND date=$2', [req.user.id, today])
   if (!existing[0]) return res.status(404).json({ error: 'No login record found for today' })
   if (existing[0].logout_time) return res.status(400).json({ error: 'Already signed off today' })
+
   const { rows } = await db.query(
     'UPDATE login_times SET logout_time=$1, logout_latitude=$2, logout_longitude=$3 WHERE user_id=$4 AND date=$5 RETURNING *',
-    [new Date(), latitude||null, longitude||null, req.user.id, today]
+    [new Date(), latitude, longitude, req.user.id, today]
   )
   res.json(rows[0])
 })
@@ -565,20 +656,6 @@ app.post('/api/upload', requireAuth, upload.single('file'), (req, res) => {
 })
 
 // ── SETTINGS ROUTES ───────────────────────────────────────────────────────────
-const DEFAULT_OFFICE_CONFIG = { latitude: 30.0726, longitude: 31.3211, radius_meters: 30 }
-
-async function getOfficeConfig() {
-  try {
-    const { rows } = await getPool().query(
-      'SELECT to_lat, to_lng, to_radius FROM settings_log ORDER BY created_at DESC LIMIT 1'
-    )
-    if (rows[0]) {
-      return { latitude: rows[0].to_lat, longitude: rows[0].to_lng, radius_meters: rows[0].to_radius }
-    }
-  } catch {}
-  return { ...DEFAULT_OFFICE_CONFIG }
-}
-
 app.get('/api/settings/office-location', requireAuth, async (req, res) => {
   if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
   try {
@@ -603,11 +680,23 @@ app.post('/api/settings/office-location', requireAuth, async (req, res) => {
     }
     const prev = await getOfficeConfig()
     const changedByName = req.profile.full_name || req.profile.email
-    await getPool().query(
+    const db = getPool()
+
+    // Update office_settings (single source of truth)
+    await db.query(
+      `INSERT INTO office_settings (id, latitude, longitude, radius_meters, updated_at)
+       VALUES ('main', $1, $2, $3, NOW())
+       ON CONFLICT (id) DO UPDATE SET latitude=$1, longitude=$2, radius_meters=$3, updated_at=NOW()`,
+      [lat, lng, radius]
+    )
+
+    // Log the change
+    await db.query(
       `INSERT INTO settings_log (changed_by, changed_by_name, from_lat, from_lng, from_radius, to_lat, to_lng, to_radius)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
       [req.user.id, changedByName, prev.latitude, prev.longitude, prev.radius_meters, lat, lng, radius]
     )
+
     res.json({ latitude: lat, longitude: lng, radius_meters: radius })
   } catch (err) {
     res.status(500).json({ error: err?.message || 'Failed to save office location' })
@@ -617,9 +706,7 @@ app.post('/api/settings/office-location', requireAuth, async (req, res) => {
 app.get('/api/settings/log', requireAuth, async (req, res) => {
   if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
   try {
-    const { rows } = await getPool().query(
-      'SELECT * FROM settings_log ORDER BY created_at DESC LIMIT 50'
-    )
+    const { rows } = await getPool().query('SELECT * FROM settings_log ORDER BY created_at DESC LIMIT 50')
     res.json(rows)
   } catch (err) {
     res.status(500).json({ error: err?.message || 'Failed to load settings log' })
