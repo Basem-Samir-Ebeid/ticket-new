@@ -280,6 +280,19 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
   res.json({ success: true })
 })
 
+app.post('/api/auth/force-change-password', requireAuth, async (req, res) => {
+  res.setHeader('Content-Type', 'application/json')
+  const { newPassword } = req.body
+  if (!newPassword) return res.status(400).json({ error: 'يجب إدخال كلمة المرور الجديدة.' })
+  if (newPassword.length < 6) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.' })
+  const password_hash = await bcrypt.hash(newPassword, 10)
+  await getPool().query(
+    'UPDATE profiles SET password_hash=$1, must_change_password=false, plain_password=$2 WHERE id=$3',
+    [password_hash, newPassword, req.user.id]
+  )
+  res.json({ success: true })
+})
+
 // ── USERS ROUTES ──────────────────────────────────────────────────────────────
 app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
   const { rows } = await getPool().query(
