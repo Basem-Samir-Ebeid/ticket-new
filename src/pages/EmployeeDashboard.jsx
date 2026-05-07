@@ -48,7 +48,13 @@ export default function EmployeeDashboard() {
   const [attendanceDate, setAttendanceDate] = useState(getLocalDateString())
   const [leaveRequests, setLeaveRequests] = useState([])
   const [showLeaveForm, setShowLeaveForm] = useState(false)
-  const [leaveForm, setLeaveForm] = useState({ start_date: '', end_date: '', reason: '' })
+  const [leaveForm, setLeaveForm] = useState({ start_date: '', end_date: '', reason: '', leave_type: 'annual' })
+  const [profileForm, setProfileForm] = useState({ full_name: '', email: '' })
+  const [updatingProfile, setUpdatingProfile] = useState(false)
+  const [profileMsg, setProfileMsg] = useState('')
+  const [changePasswordForm, setChangePasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [changePasswordMsg, setChangePasswordMsg] = useState('')
   const [leaveMsg, setLeaveMsg] = useState('')
   const [submittingLeave, setSubmittingLeave] = useState(false)
 
@@ -99,6 +105,10 @@ export default function EmployeeDashboard() {
   useEffect(() => {
     if (profile?.can_view_attendance) fetchAttendanceRecords()
   }, [profile?.can_view_attendance, attendanceDate])
+
+  useEffect(() => {
+    if (profile) setProfileForm({ full_name: profile.full_name || '', email: profile.email || '' })
+  }, [profile])
 
   useEffect(() => {
     if (selectedTicket) fetchReplies(selectedTicket.id)
@@ -238,7 +248,7 @@ export default function EmployeeDashboard() {
     try {
       await api.createLeave(leaveForm)
       setLeaveMsg('✓ Leave request submitted!')
-      setLeaveForm({ start_date: '', end_date: '', reason: '' })
+      setLeaveForm({ start_date: '', end_date: '', reason: '', leave_type: 'annual' })
       setShowLeaveForm(false)
       fetchLeaveRequests()
     } catch (e) { setLeaveMsg('Error: ' + e.message) }
@@ -332,7 +342,34 @@ export default function EmployeeDashboard() {
     { key: 'myTickets',   label: 'My Tickets',  icon: 'myTickets' },
     { key: 'leave',       label: 'Leave',       icon: 'leave' },
     ...(profile?.can_view_attendance ? [{ key: 'attendance', label: 'Attendance', icon: 'attendance' }] : []),
+    { key: 'profile',     label: 'Profile',     icon: 'profile' },
   ]
+
+  async function handleUpdateProfile(e) {
+    e.preventDefault(); setUpdatingProfile(true); setProfileMsg('')
+    try {
+      await api.updateProfile({ full_name: profileForm.full_name })
+      setProfileMsg('✓ Profile updated!')
+    } catch (err) { setProfileMsg('Error: ' + err.message) }
+    setUpdatingProfile(false)
+  }
+
+  async function handleChangePassword(e) {
+    e.preventDefault()
+    if (changePasswordForm.new_password !== changePasswordForm.confirm_password) {
+      setChangePasswordMsg('Error: Passwords do not match'); return
+    }
+    if (changePasswordForm.new_password.length < 6) {
+      setChangePasswordMsg('Error: Password must be at least 6 characters'); return
+    }
+    setChangingPassword(true); setChangePasswordMsg('')
+    try {
+      await api.changePassword(changePasswordForm.current_password, changePasswordForm.new_password)
+      setChangePasswordMsg('✓ Password changed successfully!')
+      setChangePasswordForm({ current_password: '', new_password: '', confirm_password: '' })
+    } catch (err) { setChangePasswordMsg('Error: ' + err.message) }
+    setChangingPassword(false)
+  }
 
   if (selectedTicket) {
     const isAssignee = selectedTicket.assigned_to === user?.id
@@ -866,6 +903,16 @@ export default function EmployeeDashboard() {
                     <input type="date" required value={leaveForm.end_date} onChange={e=>setLeaveForm(f=>({...f,end_date:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
                   </div>
                 </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Leave Type</label>
+                  <select value={leaveForm.leave_type||'annual'} onChange={e=>setLeaveForm(f=>({...f,leave_type:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+                    <option value="annual">Annual Leave</option>
+                    <option value="sick">Sick Leave</option>
+                    <option value="emergency">Emergency Leave</option>
+                    <option value="unpaid">Unpaid Leave</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
                 <textarea placeholder="Reason (optional)" rows={2} value={leaveForm.reason} onChange={e=>setLeaveForm(f=>({...f,reason:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 resize-none transition-all" />
                 <div className="flex gap-2">
                   <button type="submit" disabled={submittingLeave} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{submittingLeave ? 'Submitting...' : 'Submit'}</button>
@@ -892,6 +939,52 @@ export default function EmployeeDashboard() {
                   {r.admin_note && <p className="text-slate-400 text-xs mt-2 rounded-xl px-3 py-2" style={{background:'rgba(255,255,255,0.04)'}}><span className="text-slate-500">Note: </span>{r.admin_note}</p>}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'profile' && (
+          <div className="space-y-4">
+            <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(99,102,241,0.15)'}}>
+              <h2 className="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.2)'}}>👤</span>
+                Edit Profile
+              </h2>
+              <form onSubmit={handleUpdateProfile} className="space-y-4">
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Full Name</label>
+                  <input value={profileForm.full_name} onChange={e=>setProfileForm(f=>({...f,full_name:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" placeholder="Your full name" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Email</label>
+                  <input value={profileForm.email} disabled className="w-full bg-white/3 border border-white/5 rounded-xl px-3 py-2.5 text-slate-500 text-sm cursor-not-allowed" />
+                </div>
+                {profileMsg && <p className={`text-sm rounded-xl px-3 py-2 ${profileMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{profileMsg}</p>}
+                <button type="submit" disabled={updatingProfile} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{updatingProfile ? 'Saving...' : 'Save Changes'}</button>
+              </form>
+            </div>
+
+            <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(245,158,11,0.15)'}}>
+              <h2 className="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{background:'rgba(245,158,11,0.15)',border:'1px solid rgba(245,158,11,0.2)'}}>🔐</span>
+                Change Password
+              </h2>
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Current Password</label>
+                  <input type="password" value={changePasswordForm.current_password} onChange={e=>setChangePasswordForm(f=>({...f,current_password:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 transition-all" autoComplete="current-password" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">New Password</label>
+                  <input type="password" value={changePasswordForm.new_password} onChange={e=>setChangePasswordForm(f=>({...f,new_password:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 transition-all" autoComplete="new-password" placeholder="Min. 6 characters" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Confirm New Password</label>
+                  <input type="password" value={changePasswordForm.confirm_password} onChange={e=>setChangePasswordForm(f=>({...f,confirm_password:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 transition-all" autoComplete="new-password" />
+                </div>
+                {changePasswordMsg && <p className={`text-sm rounded-xl px-3 py-2 ${changePasswordMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{changePasswordMsg}</p>}
+                <button type="submit" disabled={changingPassword} className="bg-amber-900/50 hover:bg-amber-800/70 border border-amber-500/25 disabled:opacity-40 text-amber-300 text-sm font-semibold py-2 px-4 rounded-xl transition-all">{changingPassword ? 'Updating...' : 'Update Password'}</button>
+              </form>
             </div>
           </div>
         )}

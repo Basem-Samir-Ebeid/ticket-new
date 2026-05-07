@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import LogoWithStars from './LogoWithStars'
 import { isMuted, toggleMute } from '../lib/sound'
+import { api } from '../lib/api'
 
 const ICONS = {
   dashboard:   'M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z',
@@ -16,6 +17,7 @@ const ICONS = {
   myTickets:   'M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z',
   notifications:'M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0',
   myTicketsB:  'M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z',
+  profile:     'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z',
 }
 
 function NavIcon({ name, size = 'w-[18px] h-[18px]' }) {
@@ -31,6 +33,10 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
   const [signingOut, setSigningOut] = useState(false)
   const [muted, setMuted] = useState(isMuted())
   const [open, setOpen] = useState(false)
+  const [notifs, setNotifs] = useState([])
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [markingAll, setMarkingAll] = useState(false)
+  const notifRef = useRef(null)
 
   const isAmber = isSuperAdmin
   const accentActive = isAmber
@@ -39,6 +45,7 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
 
   const badgeBg = isAmber ? 'rgba(245,158,11,0.25)' : 'rgba(99,102,241,0.3)'
   const badgeColor = isAmber ? '#fbbf24' : '#a5b4fc'
+  const unreadCount = notifs.length
 
   useEffect(() => {
     const handler = (e) => setMuted(e.detail)
@@ -47,13 +54,47 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
   }, [])
 
   useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
+    if (open) document.body.style.overflow = 'hidden'
+    else document.body.style.overflow = ''
     return () => { document.body.style.overflow = '' }
   }, [open])
+
+  // Fetch notifications on mount and on WS events
+  useEffect(() => {
+    fetchNotifications()
+    const intervalId = setInterval(fetchNotifications, 30000)
+    const onWsNotif = () => fetchNotifications()
+    window.addEventListener('ws:notification', onWsNotif)
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('ws:notification', onWsNotif)
+    }
+  }, [])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setNotifOpen(false)
+      }
+    }
+    if (notifOpen) document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [notifOpen])
+
+  async function fetchNotifications() {
+    try { setNotifs(await api.getNotifications()) } catch {}
+  }
+
+  async function handleMarkAllRead() {
+    setMarkingAll(true)
+    try {
+      await api.markAllRead()
+      setNotifs([])
+      setNotifOpen(false)
+    } catch {}
+    setMarkingAll(false)
+  }
 
   async function handleSignOut() {
     setSigningOut(true)
@@ -72,6 +113,64 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
     WebkitBackdropFilter: 'blur(24px)',
     borderRight: '1px solid rgba(255,255,255,0.065)',
   }
+
+  const BellButton = () => (
+    <div className="relative" ref={notifRef}>
+      <button
+        onClick={() => setNotifOpen(v => !v)}
+        className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 border"
+        style={{
+          background: notifOpen ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.04)',
+          border: notifOpen ? '1px solid rgba(99,102,241,0.25)' : '1px solid rgba(255,255,255,0.07)',
+          color: unreadCount > 0 ? '#a5b4fc' : '#475569',
+        }}
+      >
+        <div className="relative flex-shrink-0">
+          <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+            <path strokeLinecap="round" strokeLinejoin="round" d={ICONS.notifications} />
+          </svg>
+          {unreadCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold bg-red-500 text-white">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </div>
+        <span className="text-[13px] font-medium flex-1 text-left">
+          {unreadCount > 0 ? `${unreadCount} unread` : 'Notifications'}
+        </span>
+      </button>
+
+      {notifOpen && (
+        <div
+          className="absolute bottom-full left-0 right-0 mb-2 rounded-xl overflow-hidden shadow-2xl animate-scaleIn"
+          style={{ background: 'rgba(10,10,20,0.98)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(24px)', zIndex: 100 }}
+        >
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/8">
+            <span className="text-white text-xs font-semibold">Notifications</span>
+            {unreadCount > 0 && (
+              <button onClick={handleMarkAllRead} disabled={markingAll}
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 disabled:opacity-50 transition-colors font-medium">
+                {markingAll ? 'Marking...' : 'Mark all read'}
+              </button>
+            )}
+          </div>
+
+          <div className="overflow-y-auto max-h-64">
+            {notifs.length === 0 ? (
+              <div className="px-4 py-6 text-center text-slate-500 text-xs">No unread notifications</div>
+            ) : (
+              notifs.map(n => (
+                <div key={n.id} className="px-3 py-2.5 border-b border-white/5 hover:bg-white/4 transition-colors">
+                  <p className="text-slate-200 text-xs leading-relaxed">{n.message}</p>
+                  <p className="text-slate-600 text-[10px] mt-0.5">{new Date(n.created_at).toLocaleString()}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -166,6 +265,8 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
 
       {/* Bottom actions */}
       <div className="px-3 pb-5 space-y-1.5 flex-shrink-0">
+        <BellButton />
+
         <button
           onClick={toggleMute}
           className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 border"
@@ -228,9 +329,16 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
         className="lg:hidden fixed top-3 left-3 z-50 w-10 h-10 flex items-center justify-center rounded-xl transition-all"
         style={{ background: 'rgba(6,6,14,0.92)', border: '1px solid rgba(255,255,255,0.09)', backdropFilter: 'blur(16px)' }}
       >
-        <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-        </svg>
+        <div className="relative">
+          <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+          {unreadCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 flex items-center justify-center text-[8px] font-bold text-white">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </div>
       </button>
 
       {/* ── Mobile: overlay ── */}

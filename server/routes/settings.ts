@@ -2,11 +2,13 @@ import { Router } from 'express'
 import { requireAuth } from '../auth'
 import { getOfficeConfig, saveOfficeConfig } from '../officeConfig'
 import { getGitHubSyncConfig, saveGitHubSyncConfig } from '../githubSyncConfig'
+import { getSmtpConfig, saveSmtpConfig } from '../smtpConfig'
 import { db } from '../db'
 import { settingsLog } from '../../shared/schema'
 import { desc } from 'drizzle-orm'
 import { execFileSync } from 'child_process'
 import https from 'https'
+import nodemailer from 'nodemailer'
 
 const router = Router()
 
@@ -79,6 +81,80 @@ router.get('/log', requireAuth as any, async (req: any, res) => {
     res.status(500).json({ error: err?.message || 'Failed to load settings log' })
   }
 })
+
+// ─── SMTP Settings ────────────────────────────────────────────────────────────
+
+router.get('/smtp', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const config = getSmtpConfig()
+    res.json({ ...config, password: config.password ? '••••••••' : '' })
+  } catch (err: any) {
+    console.error('GET /settings/smtp error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to load SMTP settings' })
+  }
+})
+
+router.post('/smtp', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { host, port, secure, user, password, from_name, from_email, enabled } = req.body
+
+    const existing = getSmtpConfig()
+    const updates: any = {}
+    if (host !== undefined) updates.host = String(host).trim()
+    if (port !== undefined) updates.port = Number(port) || 587
+    if (secure !== undefined) updates.secure = Boolean(secure)
+    if (user !== undefined) updates.user = String(user).trim()
+    if (password !== undefined && password !== '••••••••') updates.password = String(password)
+    else if (password === undefined) updates.password = existing.password
+    if (from_name !== undefined) updates.from_name = String(from_name).trim()
+    if (from_email !== undefined) updates.from_email = String(from_email).trim()
+    if (enabled !== undefined) updates.enabled = Boolean(enabled)
+
+    const saved = saveSmtpConfig(updates)
+    res.json({ ...saved, password: saved.password ? '••••••••' : '' })
+  } catch (err: any) {
+    console.error('POST /settings/smtp error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to save SMTP settings' })
+  }
+})
+
+router.post('/smtp/test', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const config = getSmtpConfig()
+    const testEmail = req.body.test_email || req.profile.email
+
+    if (!config.host || !config.user || !config.password) {
+      return res.status(400).json({ error: 'SMTP host, user and password are required' })
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth: { user: config.user, pass: config.password },
+      connectionTimeout: 8000,
+      greetingTimeout: 5000,
+    })
+
+    await transporter.verify()
+    await transporter.sendMail({
+      from: `"${config.from_name}" <${config.from_email || config.user}>`,
+      to: testEmail,
+      subject: 'Finest — SMTP Test',
+      text: 'This is a test email from Finest IT Ticket System. SMTP is configured correctly.',
+    })
+
+    res.json({ ok: true, message: `Test email sent successfully to ${testEmail}` })
+  } catch (err: any) {
+    console.error('POST /settings/smtp/test error:', err)
+    res.status(400).json({ error: err?.message || 'SMTP test failed' })
+  }
+})
+
+// ─── GitHub Sync ──────────────────────────────────────────────────────────────
 
 router.get('/github-sync', requireAuth as any, async (req: any, res) => {
   try {

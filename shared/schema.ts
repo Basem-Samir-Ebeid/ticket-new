@@ -11,6 +11,7 @@ export const profiles = pgTable('profiles', {
   role: text('role').notNull().default('employee'),
   can_view_attendance: boolean('can_view_attendance').notNull().default(false),
   must_change_password: boolean('must_change_password').notNull().default(true),
+  leave_balance: integer('leave_balance').notNull().default(14),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -19,6 +20,8 @@ export const tickets = pgTable('tickets', {
   title: text('title').notNull(),
   description: text('description'),
   affected_person: text('affected_person'),
+  category: text('category'),
+  due_date: date('due_date'),
   assigned_to: uuid('assigned_to').references(() => profiles.id, { onDelete: 'set null' }),
   created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'cascade' }),
   status: text('status').notNull().default('opened'),
@@ -31,6 +34,17 @@ export const tickets = pgTable('tickets', {
   opened_at: timestamp('opened_at', { withTimezone: true }),
   pending_at: timestamp('pending_at', { withTimezone: true }),
   solved_at: timestamp('solved_at', { withTimezone: true }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const ticketHistory = pgTable('ticket_history', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  ticket_id: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  changed_by: uuid('changed_by').references(() => profiles.id, { onDelete: 'set null' }),
+  changed_by_name: text('changed_by_name'),
+  field: text('field').notNull(),
+  old_value: text('old_value'),
+  new_value: text('new_value'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -69,6 +83,7 @@ export const loginTimes = pgTable('login_times', {
 export const leaveRequests = pgTable('leave_requests', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  leave_type: text('leave_type').notNull().default('annual'),
   start_date: date('start_date').notNull(),
   end_date: date('end_date').notNull(),
   reason: text('reason'),

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { db } from '../db'
-import { tickets, ticketReplies, profiles, notifications, ticketTemplates } from '../../shared/schema'
+import { tickets, ticketReplies, profiles, notifications, ticketTemplates, ticketHistory } from '../../shared/schema'
 import { eq, and, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
@@ -111,7 +111,7 @@ router.delete('/templates/:id', requireAuth as any, async (req: any, res) => {
 
 router.post('/', requireAuth as any, async (req: any, res) => {
   try {
-    const { title, description, affected_person, assigned_to, status, is_request, priority } = req.body
+    const { title, description, affected_person, assigned_to, status, is_request, priority, category, due_date } = req.body
     const now = new Date()
     const [ticket] = await db.insert(tickets).values({
       title,
@@ -121,6 +121,8 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       created_by: req.user.id,
       status: status || 'opened',
       priority: priority || 'medium',
+      category: category || null,
+      due_date: due_date || null,
       is_request: is_request || false,
       request_status: is_request ? 'pending_review' : null,
       opened_at: now,
@@ -161,31 +163,80 @@ router.post('/', requireAuth as any, async (req: any, res) => {
 
 router.patch('/:id', requireAuth as any, async (req: any, res) => {
   try {
-    const { status, request_status, assigned_to, is_request, opened_at, review, priority } = req.body
+    const { status, request_status, assigned_to, is_request, opened_at, review, priority, category, due_date, title, description } = req.body
     const updates: any = {}
+    const changerName = req.profile?.full_name || req.profile?.email || 'Someone'
+
+    // Fetch existing ticket for history comparison
+    const [existing] = await db.select().from(tickets).where(eq(tickets.id, req.params.id)).limit(1)
+    if (!existing) return res.status(404).json({ error: 'Ticket not found' })
+
+    const historyEntries: any[] = []
+
     if (status !== undefined) {
       const isAdmin = req.profile?.role === 'admin' || req.profile?.role === 'super_admin'
-      if (!isAdmin) {
-        const [existing] = await db.select({ status: tickets.status }).from(tickets).where(eq(tickets.id, req.params.id)).limit(1)
-        if (existing?.status === 'solved') {
-          return res.status(403).json({ error: 'لا يمكن تغيير حالة التيكت بعد حلّه.' })
-        }
+      if (!isAdmin && existing.status === 'solved') {
+        return res.status(403).json({ error: 'لا يمكن تغيير حالة التيكت بعد حلّه.' })
+      }
+      if (existing.status !== status) {
+        historyEntries.push({ field: 'status', old_value: existing.status, new_value: status })
       }
       updates.status = status
       if (status === 'pending') updates.pending_at = new Date()
       if (status === 'solved') updates.solved_at = new Date()
     }
     if (request_status !== undefined) updates.request_status = request_status
-    if (assigned_to !== undefined) updates.assigned_to = assigned_to
+    if (assigned_to !== undefined) {
+      if (existing.assigned_to !== assigned_to) {
+        historyEntries.push({ field: 'assigned_to', old_value: existing.assigned_to || 'unassigned', new_value: assigned_to || 'unassigned' })
+      }
+      updates.assigned_to = assigned_to
+    }
     if (is_request !== undefined) updates.is_request = is_request
     if (opened_at !== undefined) updates.opened_at = opened_at
     if (review !== undefined) updates.review = review
-    if (priority !== undefined) updates.priority = priority
+    if (priority !== undefined) {
+      if (existing.priority !== priority) {
+        historyEntries.push({ field: 'priority', old_value: existing.priority, new_value: priority })
+      }
+      updates.priority = priority
+    }
+    if (category !== undefined) {
+      if (existing.category !== category) {
+        historyEntries.push({ field: 'category', old_value: existing.category || '', new_value: category || '' })
+      }
+      updates.category = category
+    }
+    if (due_date !== undefined) {
+      if (existing.due_date !== due_date) {
+        historyEntries.push({ field: 'due_date', old_value: existing.due_date || '', new_value: due_date || '' })
+      }
+      updates.due_date = due_date
+    }
+    if (title !== undefined) {
+      if (existing.title !== title) {
+        historyEntries.push({ field: 'title', old_value: existing.title, new_value: title })
+      }
+      updates.title = title
+    }
+    if (description !== undefined) {
+      updates.description = description
+    }
 
     const [ticket] = await db.update(tickets).set(updates).where(eq(tickets.id, req.params.id)).returning()
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
 
-    const changerName = req.profile?.full_name || 'Someone'
+    // Write history entries
+    for (const entry of historyEntries) {
+      await db.insert(ticketHistory).values({
+        ticket_id: ticket.id,
+        changed_by: req.user.id,
+        changed_by_name: changerName,
+        field: entry.field,
+        old_value: entry.old_value,
+        new_value: entry.new_value,
+      }).catch(() => {})
+    }
 
     if (status !== undefined) {
       const statusLabel = status === 'solved' ? '✅ Solved' : status === 'pending' ? '🟡 Pending' : '🔵 Opened'
@@ -213,6 +264,20 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
   } catch (err: any) {
     console.error('PATCH /tickets/:id error:', err)
     res.status(500).json({ error: err?.message || 'Failed to update ticket' })
+  }
+})
+
+// ─── Ticket history ───────────────────────────────────────────────────────────
+
+router.get('/:id/history', requireAuth as any, async (req: any, res) => {
+  try {
+    const rows = await db.select().from(ticketHistory)
+      .where(eq(ticketHistory.ticket_id, req.params.id))
+      .orderBy(desc(ticketHistory.created_at))
+    res.json(rows)
+  } catch (err: any) {
+    console.error('GET /tickets/:id/history error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get ticket history' })
   }
 })
 

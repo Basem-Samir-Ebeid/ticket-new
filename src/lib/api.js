@@ -78,6 +78,7 @@ export const api = {
   me: () => request('GET', '/auth/me'),
   changePassword: (currentPassword, newPassword) => request('POST', '/auth/change-password', { currentPassword, newPassword }),
   forceChangePassword: (newPassword) => request('POST', '/auth/force-change-password', { newPassword }),
+  updateProfile: (data) => request('PATCH', '/auth/profile', data),
 
   // Users
   getUsers: () => request('GET', '/users'),
@@ -98,6 +99,7 @@ export const api = {
   getReplies: (ticketId) => request('GET', `/tickets/${ticketId}/replies`),
   createReply: (ticketId, data) => request('POST', `/tickets/${ticketId}/replies`, data),
   rateTicket: (id, rating, rating_comment) => request('POST', `/tickets/${id}/rate`, { rating, rating_comment }),
+  getTicketHistory: (id) => request('GET', `/tickets/${id}/history`),
 
   // Templates
   getTemplates: () => request('GET', '/tickets/templates'),
@@ -122,6 +124,7 @@ export const api = {
   // Notifications
   getNotifications: () => request('GET', '/notifications'),
   markRead: (id) => request('PATCH', `/notifications/${id}/read`),
+  markAllRead: () => request('PATCH', '/notifications/mark-all-read'),
 
   // Upload
   uploadFile: async (file) => {
@@ -148,6 +151,11 @@ export const api = {
   saveOfficeLocation: (data) => request('POST', '/settings/office-location', data),
   getSettingsLog: () => request('GET', '/settings/log'),
 
+  // SMTP Settings
+  getSmtpSettings: () => request('GET', '/settings/smtp'),
+  saveSmtpSettings: (data) => request('POST', '/settings/smtp', data),
+  testSmtpSettings: (data) => request('POST', '/settings/smtp/test', data),
+
   // GitHub sync status
   getGithubSyncStatus: () => request('GET', '/github-sync-status'),
 
@@ -155,6 +163,29 @@ export const api = {
   getGithubSyncSettings: () => request('GET', '/settings/github-sync'),
   saveGithubSyncSettings: (data) => request('POST', '/settings/github-sync', data),
   testGithubSyncConnection: (data) => request('POST', '/settings/github-sync/test', data),
+}
+
+// ─── CSV Export helper ───────────────────────────────────────────────────────
+export function exportCsv(filename, rows, columns) {
+  if (!rows || rows.length === 0) return
+  const header = columns.map(c => `"${c.label}"`).join(',')
+  const body = rows.map(row =>
+    columns.map(c => {
+      const val = c.value(row)
+      if (val === null || val === undefined) return '""'
+      return `"${String(val).replace(/"/g, '""')}"`
+    }).join(',')
+  ).join('\n')
+  const csv = header + '\n' + body
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 // ─── WebSocket client with heartbeat & auto-reconnect ───────────────────────

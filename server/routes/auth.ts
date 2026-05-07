@@ -36,6 +36,24 @@ router.get('/me', requireAuth as any, async (req: any, res) => {
   }
 })
 
+router.patch('/profile', requireAuth as any, async (req: any, res) => {
+  try {
+    const { full_name, profile_picture_url } = req.body
+    const updates: any = {}
+    if (full_name !== undefined) updates.full_name = full_name || null
+    if (profile_picture_url !== undefined) updates.profile_picture_url = profile_picture_url || null
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' })
+
+    const [user] = await db.update(profiles).set(updates).where(eq(profiles.id, req.user.id)).returning()
+    if (!user) return res.status(404).json({ error: 'User not found' })
+    const { password_hash, ...safeUser } = user
+    res.json(safeUser)
+  } catch (err: any) {
+    console.error('PATCH /auth/profile error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to update profile' })
+  }
+})
+
 router.post('/change-password', requireAuth as any, async (req: any, res) => {
   try {
     const { currentPassword, newPassword } = req.body

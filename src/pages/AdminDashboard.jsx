@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { api } from '../lib/api'
+import { api, exportCsv } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import Sidebar from '../components/Sidebar'
 import StatusBadge from '../components/StatusBadge'
@@ -31,7 +31,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [showCreateTicket, setShowCreateTicket] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '' })
-  const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened' })
+  const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '' })
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
   const [requests, setRequests] = useState([])
@@ -49,7 +49,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [rejectionNote, setRejectionNote] = useState('')
   const [processingLeaveId, setProcessingLeaveId] = useState(null)
   const [showLeaveForm, setShowLeaveForm] = useState(false)
-  const [leaveForm, setLeaveForm] = useState({ start_date: '', end_date: '', reason: '' })
+  const [leaveForm, setLeaveForm] = useState({ start_date: '', end_date: '', reason: '', leave_type: 'annual' })
   const [submittingLeave, setSubmittingLeave] = useState(false)
   const [resetPwdTarget, setResetPwdTarget] = useState(null)
   const [resetPwdValue, setResetPwdValue] = useState('')
@@ -88,6 +88,21 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [testingGithubSync, setTestingGithubSync] = useState(false)
   const [githubSyncTestResult, setGithubSyncTestResult] = useState(null)
   const [githubSyncLoaded, setGithubSyncLoaded] = useState(false)
+  const [smtpForm, setSmtpForm] = useState({ host: '', port: 587, secure: false, user: '', password: '', from_name: 'Finest IT', from_email: '', enabled: false })
+  const [smtpMsg, setSmtpMsg] = useState('')
+  const [savingSmtp, setSavingSmtp] = useState(false)
+  const [testingSmtp, setTestingSmtp] = useState(false)
+  const [smtpTestResult, setSmtpTestResult] = useState(null)
+  const [smtpLoaded, setSmtpLoaded] = useState(false)
+  const [monthlyReport, setMonthlyReport] = useState(null)
+  const [monthlyReportYear, setMonthlyReportYear] = useState(new Date().getFullYear())
+  const [monthlyReportMonth, setMonthlyReportMonth] = useState(new Date().getMonth() + 1)
+  const [loadingMonthlyReport, setLoadingMonthlyReport] = useState(false)
+  const TICKETS_PER_PAGE = 20
+  const USERS_PER_PAGE = 20
+  const [ticketPage, setTicketPage] = useState(1)
+  const [userPage, setUserPage] = useState(1)
+  const [ticketHistoryMap, setTicketHistoryMap] = useState({})
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
@@ -295,6 +310,45 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     }
   }
 
+  async function fetchSmtpSettings() {
+    try {
+      const data = await api.getSmtpSettings()
+      setSmtpForm({ host: data.host||'', port: data.port||587, secure: data.secure||false, user: data.user||'', password: '', from_name: data.from_name||'Finest IT', from_email: data.from_email||'', enabled: data.enabled||false })
+    } catch {}
+    setSmtpLoaded(true)
+  }
+
+  async function handleSaveSmtp(e) {
+    e.preventDefault()
+    setSavingSmtp(true); setSmtpMsg(''); setSmtpTestResult(null)
+    try {
+      const payload = { ...smtpForm }
+      if (!smtpForm.password) delete payload.password
+      await api.saveSmtpSettings(payload)
+      setSmtpMsg('✓ SMTP settings saved!')
+      setSmtpForm(f => ({ ...f, password: '' }))
+    } catch (err) { setSmtpMsg('Error: ' + err.message) }
+    setSavingSmtp(false)
+  }
+
+  async function handleTestSmtp() {
+    setTestingSmtp(true); setSmtpTestResult(null); setSmtpMsg('')
+    try {
+      const data = await api.testSmtpSettings({ test_email: '' })
+      setSmtpTestResult({ ok: true, message: data.message })
+    } catch (err) { setSmtpTestResult({ ok: false, message: err.message }) }
+    setTestingSmtp(false)
+  }
+
+  async function fetchMonthlyReport() {
+    setLoadingMonthlyReport(true); setMonthlyReport(null)
+    try {
+      const data = await api.getMonthlyAttendanceReport(monthlyReportYear, monthlyReportMonth)
+      setMonthlyReport(data)
+    } catch (err) { setMonthlyReport({ error: err.message }) }
+    setLoadingMonthlyReport(false)
+  }
+
   async function handleSaveGithubSync(e) {
     e.preventDefault()
     setSavingGithubSync(true)
@@ -379,7 +433,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       await api.createLeave(leaveForm)
       setMsg('✓ Leave request submitted')
       setShowLeaveForm(false)
-      setLeaveForm({ start_date: '', end_date: '', reason: '' })
+      setLeaveForm({ start_date: '', end_date: '', reason: '', leave_type: 'annual' })
       fetchLeaveRequests()
     } catch (err) { setMsg('Error: ' + err.message) }
     setSubmittingLeave(false)
@@ -530,9 +584,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         affected_person: ticketForm.affected_person,
         assigned_to: ticketForm.assigned_to || null,
         status: ticketForm.status,
+        priority: ticketForm.priority || 'medium',
+        category: ticketForm.category || null,
+        due_date: ticketForm.due_date || null,
       })
       setMsg('✓ Ticket created!')
-      setTicketForm({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened' })
+      setTicketForm({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '' })
       setShowCreateTicket(false)
       fetchTickets()
     } catch (e) { setMsg('Error: ' + e.message) }
@@ -1019,9 +1076,15 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Tickets Tab */}
         {tab === 'tickets' && (
           <div>
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-4 gap-2 flex-wrap">
               <h2 className="text-white font-semibold text-sm">All Tickets</h2>
-              <button onClick={() => setShowCreateTicket(v=>!v)} className="btn-primary text-sm px-4 py-2">+ New Ticket</button>
+              <div className="flex gap-2">
+                <button onClick={() => exportCsv('/api/export/tickets', 'tickets.csv')} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                  Export CSV
+                </button>
+                <button onClick={() => setShowCreateTicket(v=>!v)} className="btn-primary text-sm px-4 py-2">+ New Ticket</button>
+              </div>
             </div>
 
             {showCreateTicket && (
@@ -1058,6 +1121,14 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <option value="pending">Pending</option>
                       <option value="solved">Solved</option>
                     </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Category</label>
+                    <input value={ticketForm.category} onChange={e=>setTicketForm(f=>({...f,category:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="e.g. Hardware, Network" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Due Date</label>
+                    <input type="date" value={ticketForm.due_date} onChange={e=>setTicketForm(f=>({...f,due_date:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
                   </div>
                 </div>
                 <div>
@@ -1126,7 +1197,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
                 </div>
               )}
-              {filteredTickets.map((t, i) => (
+              {filteredTickets.slice((ticketPage-1)*TICKETS_PER_PAGE, ticketPage*TICKETS_PER_PAGE).map((t, i) => (
                 <div key={t.id}
                   className="group rounded-2xl p-4 transition-all animate-fadeIn glass-card"
                   style={{border:'1px solid rgba(255,255,255,0.06)', animationDelay:`${i*0.04}s`}}
@@ -1164,6 +1235,15 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 </div>
               ))}
             </div>
+            {filteredTickets.length > TICKETS_PER_PAGE && (
+              <div className="flex items-center justify-between mt-4 px-1">
+                <p className="text-slate-500 text-xs">Showing {Math.min((ticketPage-1)*TICKETS_PER_PAGE+1, filteredTickets.length)}–{Math.min(ticketPage*TICKETS_PER_PAGE, filteredTickets.length)} of {filteredTickets.length}</p>
+                <div className="flex gap-2">
+                  <button onClick={()=>setTicketPage(p=>Math.max(1,p-1))} disabled={ticketPage===1} className="btn-ghost text-xs px-3 py-1.5 disabled:opacity-40">← Prev</button>
+                  <button onClick={()=>setTicketPage(p=>Math.min(Math.ceil(filteredTickets.length/TICKETS_PER_PAGE),p+1))} disabled={ticketPage>=Math.ceil(filteredTickets.length/TICKETS_PER_PAGE)} className="btn-ghost text-xs px-3 py-1.5 disabled:opacity-40">Next →</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1241,6 +1321,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <span>Approved: <span className="text-green-400 font-medium">{leaveRequests.filter(r=>r.status==='approved').length}</span></span>
                   <span>Rejected: <span className="text-red-400 font-medium">{leaveRequests.filter(r=>r.status==='rejected').length}</span></span>
                 </div>
+                <button onClick={() => exportCsv('/api/export/leaves', 'leaves.csv')} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                  Export CSV
+                </button>
                 <button onClick={()=>setShowLeaveForm(v=>!v)} className="bg-green-700 hover:bg-green-600 text-white text-xs px-4 py-2 rounded-lg transition-all">
                   🌴 {showLeaveForm ? 'Cancel' : 'Request Leave'}
                 </button>
@@ -1263,6 +1347,16 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       onChange={e=>setLeaveForm(f=>({...f,end_date:e.target.value}))}
                       className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500" />
                   </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Leave Type</label>
+                  <select value={leaveForm.leave_type||'annual'} onChange={e=>setLeaveForm(f=>({...f,leave_type:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-300 text-sm focus:outline-none focus:border-green-500">
+                    <option value="annual">Annual Leave</option>
+                    <option value="sick">Sick Leave</option>
+                    <option value="emergency">Emergency Leave</option>
+                    <option value="unpaid">Unpaid Leave</option>
+                    <option value="other">Other</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Reason (optional)</label>
@@ -1329,6 +1423,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Users Tab */}
         {tab === 'users' && (
           <div>
+
             <div className="flex flex-wrap gap-3 justify-between items-center mb-4">
               <h2 className="text-white font-semibold text-sm">Users <span className="text-slate-500 font-normal">({users.length})</span></h2>
               <div className="flex gap-2 flex-1 justify-end">
@@ -1339,6 +1434,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   placeholder="Search users..."
                   className="bg-white/5 border border-white/8 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500/50 w-52 placeholder-slate-600 transition-all"
                 />
+                <button onClick={() => exportCsv('/api/export/users', 'users.csv')} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                  Export CSV
+                </button>
                 <button onClick={()=>setShowCreateUser(v=>!v)} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">+ New User</button>
               </div>
             </div>
@@ -1439,7 +1538,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   {users.filter(u => {
                     const q = userSearch.toLowerCase()
                     return !q || (u.full_name||'').toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q)
-                  }).map((u) => (
+                  }).slice((userPage-1)*USERS_PER_PAGE, userPage*USERS_PER_PAGE).map((u) => (
                     <tr key={u.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
                       <td className="px-4 py-3 text-white font-semibold whitespace-nowrap text-sm">{u.full_name || '—'}</td>
                       <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">{u.email}</td>
@@ -1490,15 +1589,32 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </table>
               </div>
             </div>
+            {users.filter(u => { const q = userSearch.toLowerCase(); return !q || (u.full_name||'').toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q) }).length > USERS_PER_PAGE && (
+              <div className="flex items-center justify-between mt-4 px-1">
+                <p className="text-slate-500 text-xs">
+                  Page {userPage} of {Math.ceil(users.filter(u => { const q = userSearch.toLowerCase(); return !q || (u.full_name||'').toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q) }).length / USERS_PER_PAGE)}
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={()=>setUserPage(p=>Math.max(1,p-1))} disabled={userPage===1} className="btn-ghost text-xs px-3 py-1.5 disabled:opacity-40">← Prev</button>
+                  <button onClick={()=>setUserPage(p=>p+1)} disabled={userPage>=Math.ceil(users.filter(u => { const q = userSearch.toLowerCase(); return !q || (u.full_name||'').toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q) }).length/USERS_PER_PAGE)} className="btn-ghost text-xs px-3 py-1.5 disabled:opacity-40">Next →</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Attendance Tab */}
         {tab === 'attendance' && (
           <div>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
               <h2 className="text-white font-semibold text-sm">Attendance</h2>
-              <input type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 transition-all" />
+              <div className="flex items-center gap-2 flex-wrap">
+                <input type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 transition-all" />
+                <button onClick={() => exportCsv(`/api/export/attendance?date=${selectedDate}`, `attendance_${selectedDate}.csv`)} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                  Export CSV
+                </button>
+              </div>
             </div>
 
             <div className="glass-card rounded-2xl overflow-hidden" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
@@ -1544,6 +1660,61 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <p className="text-2xl font-black pl-2" style={{color:s.color}}>{s.val}</p>
                 </div>
               ))}
+            </div>
+
+            {/* Monthly Attendance Report */}
+            <div className="glass-card rounded-2xl p-5 mt-6" style={{border:'1px solid rgba(99,102,241,0.15)'}}>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <h3 className="text-white font-semibold text-sm flex items-center gap-2">📊 Monthly Report</h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select value={monthlyReportYear} onChange={e=>setMonthlyReportYear(Number(e.target.value))} className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-1.5 focus:outline-none">
+                    {Array.from({length:5},(_,i)=>new Date().getFullYear()-i).map(y=><option key={y} value={y}>{y}</option>)}
+                  </select>
+                  <select value={monthlyReportMonth} onChange={e=>setMonthlyReportMonth(Number(e.target.value))} className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-1.5 focus:outline-none">
+                    {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+                  </select>
+                  <button onClick={fetchMonthlyReport} disabled={loadingMonthlyReport} className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50">
+                    {loadingMonthlyReport ? 'Loading...' : 'Generate'}
+                  </button>
+                  {monthlyReport && !monthlyReport.error && (
+                    <button onClick={() => exportCsv(`/api/export/attendance?year=${monthlyReportYear}&month=${monthlyReportMonth}`, `attendance_${monthlyReportYear}_${monthlyReportMonth}.csv`)} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                      Export
+                    </button>
+                  )}
+                </div>
+              </div>
+              {monthlyReport?.error && <p className="text-red-400 text-sm">{monthlyReport.error}</p>}
+              {monthlyReport && !monthlyReport.error && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/8">
+                        {['Name','Days Present','Days Absent','Avg Hours/Day','Total Hours'].map(h=>(
+                          <th key={h} className="text-left text-[11px] text-slate-500 uppercase tracking-widest px-4 py-2 font-semibold">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(monthlyReport.employees||[]).map(emp=>(
+                        <tr key={emp.user_id} className="border-b border-white/5 hover:bg-white/3">
+                          <td className="px-4 py-2.5 text-white font-medium text-sm">{emp.full_name}</td>
+                          <td className="px-4 py-2.5 text-emerald-400 font-semibold">{emp.days_present}</td>
+                          <td className="px-4 py-2.5 text-red-400">{emp.days_absent ?? '—'}</td>
+                          <td className="px-4 py-2.5 text-slate-300">{emp.avg_hours_per_day ? Number(emp.avg_hours_per_day).toFixed(1)+'h' : '—'}</td>
+                          <td className="px-4 py-2.5 text-slate-300">{emp.total_hours ? Number(emp.total_hours).toFixed(1)+'h' : '—'}</td>
+                        </tr>
+                      ))}
+                      {(monthlyReport.employees||[]).length === 0 && (
+                        <tr><td colSpan={5} className="text-center text-slate-500 py-6">No data for this period</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {!monthlyReport && !loadingMonthlyReport && (
+                <p className="text-slate-500 text-sm text-center py-4">Select a month and click Generate to view the report</p>
+              )}
             </div>
           </div>
         )}
@@ -1688,6 +1859,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
           </div>
         )}
         {/* Settings Tab */}
+        {tab === 'settings' && !smtpLoaded && (() => { fetchSmtpSettings(); return null })()}
         {tab === 'settings' && (
           <div className="space-y-4 animate-fadeIn">
             <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
@@ -1974,6 +2146,63 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   })}
                 </div>
               )}
+            </div>
+
+            {/* SMTP Email Settings */}
+            <div className="glass-card rounded-2xl p-6 animate-fadeIn" style={{border:'1px solid rgba(99,102,241,0.15)'}}>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(99,102,241,0.15)', border:'1px solid rgba(99,102,241,0.25)'}}>
+                  <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold">SMTP Email Settings</h2>
+                  <p className="text-slate-500 text-xs">Configure outgoing email for notifications</p>
+                </div>
+                <label className="ml-auto flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={smtpForm.enabled} onChange={e=>setSmtpForm(f=>({...f,enabled:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
+                  <span className="text-slate-400 text-xs">Enabled</span>
+                </label>
+              </div>
+              <form onSubmit={handleSaveSmtp} className="space-y-4">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">SMTP Host</label>
+                    <input value={smtpForm.host} onChange={e=>setSmtpForm(f=>({...f,host:e.target.value}))} placeholder="smtp.gmail.com" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Port</label>
+                    <input type="number" value={smtpForm.port} onChange={e=>setSmtpForm(f=>({...f,port:Number(e.target.value)}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Username</label>
+                    <input value={smtpForm.user} onChange={e=>setSmtpForm(f=>({...f,user:e.target.value}))} placeholder="you@example.com" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Password {smtpForm.user && <span className="text-slate-600 normal-case font-normal">(leave blank to keep)</span>}</label>
+                    <input type="password" value={smtpForm.password} onChange={e=>setSmtpForm(f=>({...f,password:e.target.value}))} placeholder="App password or SMTP password" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" autoComplete="new-password" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">From Name</label>
+                    <input value={smtpForm.from_name} onChange={e=>setSmtpForm(f=>({...f,from_name:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">From Email</label>
+                    <input type="email" value={smtpForm.from_email} onChange={e=>setSmtpForm(f=>({...f,from_email:e.target.value}))} placeholder="noreply@company.com" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={smtpForm.secure} onChange={e=>setSmtpForm(f=>({...f,secure:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
+                  <span className="text-slate-400 text-sm">Use TLS/SSL (secure)</span>
+                </label>
+                {smtpMsg && <p className={`text-sm rounded-xl px-3 py-2 ${smtpMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{smtpMsg}</p>}
+                {smtpTestResult && <p className={`text-sm rounded-xl px-3 py-2 ${smtpTestResult.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>{smtpTestResult.ok ? '✓ ' : '✗ '}{smtpTestResult.message}</p>}
+                <div className="flex gap-2 flex-wrap">
+                  <button type="submit" disabled={savingSmtp} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{savingSmtp ? 'Saving...' : 'Save Settings'}</button>
+                  <button type="button" onClick={handleTestSmtp} disabled={testingSmtp||!smtpForm.host} className="btn-ghost disabled:opacity-50 text-sm px-4 py-2">{testingSmtp ? 'Testing...' : 'Test Connection'}</button>
+                </div>
+              </form>
             </div>
 
             {/* GitHub Sync Settings — super admin only */}
