@@ -17,12 +17,12 @@ function getLocalDateString(date = new Date()) {
 
 export default function AdminDashboard({ isSuperAdmin = false }) {
   const { user } = useAuth()
-  const btnPrimary = isSuperAdmin ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'
-  const tabActiveCls = isSuperAdmin ? 'bg-amber-600 text-white' : 'bg-blue-600 text-white'
+  const btnPrimary = isSuperAdmin ? 'bg-amber-600 hover:bg-amber-500' : 'bg-indigo-600 hover:bg-indigo-500'
+  const tabActiveCls = isSuperAdmin ? 'tab-active-amber' : 'tab-active-indigo'
   const bgGrad = isSuperAdmin
-    ? 'radial-gradient(ellipse at 70% 0%, #2a1500 0%, #0a0a0f 55%)'
-    : 'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'
-  const focusBorder = isSuperAdmin ? 'focus:border-amber-500' : 'focus:border-blue-500'
+    ? 'radial-gradient(ellipse at 60% -10%, rgba(120,53,15,0.5) 0%, transparent 55%), radial-gradient(ellipse at 90% 60%, rgba(80,30,5,0.25) 0%, transparent 45%), #05050a'
+    : 'radial-gradient(ellipse at 60% -10%, rgba(49,46,129,0.5) 0%, transparent 55%), radial-gradient(ellipse at 10% 80%, rgba(30,15,80,0.25) 0%, transparent 45%), #05050a'
+  const focusBorder = isSuperAdmin ? 'focus:border-amber-500' : 'focus:border-indigo-500'
   const [tab, setTab] = useState('dashboard')
   const [tickets, setTickets] = useState([])
   const [users, setUsers] = useState([])
@@ -806,26 +806,32 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 p-1 rounded-xl overflow-x-auto border border-white/8" style={{background:'rgba(255,255,255,0.02)'}}>
-          {['dashboard', 'tickets', 'requests', 'leave', 'users', 'attendance', 'monthlyReport', 'performance', 'settings'].map(t => (
+        <div className="flex gap-1 mb-6 p-1 rounded-2xl overflow-x-auto"
+          style={{background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.06)'}}>
+          {[
+            { key: 'dashboard',     label: 'Dashboard' },
+            { key: 'tickets',       label: 'Tickets' },
+            { key: 'requests',      label: 'Requests',  badge: requests.filter(r=>r.request_status==='pending_review').length },
+            { key: 'leave',         label: 'Leave',     badge: leaveRequests.filter(r=>r.status==='pending').length },
+            { key: 'users',         label: 'Users' },
+            { key: 'attendance',    label: 'Attendance' },
+            { key: 'monthlyReport', label: 'Report' },
+            { key: 'performance',   label: 'Performance' },
+            { key: 'settings',      label: 'Settings' },
+          ].map(({ key: t, label, badge }) => (
             <button key={t} onClick={() => {
               setTab(t); setSelectedTicket(null)
               if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings() }
               if (t === 'monthlyReport') { fetchMonthlyReport(reportYear, reportMonth) }
             }}
-              className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all whitespace-nowrap flex-shrink-0 ${tab === t ? `${tabActiveCls} shadow-lg` : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
-              {t === 'performance' ? '⭐ Performance'
-                : t === 'monthlyReport' ? '📅 تقرير شهري'
-                : t === 'requests'
-                  ? <>📋 Requests{requests.filter(r=>r.request_status==='pending_review').length > 0 && <span className="ml-1.5 bg-amber-500/20 text-amber-400 text-xs px-1.5 py-0.5 rounded-full">{requests.filter(r=>r.request_status==='pending_review').length}</span>}</>
-                : t === 'leave'
-                  ? <>🌴 Leave{leaveRequests.filter(r=>r.status==='pending').length > 0 && <span className="ml-1.5 bg-amber-500/20 text-amber-400 text-xs px-1.5 py-0.5 rounded-full">{leaveRequests.filter(r=>r.status==='pending').length}</span>}</>
-                : t === 'settings' ? '⚙️ Settings'
-                : t === 'dashboard' ? '📊 Dashboard'
-                : t === 'tickets' ? '🎫 Tickets'
-                : t === 'users' ? '👥 Users'
-                : t === 'attendance' ? '📍 Attendance'
-                : t}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${tab === t ? tabActiveCls : 'tab-inactive'}`}>
+              {label}
+              {badge > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold"
+                  style={{background: isSuperAdmin ? 'rgba(245,158,11,0.25)' : 'rgba(99,102,241,0.3)', color: isSuperAdmin ? '#fbbf24' : '#a5b4fc'}}>
+                  {badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -861,36 +867,60 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               {[
-                { label: 'Total Tickets', val: tickets.length,  color: 'text-slate-200',  acc: 'rgba(148,163,184,0.06)', bd: 'rgba(148,163,184,0.12)' },
-                { label: 'Opened',        val: openedTickets,   color: 'text-blue-400',   acc: 'rgba(59,130,246,0.08)',  bd: 'rgba(59,130,246,0.18)' },
-                { label: 'Pending',       val: pendingTickets,  color: 'text-amber-400',  acc: 'rgba(245,158,11,0.08)',  bd: 'rgba(245,158,11,0.18)' },
-                { label: 'Solved',        val: solvedTickets,   color: 'text-emerald-400',acc: 'rgba(52,211,153,0.08)',  bd: 'rgba(52,211,153,0.18)' },
-                { label: 'Total Users',   val: users.length,    color: 'text-purple-400', acc: 'rgba(168,85,247,0.08)',  bd: 'rgba(168,85,247,0.18)' },
+                { label: 'Total Tickets', val: tickets.length,  color: '#94a3b8', glow: 'stat-glow-blue',   acc: 'rgba(99,102,241,0.06)',  bd: 'rgba(99,102,241,0.14)', bar: 'rgba(99,102,241,0.5)' },
+                { label: 'Opened',        val: openedTickets,   color: '#60a5fa', glow: 'stat-glow-blue',   acc: 'rgba(59,130,246,0.07)',  bd: 'rgba(59,130,246,0.16)', bar: '#3b82f6' },
+                { label: 'Pending',       val: pendingTickets,  color: '#fbbf24', glow: 'stat-glow-amber',  acc: 'rgba(245,158,11,0.07)',  bd: 'rgba(245,158,11,0.16)', bar: '#f59e0b' },
+                { label: 'Solved',        val: solvedTickets,   color: '#34d399', glow: 'stat-glow-green',  acc: 'rgba(16,185,129,0.07)',  bd: 'rgba(16,185,129,0.16)', bar: '#10b981' },
+                { label: 'Total Users',   val: users.length,    color: '#c084fc', glow: 'stat-glow-purple', acc: 'rgba(168,85,247,0.07)',  bd: 'rgba(168,85,247,0.16)', bar: '#a855f7' },
               ].map((s, i) => (
-                <div key={s.label} className="rounded-xl p-5 hover-lift animate-fadeIn border" style={{background:s.acc, borderColor:s.bd, animationDelay:`${i*0.08}s`}}>
-                  <p className="text-xs text-slate-500 mb-2 uppercase tracking-wider font-medium">{s.label}</p>
-                  <p className={`text-3xl font-bold ${s.color}`}>{s.val}</p>
+                <div key={s.label} className={`relative rounded-2xl p-4 hover-lift animate-fadeIn overflow-hidden glass-card ${s.glow}`}
+                  style={{border:`1px solid ${s.bd}`, background:s.acc, animationDelay:`${i*0.07}s`}}>
+                  <div className="absolute top-0 left-0 w-0.5 h-full rounded-l-2xl" style={{background:s.bar}} />
+                  <p className="text-[11px] text-slate-500 mb-2.5 uppercase tracking-widest font-semibold pl-2">{s.label}</p>
+                  <p className="text-3xl font-black pl-2 counter-animate" style={{color:s.color}}>{s.val}</p>
                 </div>
               ))}
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="glass rounded-xl p-5">
-                <h3 className="text-white font-medium mb-4">👥 User Breakdown</h3>
+              <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
+                <h3 className="text-white font-semibold mb-4 flex items-center gap-2 text-sm">
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{background:'rgba(168,85,247,0.15)',border:'1px solid rgba(168,85,247,0.2)'}}>👥</span>
+                  User Breakdown
+                </h3>
                 <div className="space-y-3">
-                  {[['Members', memberCount], ['Employees', employeeCount], ['Admins', users.filter(u=>u.role==='admin').length]].map(([l,v]) => (
-                    <div key={l} className="flex justify-between"><span className="text-slate-400 text-sm">{l}</span><span className="text-white font-medium">{v}</span></div>
+                  {[
+                    ['Members', memberCount, '#a78bfa'],
+                    ['Employees', employeeCount, '#60a5fa'],
+                    ['Admins', users.filter(u=>u.role==='admin').length, '#f59e0b'],
+                  ].map(([l,v,c]) => (
+                    <div key={l} className="flex items-center justify-between py-1">
+                      <span className="text-slate-400 text-sm">{l}</span>
+                      <span className="text-sm font-bold" style={{color:c}}>{v}</span>
+                    </div>
                   ))}
                 </div>
               </div>
-              <div className="glass rounded-xl p-5">
-                <h3 className="text-white font-medium mb-4">📈 Ticket Statistics</h3>
+              <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
+                <h3 className="text-white font-semibold mb-4 flex items-center gap-2 text-sm">
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{background:'rgba(16,185,129,0.15)',border:'1px solid rgba(16,185,129,0.2)'}}>📈</span>
+                  Ticket Statistics
+                </h3>
                 <div className="space-y-3">
-                  <div className="flex justify-between"><span className="text-slate-400 text-sm">Resolution Rate</span><span className="text-green-400 font-medium">{tickets.length > 0 ? ((solvedTickets/tickets.length)*100).toFixed(1) : 0}%</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400 text-sm">Active Tickets</span><span className="text-yellow-400 font-medium">{openedTickets + pendingTickets}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400 text-sm">Avg per User</span><span className="text-white font-medium">{users.length > 0 ? (tickets.length/users.length).toFixed(1) : 0}</span></div>
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-slate-400 text-sm">Resolution Rate</span>
+                    <span className="text-emerald-400 font-bold text-sm">{tickets.length > 0 ? ((solvedTickets/tickets.length)*100).toFixed(1) : 0}%</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-slate-400 text-sm">Active Tickets</span>
+                    <span className="text-amber-400 font-bold text-sm">{openedTickets + pendingTickets}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-slate-400 text-sm">Avg per User</span>
+                    <span className="text-white font-bold text-sm">{users.length > 0 ? (tickets.length/users.length).toFixed(1) : 0}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -930,21 +960,34 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </div>
             )}
 
-            <div className="glass rounded-xl p-5">
-              <h3 className="text-white font-medium mb-4">🕐 Recent Tickets</h3>
-              <div className="space-y-2">
+            <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
+              <div className="flex items-center gap-2.5 mb-5">
+                <span className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.2)'}}>🎫</span>
+                <h3 className="text-white font-semibold text-sm">Recent Tickets</h3>
+                <span className="ml-auto text-[11px] text-slate-600">{tickets.length} total</span>
+              </div>
+              <div className="space-y-1">
                 {tickets.slice(0, 5).map((t, i) => (
-                  <div key={t.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors" style={{animationDelay:`${i*0.1}s`}}>
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <StatusBadge status={t.status} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate">{t.title}</p>
-                        <p className="text-slate-400 text-xs">Assigned to {t.assigned_to_profile?.full_name || 'Unassigned'}</p>
-                      </div>
+                  <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/4 transition-all cursor-default row-hover"
+                    style={{animationDelay:`${i*0.08}s`}}>
+                    <StatusBadge status={t.status} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-slate-200 text-sm font-medium truncate">{t.title}</p>
+                      <p className="text-slate-500 text-xs truncate">{t.assigned_to_profile?.full_name || 'Unassigned'}</p>
                     </div>
-                    <span className="text-slate-500 text-xs ml-3">{new Date(t.created_at).toLocaleDateString()}</span>
+                    <span className="text-slate-600 text-[11px] flex-shrink-0">{new Date(t.created_at).toLocaleDateString()}</span>
                   </div>
                 ))}
+                {tickets.length === 0 && (
+                  <div className="empty-state">
+                    <div className="empty-state-icon">
+                      <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a3 3 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z" />
+                      </svg>
+                    </div>
+                    <p className="text-slate-500 text-sm">No tickets yet</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -954,31 +997,31 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {tab === 'tickets' && (
           <div>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-white font-medium">All Tickets</h2>
-              <button onClick={() => setShowCreateTicket(v=>!v)} className={`${btnPrimary} text-white text-sm px-4 py-2 rounded-lg transition-all hover:scale-105`}>+ New Ticket</button>
+              <h2 className="text-white font-semibold text-sm">All Tickets</h2>
+              <button onClick={() => setShowCreateTicket(v=>!v)} className="btn-primary text-sm px-4 py-2">+ New Ticket</button>
             </div>
 
             {showCreateTicket && (
-              <form onSubmit={createTicket} className="glass rounded-xl p-5 mb-4 space-y-4 animate-scaleIn">
+              <form onSubmit={createTicket} className="glass-card rounded-2xl p-5 mb-4 space-y-4 animate-scaleIn" style={{border:'1px solid rgba(99,102,241,0.2)'}}>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Title</label>
-                    <input required value={ticketForm.title} onChange={e=>setTicketForm(f=>({...f,title:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" placeholder="Issue title" />
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Title</label>
+                    <input required value={ticketForm.title} onChange={e=>setTicketForm(f=>({...f,title:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="Issue title" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Affected Person</label>
-                    <input value={ticketForm.affected_person} onChange={e=>setTicketForm(f=>({...f,affected_person:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" placeholder="Person with issue" />
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Affected Person</label>
+                    <input value={ticketForm.affected_person} onChange={e=>setTicketForm(f=>({...f,affected_person:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="Person with issue" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Assign To</label>
-                    <select value={ticketForm.assigned_to} onChange={e=>setTicketForm(f=>({...f,assigned_to:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-300 text-sm focus:outline-none focus:border-blue-500">
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Assign To</label>
+                    <select value={ticketForm.assigned_to} onChange={e=>setTicketForm(f=>({...f,assigned_to:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
                       <option value="">Unassigned</option>
                       {users.map(u => <option key={u.id} value={u.id}>{u.full_name||u.email} ({u.role})</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Status</label>
-                    <select value={ticketForm.status} onChange={e=>setTicketForm(f=>({...f,status:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-300 text-sm focus:outline-none focus:border-blue-500">
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Status</label>
+                    <select value={ticketForm.status} onChange={e=>setTicketForm(f=>({...f,status:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
                       <option value="opened">Opened</option>
                       <option value="pending">Pending</option>
                       <option value="solved">Solved</option>
@@ -986,32 +1029,32 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Description</label>
-                  <textarea rows={3} value={ticketForm.description} onChange={e=>setTicketForm(f=>({...f,description:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" placeholder="Describe the issue..." />
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Description</label>
+                  <textarea rows={3} value={ticketForm.description} onChange={e=>setTicketForm(f=>({...f,description:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 resize-none transition-all" placeholder="Describe the issue..." />
                 </div>
                 <div className="flex gap-2">
-                  <button type="submit" disabled={loading} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{loading ? 'Creating...' : 'Create Ticket'}</button>
-                  <button type="button" onClick={()=>setShowCreateTicket(false)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
+                  <button type="submit" disabled={loading} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{loading ? 'Creating...' : 'Create Ticket'}</button>
+                  <button type="button" onClick={()=>setShowCreateTicket(false)} className="btn-ghost text-sm px-4 py-2">Cancel</button>
                 </div>
               </form>
             )}
 
-            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
               <div className="relative flex-1">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                 </svg>
                 <input
                   value={ticketSearch}
                   onChange={e => setTicketSearch(e.target.value)}
-                  placeholder="Search by title, description, or affected person..."
-                  className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500"
+                  placeholder="Search tickets..."
+                  className="w-full bg-white/5 border border-white/8 rounded-xl pl-9 pr-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all"
                 />
               </div>
-              <div className="flex gap-2 shrink-0">
+              <div className="flex gap-1.5 shrink-0">
                 {['all','opened','pending','solved'].map(f => (
                   <button key={f} onClick={() => setTicketStatusFilter(f)}
-                    className={`px-3 py-2 rounded-lg text-xs font-medium capitalize transition-all ${ticketStatusFilter === f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold capitalize transition-all ${ticketStatusFilter === f ? (isSuperAdmin ? 'tab-active-amber' : 'tab-active-indigo') : 'tab-inactive border border-white/8'}`}>
                     {f}
                   </button>
                 ))}
@@ -1019,43 +1062,54 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
             </div>
 
             {(ticketSearch || ticketStatusFilter !== 'all') && (
-              <p className="text-slate-500 text-xs mb-3">
+              <p className="text-slate-600 text-xs mb-3">
                 Showing {filteredTickets.length} of {tickets.length} tickets
-                {ticketSearch && <> matching "<span className="text-slate-300">{ticketSearch}</span>"</>}
+                {ticketSearch && <> matching "<span className="text-slate-400">{ticketSearch}</span>"</>}
               </p>
             )}
 
-            <div className="space-y-3">
-              {filteredTickets.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">{tickets.length === 0 ? 'No tickets yet' : 'No tickets match your search'}</div>}
+            <div className="space-y-2">
+              {filteredTickets.length === 0 && (
+                <div className="glass-card rounded-2xl py-12" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
+                  <div className="empty-state">
+                    <div className="empty-state-icon">
+                      <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a3 3 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z" />
+                      </svg>
+                    </div>
+                    <p className="text-slate-500 text-sm">{tickets.length === 0 ? 'No tickets yet' : 'No tickets match your search'}</p>
+                  </div>
+                </div>
+              )}
               {filteredTickets.map((t, i) => (
                 <div key={t.id}
-                  className="group rounded-xl p-4 transition-all border border-white/6 hover:border-white/14 animate-fadeIn"
-                  style={{background:'rgba(255,255,255,0.03)', animationDelay:`${i*0.05}s`}}
-                  onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.055)'}
-                  onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
+                  className="group rounded-2xl p-4 transition-all animate-fadeIn glass-card"
+                  style={{border:'1px solid rgba(255,255,255,0.06)', animationDelay:`${i*0.04}s`}}
+                  onMouseEnter={e=>{ e.currentTarget.style.background='rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.1)' }}
+                  onMouseLeave={e=>{ e.currentTarget.style.background=''; e.currentTarget.style.borderColor='rgba(255,255,255,0.06)' }}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0 cursor-pointer" onClick={()=>setSelectedTicket(t)}>
                       <div className="flex items-center gap-2 mb-2">
                         <StatusBadge status={t.status} />
-                        <span className="text-slate-600 text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
+                        <span className="text-slate-600 text-[11px]">{new Date(t.created_at).toLocaleDateString()}</span>
                       </div>
-                      <h3 className="text-white text-sm font-medium group-hover:text-amber-100 transition-colors leading-snug">{t.title}</h3>
+                      <h3 className="text-slate-100 text-sm font-semibold group-hover:text-white transition-colors leading-snug">{t.title}</h3>
                       {t.description && <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 leading-relaxed">{t.description}</p>}
                       {t.affected_person && <p className="text-slate-600 text-xs mt-1.5 flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>{t.affected_person}</p>}
-                      <p className="text-slate-600 text-xs mt-1">Assigned to: <span className="text-slate-400">{t.assigned_to_profile?.full_name || 'Unassigned'}</span></p>
+                      <p className="text-slate-600 text-[11px] mt-1">→ <span className="text-slate-400">{t.assigned_to_profile?.full_name || 'Unassigned'}</span></p>
                     </div>
                     <div className="flex flex-col gap-2 flex-shrink-0">
                       <select value={t.status} onChange={e=>updateStatus(t.id, e.target.value)}
-                        className="rounded-lg px-2 py-1.5 text-slate-300 text-xs outline-none border border-white/10 transition-colors hover:border-white/20"
+                        className="rounded-xl px-2.5 py-1.5 text-slate-300 text-xs outline-none border border-white/10 transition-colors hover:border-white/20 cursor-pointer"
                         style={{background:'rgba(255,255,255,0.06)'}}>
                         <option value="opened">Opened</option>
                         <option value="pending">Pending</option>
                         <option value="solved">Solved</option>
                       </select>
                       <button onClick={()=>deleteTicket(t.id)} disabled={loading}
-                        className="text-xs text-red-400 hover:text-red-300 border border-red-500/15 hover:border-red-500/30 rounded-lg px-2 py-1.5 transition-colors"
-                        style={{background:'rgba(239,68,68,0.05)'}}>
+                        className="text-xs text-red-400/70 hover:text-red-400 border border-red-500/10 hover:border-red-500/25 rounded-xl px-2.5 py-1.5 transition-all"
+                        style={{background:'rgba(239,68,68,0.04)'}}>
                         Delete
                       </button>
                     </div>
@@ -1078,44 +1132,49 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </div>
             </div>
 
-            {requests.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">No requests yet</div>}
+            {requests.length === 0 && (
+              <div className="glass-card rounded-2xl py-12" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
+                <div className="empty-state"><p className="text-slate-500 text-sm">No requests yet</p></div>
+              </div>
+            )}
 
             {requests.map((r, i) => (
-              <div key={r.id} className={`glass rounded-xl p-5 animate-fadeIn hover-lift border ${r.request_status==='pending_review' ? 'border-yellow-500/20' : r.request_status==='accepted' ? 'border-green-500/20' : 'border-red-500/20'}`} style={{animationDelay:`${i*0.05}s`}}>
+              <div key={r.id} className="glass-card rounded-2xl p-5 animate-fadeIn"
+                style={{border: r.request_status==='pending_review' ? '1px solid rgba(245,158,11,0.2)' : r.request_status==='accepted' ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(239,68,68,0.2)', animationDelay:`${i*0.05}s`}}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${r.request_status==='pending_review' ? 'bg-yellow-900/30 text-yellow-400' : r.request_status==='accepted' ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
-                        {r.request_status==='pending_review' ? '⏳ Pending' : r.request_status==='accepted' ? '✅ Accepted' : '❌ Refused'}
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${r.request_status==='pending_review' ? 'bg-amber-900/30 text-amber-400' : r.request_status==='accepted' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-red-900/30 text-red-400'}`}>
+                        {r.request_status==='pending_review' ? 'Pending' : r.request_status==='accepted' ? 'Accepted' : 'Refused'}
                       </span>
-                      <span className="text-slate-500 text-xs">{new Date(r.created_at).toLocaleDateString()}</span>
+                      <span className="text-slate-500 text-[11px]">{new Date(r.created_at).toLocaleDateString()}</span>
                     </div>
-                    <h3 className="text-white font-medium">{r.title}</h3>
-                    {r.description && <p className="text-slate-400 text-sm mt-1">{r.description}</p>}
-                    {r.affected_person && <p className="text-slate-500 text-xs mt-1">👤 {r.affected_person}</p>}
-                    <p className="text-slate-500 text-xs mt-2">Requested by: <span className="text-slate-300">{r.created_by_profile?.full_name || r.created_by_profile?.email || 'Unknown'}</span></p>
+                    <h3 className="text-slate-100 font-semibold text-sm">{r.title}</h3>
+                    {r.description && <p className="text-slate-500 text-xs mt-1">{r.description}</p>}
+                    {r.affected_person && <p className="text-slate-600 text-xs mt-1">👤 {r.affected_person}</p>}
+                    <p className="text-slate-600 text-xs mt-1.5">By: <span className="text-slate-400">{r.created_by_profile?.full_name || r.created_by_profile?.email || 'Unknown'}</span></p>
                   </div>
-                  <div className="flex flex-col gap-2 min-w-fit">
+                  <div className="flex flex-col gap-1.5 min-w-fit">
                     {r.request_status === 'pending_review' && (
                       <>
-                        <button onClick={()=>{setAcceptingRequest(r);setAssignTo('')}} className="bg-green-700 hover:bg-green-600 text-white text-xs px-3 py-1.5 rounded-lg">Accept</button>
-                        <button onClick={()=>refuseRequest(r)} disabled={loading} className="bg-red-900/40 hover:bg-red-800/60 text-red-400 text-xs px-3 py-1.5 rounded-lg border border-red-500/20">Refuse</button>
+                        <button onClick={()=>{setAcceptingRequest(r);setAssignTo('')}} className="bg-emerald-800/60 hover:bg-emerald-700/70 text-emerald-300 text-xs px-3 py-1.5 rounded-xl border border-emerald-600/20 transition-all">Accept</button>
+                        <button onClick={()=>refuseRequest(r)} disabled={loading} className="bg-red-900/30 hover:bg-red-800/50 text-red-400 text-xs px-3 py-1.5 rounded-xl border border-red-500/20 transition-all">Refuse</button>
                       </>
                     )}
-                    <button onClick={()=>deleteRequest(r.id)} disabled={loading} className="bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg border border-red-500/20 disabled:opacity-50">Delete</button>
+                    <button onClick={()=>deleteRequest(r.id)} disabled={loading} className="bg-red-950/30 hover:bg-red-900/50 text-red-400/70 text-xs px-3 py-1.5 rounded-xl border border-red-500/15 disabled:opacity-50 transition-all">Delete</button>
                   </div>
                 </div>
 
                 {acceptingRequest?.id === r.id && (
-                  <div className="mt-4 pt-4 border-t border-white/10 animate-scaleIn">
-                    <label className="block text-xs text-slate-400 mb-2 uppercase tracking-wider">Assign to</label>
+                  <div className="mt-4 pt-4 border-t border-white/8 animate-scaleIn">
+                    <label className="block text-[11px] text-slate-500 mb-2 uppercase tracking-widest font-semibold">Assign to</label>
                     <div className="flex gap-2">
-                      <select value={assignTo} onChange={e=>setAssignTo(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-300 text-sm focus:outline-none focus:border-green-500">
+                      <select value={assignTo} onChange={e=>setAssignTo(e.target.value)} className="flex-1 bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-emerald-500/50 transition-all">
                         <option value="">— Select a member —</option>
                         {users.filter(u=>u.role!=='admin').map(u => <option key={u.id} value={u.id}>{u.full_name||u.email} ({u.role})</option>)}
                       </select>
-                      <button onClick={()=>acceptRequest(r)} disabled={!assignTo||loading} className="bg-green-700 hover:bg-green-600 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-lg">{loading ? 'Saving...' : 'Confirm'}</button>
-                      <button onClick={()=>setAcceptingRequest(null)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-3 py-2 rounded-lg">Cancel</button>
+                      <button onClick={()=>acceptRequest(r)} disabled={!assignTo||loading} className="bg-emerald-800/60 hover:bg-emerald-700/70 disabled:opacity-40 text-emerald-300 text-sm px-4 py-2 rounded-xl border border-emerald-600/20 transition-all">{loading ? 'Saving...' : 'Confirm'}</button>
+                      <button onClick={()=>setAcceptingRequest(null)} className="btn-ghost text-sm px-3 py-2">Cancel</button>
                     </div>
                   </div>
                 )}
@@ -1172,41 +1231,46 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </form>
             )}
 
-            {leaveRequests.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">No leave requests yet</div>}
+            {leaveRequests.length === 0 && (
+              <div className="glass-card rounded-2xl py-12" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
+                <div className="empty-state"><p className="text-slate-500 text-sm">No leave requests yet</p></div>
+              </div>
+            )}
 
             {leaveRequests.map((r, i) => (
-              <div key={r.id} className={`glass rounded-xl p-5 animate-fadeIn hover-lift border ${r.status==='pending' ? 'border-yellow-500/20' : r.status==='approved' ? 'border-green-500/20' : 'border-red-500/20'}`} style={{animationDelay:`${i*0.05}s`}}>
+              <div key={r.id} className="glass-card rounded-2xl p-5 animate-fadeIn"
+                style={{border: r.status==='pending' ? '1px solid rgba(245,158,11,0.18)' : r.status==='approved' ? '1px solid rgba(16,185,129,0.18)' : '1px solid rgba(239,68,68,0.18)', animationDelay:`${i*0.05}s`}}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${r.status==='pending' ? 'bg-yellow-900/30 text-yellow-400' : r.status==='approved' ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
-                        {r.status==='pending' ? '⏳ Pending' : r.status==='approved' ? '✅ Approved' : '❌ Rejected'}
+                      <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${r.status==='pending' ? 'bg-amber-900/30 text-amber-400' : r.status==='approved' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-red-900/30 text-red-400'}`}>
+                        {r.status==='pending' ? 'Pending' : r.status==='approved' ? 'Approved' : 'Rejected'}
                       </span>
-                      <span className="text-slate-500 text-xs">Submitted {new Date(r.created_at).toLocaleDateString()}</span>
+                      <span className="text-slate-500 text-[11px]">{new Date(r.created_at).toLocaleDateString()}</span>
                     </div>
-                    <h3 className="text-white font-medium">{new Date(r.start_date).toLocaleDateString()} → {new Date(r.end_date).toLocaleDateString()}</h3>
-                    {r.reason && <p className="text-slate-400 text-sm mt-1">{r.reason}</p>}
-                    <p className="text-slate-500 text-xs mt-2">Requested by: <span className="text-slate-300">{r.user?.full_name || r.user?.email || 'Unknown'}</span>{r.user?.role && <span className="text-slate-500 ml-1">({r.user.role})</span>}</p>
-                    {r.admin_note && <p className="text-slate-300 text-xs mt-2 bg-white/5 rounded-lg p-2"><span className="text-slate-500">Admin note: </span>{r.admin_note}</p>}
+                    <h3 className="text-slate-100 font-semibold text-sm">{new Date(r.start_date).toLocaleDateString()} — {new Date(r.end_date).toLocaleDateString()}</h3>
+                    {r.reason && <p className="text-slate-500 text-xs mt-1">{r.reason}</p>}
+                    <p className="text-slate-600 text-xs mt-1.5">By: <span className="text-slate-400">{r.user?.full_name || r.user?.email || 'Unknown'}</span>{r.user?.role && <span className="text-slate-600 ml-1">({r.user.role})</span>}</p>
+                    {r.admin_note && <p className="text-slate-400 text-xs mt-2 rounded-xl px-3 py-2" style={{background:'rgba(255,255,255,0.04)'}}><span className="text-slate-500">Note: </span>{r.admin_note}</p>}
                   </div>
-                  <div className="flex flex-col gap-2 min-w-fit">
+                  <div className="flex flex-col gap-1.5 min-w-fit">
                     {r.status === 'pending' && (
                       <>
-                        <button onClick={()=>approveLeaveRequest(r)} disabled={processingLeaveId===r.id} className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg">{processingLeaveId===r.id ? '...' : 'Approve'}</button>
-                        <button onClick={()=>{setRejectingLeaveId(r.id);setRejectionNote('')}} disabled={processingLeaveId===r.id} className="bg-red-900/40 hover:bg-red-800/60 text-red-400 text-xs px-3 py-1.5 rounded-lg border border-red-500/20">Reject</button>
+                        <button onClick={()=>approveLeaveRequest(r)} disabled={processingLeaveId===r.id} className="bg-emerald-800/60 hover:bg-emerald-700/70 disabled:opacity-50 text-emerald-300 text-xs px-3 py-1.5 rounded-xl border border-emerald-600/20 transition-all">{processingLeaveId===r.id ? '...' : 'Approve'}</button>
+                        <button onClick={()=>{setRejectingLeaveId(r.id);setRejectionNote('')}} disabled={processingLeaveId===r.id} className="bg-red-900/30 hover:bg-red-800/50 text-red-400 text-xs px-3 py-1.5 rounded-xl border border-red-500/20 transition-all">Reject</button>
                       </>
                     )}
-                    <button onClick={()=>deleteLeaveRequest(r.id)} className="bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs px-3 py-1.5 rounded-lg border border-red-500/20">Delete</button>
+                    <button onClick={()=>deleteLeaveRequest(r.id)} className="bg-red-950/30 hover:bg-red-900/50 text-red-400/70 text-xs px-3 py-1.5 rounded-xl border border-red-500/15 transition-all">Delete</button>
                   </div>
                 </div>
 
                 {rejectingLeaveId === r.id && (
-                  <div className="mt-4 pt-4 border-t border-white/10 animate-scaleIn">
-                    <label className="block text-xs text-slate-400 mb-2 uppercase tracking-wider">Reason (optional)</label>
+                  <div className="mt-4 pt-4 border-t border-white/8 animate-scaleIn">
+                    <label className="block text-[11px] text-slate-500 mb-2 uppercase tracking-widest font-semibold">Reason (optional)</label>
                     <div className="flex gap-2">
-                      <input type="text" value={rejectionNote} onChange={e=>setRejectionNote(e.target.value)} placeholder="Why is this rejected?" className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-300 text-sm focus:outline-none focus:border-red-500" />
-                      <button onClick={()=>rejectLeaveRequest(r)} disabled={processingLeaveId===r.id} className="bg-red-700 hover:bg-red-600 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-lg">{processingLeaveId===r.id ? 'Saving...' : 'Confirm Reject'}</button>
-                      <button onClick={()=>{setRejectingLeaveId(null);setRejectionNote('')}} className="text-slate-400 hover:text-white border border-white/10 text-sm px-3 py-2 rounded-lg">Cancel</button>
+                      <input type="text" value={rejectionNote} onChange={e=>setRejectionNote(e.target.value)} placeholder="Why is this rejected?" className="flex-1 bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-red-500/50 transition-all" />
+                      <button onClick={()=>rejectLeaveRequest(r)} disabled={processingLeaveId===r.id} className="bg-red-800/60 hover:bg-red-700/70 disabled:opacity-40 text-red-300 text-sm px-4 py-2 rounded-xl border border-red-500/20 transition-all">{processingLeaveId===r.id ? 'Saving...' : 'Confirm'}</button>
+                      <button onClick={()=>{setRejectingLeaveId(null);setRejectionNote('')}} className="btn-ghost text-sm px-3 py-2">Cancel</button>
                     </div>
                   </div>
                 )}
@@ -1219,37 +1283,37 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {tab === 'users' && (
           <div>
             <div className="flex flex-wrap gap-3 justify-between items-center mb-4">
-              <h2 className="text-white font-medium">Users ({users.length})</h2>
-              <div className="flex gap-3 flex-1 justify-end">
+              <h2 className="text-white font-semibold text-sm">Users <span className="text-slate-500 font-normal">({users.length})</span></h2>
+              <div className="flex gap-2 flex-1 justify-end">
                 <input
                   type="text"
                   value={userSearch}
                   onChange={e => setUserSearch(e.target.value)}
-                  placeholder="Search by name, email or role..."
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 w-56 placeholder-slate-500"
+                  placeholder="Search users..."
+                  className="bg-white/5 border border-white/8 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500/50 w-52 placeholder-slate-600 transition-all"
                 />
-                <button onClick={()=>setShowCreateUser(v=>!v)} className={`${btnPrimary} text-white text-sm px-4 py-2 rounded-lg transition-all hover:scale-105 whitespace-nowrap`}>+ New User</button>
+                <button onClick={()=>setShowCreateUser(v=>!v)} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">+ New User</button>
               </div>
             </div>
 
             {showCreateUser && (
-              <form onSubmit={createUser} className="glass rounded-xl p-5 mb-4 space-y-4 animate-scaleIn">
+              <form onSubmit={createUser} className="glass-card rounded-2xl p-5 mb-4 space-y-4 animate-scaleIn" style={{border:'1px solid rgba(99,102,241,0.2)'}}>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Email</label>
-                    <input required type="email" value={userForm.email} onChange={e=>setUserForm(f=>({...f,email:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" placeholder="user@company.com" />
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Email</label>
+                    <input required type="email" value={userForm.email} onChange={e=>setUserForm(f=>({...f,email:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="user@company.com" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Password</label>
-                    <input required type="password" value={userForm.password} onChange={e=>setUserForm(f=>({...f,password:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" placeholder="••••••••" autoComplete="new-password" />
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Password</label>
+                    <input required type="password" value={userForm.password} onChange={e=>setUserForm(f=>({...f,password:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="••••••••" autoComplete="new-password" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Full Name</label>
-                    <input value={userForm.full_name} onChange={e=>setUserForm(f=>({...f,full_name:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" placeholder="John Doe" />
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Full Name</label>
+                    <input value={userForm.full_name} onChange={e=>setUserForm(f=>({...f,full_name:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="John Doe" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Role</label>
-                    <select value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-300 text-sm focus:outline-none focus:border-blue-500">
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Role</label>
+                    <select value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
                       <option value="member">Member</option>
                       <option value="employee">Employee</option>
                       <option value="admin">Admin</option>
@@ -1258,35 +1322,35 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={userForm.can_view_attendance} onChange={e=>setUserForm(f=>({...f,can_view_attendance:e.target.checked}))} className="w-4 h-4 rounded" />
-                  <span className="text-slate-300 text-sm">Can view attendance</span>
+                  <input type="checkbox" checked={userForm.can_view_attendance} onChange={e=>setUserForm(f=>({...f,can_view_attendance:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
+                  <span className="text-slate-400 text-sm">Can view attendance</span>
                 </label>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Profile Picture</label>
-                  <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/10 rounded-lg px-3 py-2 hover:bg-white/8 transition-colors">
-                    <span className="text-slate-400 text-sm">📷 {profilePicFile ? profilePicFile.name : 'Choose from device...'}</span>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Profile Picture</label>
+                  <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 hover:bg-white/8 transition-all">
+                    <span className="text-slate-500 text-sm">📷 {profilePicFile ? profilePicFile.name : 'Choose from device...'}</span>
                     <input type="file" accept="image/*" className="hidden" onChange={e=>setProfilePicFile(e.target.files[0])} />
                   </label>
-                  {profilePicFile && <p className="text-xs text-green-400 mt-1">✓ {profilePicFile.name} selected</p>}
+                  {profilePicFile && <p className="text-xs text-emerald-400 mt-1">✓ {profilePicFile.name} selected</p>}
                 </div>
                 <div className="flex gap-2">
-                  <button type="submit" disabled={loading || uploadingPic} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{uploadingPic ? 'Uploading...' : loading ? 'Creating...' : 'Create User'}</button>
-                  <button type="button" onClick={()=>{setShowCreateUser(false);setProfilePicFile(null)}} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
+                  <button type="submit" disabled={loading || uploadingPic} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{uploadingPic ? 'Uploading...' : loading ? 'Creating...' : 'Create User'}</button>
+                  <button type="button" onClick={()=>{setShowCreateUser(false);setProfilePicFile(null)}} className="btn-ghost text-sm px-4 py-2">Cancel</button>
                 </div>
               </form>
             )}
 
             {editingUser && (
-              <form onSubmit={updateUser} className="glass rounded-xl p-5 mb-4 space-y-4 animate-scaleIn border border-blue-500/30">
-                <h3 className="text-white font-medium">Edit: {editingUser.email}</h3>
+              <form onSubmit={updateUser} className="glass-card rounded-2xl p-5 mb-4 space-y-4 animate-scaleIn" style={{border:'1px solid rgba(99,102,241,0.25)'}}>
+                <h3 className="text-white font-semibold text-sm">Edit: <span className="text-slate-400 font-normal">{editingUser.email}</span></h3>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Full Name</label>
-                    <input value={userForm.full_name} onChange={e=>setUserForm(f=>({...f,full_name:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Full Name</label>
+                    <input value={userForm.full_name} onChange={e=>setUserForm(f=>({...f,full_name:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Role</label>
-                    <select value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-300 text-sm focus:outline-none focus:border-blue-500">
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Role</label>
+                    <select value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
                       <option value="member">Member</option>
                       <option value="employee">Employee</option>
                       <option value="admin">Admin</option>
@@ -1295,31 +1359,31 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={userForm.can_view_attendance} onChange={e=>setUserForm(f=>({...f,can_view_attendance:e.target.checked}))} className="w-4 h-4 rounded" />
-                  <span className="text-slate-300 text-sm">Can view attendance</span>
+                  <input type="checkbox" checked={userForm.can_view_attendance} onChange={e=>setUserForm(f=>({...f,can_view_attendance:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
+                  <span className="text-slate-400 text-sm">Can view attendance</span>
                 </label>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Profile Picture</label>
-                  <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/10 rounded-lg px-3 py-2 hover:bg-white/8 transition-colors">
-                    <span className="text-slate-400 text-sm">📷 {profilePicFile ? profilePicFile.name : 'Choose from device...'}</span>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Profile Picture</label>
+                  <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 hover:bg-white/8 transition-all">
+                    <span className="text-slate-500 text-sm">📷 {profilePicFile ? profilePicFile.name : 'Choose from device...'}</span>
                     <input type="file" accept="image/*" className="hidden" onChange={e=>setProfilePicFile(e.target.files[0])} />
                   </label>
                   {profilePicFile && <p className="text-xs text-green-400 mt-1">✓ {profilePicFile.name} selected</p>}
                 </div>
                 <div className="flex gap-2">
-                  <button type="submit" disabled={loading || uploadingPic} className={`${btnPrimary} disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg`}>{uploadingPic ? 'Uploading...' : loading ? 'Saving...' : 'Save Changes'}</button>
-                  <button type="button" onClick={()=>{setEditingUser(null);setProfilePicFile(null)}} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
+                  <button type="submit" disabled={loading || uploadingPic} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{uploadingPic ? 'Uploading...' : loading ? 'Saving...' : 'Save Changes'}</button>
+                  <button type="button" onClick={()=>{setEditingUser(null);setProfilePicFile(null)}} className="btn-ghost text-sm px-4 py-2">Cancel</button>
                 </div>
               </form>
             )}
 
-            <div className="glass rounded-xl overflow-hidden">
+            <div className="glass-card rounded-2xl overflow-hidden" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
               <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/10">
+                  <tr className="border-b border-white/8">
                     {['Name', 'Email', 'Role', ...(isSuperAdmin ? ['Password', 'Status'] : ['Attendance']), 'Actions'].map(h => (
-                      <th key={h} className="text-left text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium whitespace-nowrap">{h}</th>
+                      <th key={h} className="text-left text-[11px] text-slate-500 uppercase tracking-widest px-4 py-3 font-semibold whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1329,18 +1393,18 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     const q = userSearch.toLowerCase()
                     return !q || (u.full_name||'').toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q)
                   }).map((u) => (
-                    <tr key={u.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
-                      <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{u.full_name || '—'}</td>
-                      <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{u.email}</td>
+                    <tr key={u.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
+                      <td className="px-4 py-3 text-white font-semibold whitespace-nowrap text-sm">{u.full_name || '—'}</td>
+                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">{u.email}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${u.role==='super_admin' ? 'bg-amber-900/30 text-amber-400' : u.role==='admin' ? 'bg-purple-900/30 text-purple-400' : u.role==='employee' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-900/30 text-slate-400'}`}>{u.role==='super_admin' ? '👑 Super Admin' : u.role}</span>
+                        <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize ${u.role==='super_admin' ? 'bg-amber-900/30 text-amber-400' : u.role==='admin' ? 'bg-purple-900/30 text-purple-400' : u.role==='employee' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-800/60 text-slate-400'}`}>{u.role==='super_admin' ? '👑 Super Admin' : u.role}</span>
                       </td>
                       {isSuperAdmin ? (
                         <>
                           <td className="px-4 py-3 whitespace-nowrap">
                             {u.plain_password ? (
                               <div className="flex items-center gap-2">
-                                <span className="font-mono text-xs text-slate-200 bg-white/5 px-2 py-1 rounded">
+                                <span className="font-mono text-xs text-slate-200 bg-white/5 px-2 py-1 rounded-lg">
                                   {visiblePasswords[u.id] ? u.plain_password : '••••••••'}
                                 </span>
                                 <button
@@ -1358,19 +1422,19 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             {u.must_change_password
-                              ? <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-orange-900/30 text-orange-400">لم يغير الباسورد</span>
-                              : <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-900/30 text-green-400">✓ نشط</span>
+                              ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-900/30 text-orange-400">لم يغير الباسورد</span>
+                              : <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-900/30 text-emerald-400">✓ نشط</span>
                             }
                           </td>
                         </>
                       ) : (
-                        <td className="px-4 py-3 text-slate-400 text-xs">{u.can_view_attendance ? '✓ Yes' : '—'}</td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">{u.can_view_attendance ? <span className="text-emerald-400">✓ Yes</span> : '—'}</td>
                       )}
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
-                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:''})}} className="text-xs text-blue-400 hover:text-blue-300">Edit</button>
-                          <button onClick={()=>openResetPwd(u)} disabled={resettingUserId===u.id} className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50">{resettingUserId===u.id ? '...' : 'Reset Pwd'}</button>
-                          <button onClick={()=>deleteUser(u.id)} disabled={loading} className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50">Delete</button>
+                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:''})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
+                          <button onClick={()=>openResetPwd(u)} disabled={resettingUserId===u.id} className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 transition-colors">{resettingUserId===u.id ? '...' : 'Reset Pwd'}</button>
+                          <button onClick={()=>deleteUser(u.id)} disabled={loading} className="text-xs text-red-400/70 hover:text-red-400 disabled:opacity-50 transition-colors">Delete</button>
                         </div>
                       </td>
                     </tr>
@@ -1386,11 +1450,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {tab === 'attendance' && (
           <div>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-white font-medium">Attendance</h2>
-              <input type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} className="bg-white/5 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" />
+              <h2 className="text-white font-semibold text-sm">Attendance</h2>
+              <input type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 transition-all" />
             </div>
 
-            <div className="glass rounded-2xl overflow-hidden">
+            <div className="glass-card rounded-2xl overflow-hidden" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
               <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -1421,10 +1485,18 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mt-6">
-              <div className="glass rounded-xl p-4"><p className="text-xs text-slate-400 mb-1">Total Logins</p><p className="text-2xl font-semibold text-white">{loginTimes.length}</p></div>
-              <div className="glass rounded-xl p-4"><p className="text-xs text-slate-400 mb-1">Signed Off</p><p className="text-2xl font-semibold text-amber-400">{loginTimes.filter(lt=>lt.logout_time).length}</p></div>
-              <div className="glass rounded-xl p-4"><p className="text-xs text-slate-400 mb-1">Still Working</p><p className="text-2xl font-semibold text-green-400">{loginTimes.filter(lt=>!lt.logout_time).length}</p></div>
+            <div className="grid grid-cols-3 gap-3 mt-6">
+              {[
+                { label:'Total Logins', val:loginTimes.length, color:'#94a3b8', bar:'rgba(99,102,241,0.5)', acc:'rgba(99,102,241,0.06)', bd:'rgba(99,102,241,0.14)' },
+                { label:'Signed Off', val:loginTimes.filter(lt=>lt.logout_time).length, color:'#fbbf24', bar:'#f59e0b', acc:'rgba(245,158,11,0.07)', bd:'rgba(245,158,11,0.16)' },
+                { label:'Still Working', val:loginTimes.filter(lt=>!lt.logout_time).length, color:'#34d399', bar:'#10b981', acc:'rgba(16,185,129,0.07)', bd:'rgba(16,185,129,0.16)' },
+              ].map(s => (
+                <div key={s.label} className="relative rounded-2xl p-4 overflow-hidden glass-card" style={{border:`1px solid ${s.bd}`, background:s.acc}}>
+                  <div className="absolute top-0 left-0 w-0.5 h-full" style={{background:s.bar}} />
+                  <p className="text-[11px] text-slate-500 mb-2 uppercase tracking-widest font-semibold pl-2">{s.label}</p>
+                  <p className="text-2xl font-black pl-2" style={{color:s.color}}>{s.val}</p>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -1433,17 +1505,17 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {tab === 'monthlyReport' && (
           <div className="space-y-6 animate-fadeIn" dir="rtl">
             {/* Header */}
-            <div className="glass rounded-xl p-6">
+            <div className="glass-card rounded-2xl p-6" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-bold text-white flex items-center gap-2">📅 تقرير الحضور الشهري</h2>
-                  <p className="text-slate-400 text-sm mt-1">إحصائيات تفصيلية لحضور الموظفين خلال الشهر المحدد</p>
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">📅 تقرير الحضور الشهري</h2>
+                  <p className="text-slate-500 text-sm mt-1">إحصائيات تفصيلية لحضور الموظفين خلال الشهر المحدد</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
                   <select
                     value={reportMonth}
                     onChange={e => { const m = Number(e.target.value); setReportMonth(m); fetchMonthlyReport(reportYear, m) }}
-                    className="bg-white/5 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                    className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 transition-all"
                   >
                     {['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'].map((name,i) => (
                       <option key={i+1} value={i+1}>{name}</option>
@@ -1452,7 +1524,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <select
                     value={reportYear}
                     onChange={e => { const y = Number(e.target.value); setReportYear(y); fetchMonthlyReport(y, reportMonth) }}
-                    className="bg-white/5 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                    className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 transition-all"
                   >
                     {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
@@ -1488,14 +1560,14 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                         a.click()
                         URL.revokeObjectURL(url)
                       }}
-                      className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-medium transition-all bg-emerald-600 hover:bg-emerald-500 text-white"
+                      className="flex items-center gap-2 text-sm px-4 py-2 rounded-xl font-medium transition-all bg-emerald-800/60 hover:bg-emerald-700/70 text-emerald-300 border border-emerald-600/20"
                     >
                       ⬇️ تصدير CSV
                     </button>
                   )}
                   <button
                     onClick={() => fetchMonthlyReport(reportYear, reportMonth)}
-                    className={`flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-medium transition-all ${isSuperAdmin ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'} text-white`}
+                    className={`flex items-center gap-2 text-sm px-4 py-2 rounded-xl font-medium transition-all ${isSuperAdmin ? 'bg-amber-900/40 hover:bg-amber-800/60 text-amber-300 border border-amber-600/20' : 'btn-primary'}`}
                   >
                     {loadingReport ? (
                       <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
@@ -1525,14 +1597,14 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
             {loadingReport && (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {[1,2,3].map(i => (
-                  <div key={i} className="glass rounded-xl p-5 animate-pulse">
-                    <div className="h-4 bg-white/10 rounded w-1/2 mb-3"/>
-                    <div className="h-8 bg-white/10 rounded w-1/3 mb-4"/>
-                    <div className="h-2 bg-white/10 rounded w-full mb-2"/>
+                  <div key={i} className="glass-card rounded-2xl p-5 animate-pulse" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
+                    <div className="h-4 bg-white/8 rounded-xl w-1/2 mb-3"/>
+                    <div className="h-8 bg-white/8 rounded-xl w-1/3 mb-4"/>
+                    <div className="h-2 bg-white/8 rounded-full w-full mb-2"/>
                     <div className="grid grid-cols-3 gap-2 mt-4">
-                      <div className="h-10 bg-white/10 rounded"/>
-                      <div className="h-10 bg-white/10 rounded"/>
-                      <div className="h-10 bg-white/10 rounded"/>
+                      <div className="h-10 bg-white/8 rounded-xl"/>
+                      <div className="h-10 bg-white/8 rounded-xl"/>
+                      <div className="h-10 bg-white/8 rounded-xl"/>
                     </div>
                   </div>
                 ))}
@@ -1542,35 +1614,36 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
             {/* Summary cards */}
             {!loadingReport && monthlyReport && (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
-                    { label: 'أيام العمل', value: monthlyReport.working_days, color: 'text-blue-400', icon: '📆' },
-                    { label: 'إجمالي الموظفين', value: monthlyReport.employees.length, color: 'text-purple-400', icon: '👥' },
-                    { label: 'متوسط الحضور', value: monthlyReport.employees.length > 0 ? Math.round(monthlyReport.employees.reduce((s,e)=>s+e.attendance_rate,0)/monthlyReport.employees.length) + '%' : '—', color: 'text-green-400', icon: '📊' },
-                    { label: 'حضور كامل', value: monthlyReport.employees.filter(e=>e.attendance_rate>=100).length, color: 'text-amber-400', icon: '🏆' },
-                  ].map(({label,value,color,icon}) => (
-                    <div key={label} className="glass rounded-xl p-4 text-center">
+                    { label: 'أيام العمل', value: monthlyReport.working_days, color: '#818cf8', bar:'rgba(99,102,241,0.5)', bg:'rgba(99,102,241,0.06)', bd:'rgba(99,102,241,0.15)', icon: '📆' },
+                    { label: 'إجمالي الموظفين', value: monthlyReport.employees.length, color: '#c084fc', bar:'#a855f7', bg:'rgba(168,85,247,0.06)', bd:'rgba(168,85,247,0.15)', icon: '👥' },
+                    { label: 'متوسط الحضور', value: monthlyReport.employees.length > 0 ? Math.round(monthlyReport.employees.reduce((s,e)=>s+e.attendance_rate,0)/monthlyReport.employees.length) + '%' : '—', color: '#34d399', bar:'#10b981', bg:'rgba(16,185,129,0.06)', bd:'rgba(16,185,129,0.15)', icon: '📊' },
+                    { label: 'حضور كامل', value: monthlyReport.employees.filter(e=>e.attendance_rate>=100).length, color: '#fbbf24', bar:'#f59e0b', bg:'rgba(245,158,11,0.06)', bd:'rgba(245,158,11,0.15)', icon: '🏆' },
+                  ].map(({label,value,color,bar,bg,bd,icon}) => (
+                    <div key={label} className="relative rounded-2xl p-4 text-center overflow-hidden glass-card" style={{background:bg, border:`1px solid ${bd}`}}>
+                      <div className="absolute top-0 left-0 w-0.5 h-full" style={{background:bar}} />
                       <p className="text-2xl mb-1">{icon}</p>
-                      <p className={`text-2xl font-bold ${color}`}>{value}</p>
-                      <p className="text-xs text-slate-400 mt-1">{label}</p>
+                      <p className="text-2xl font-black" style={{color}}>{value}</p>
+                      <p className="text-[11px] text-slate-500 mt-1">{label}</p>
                     </div>
                   ))}
                 </div>
 
                 {/* Employee cards */}
                 {monthlyReport.employees.length === 0 ? (
-                  <div className="glass rounded-xl p-12 text-center text-slate-500">لا يوجد موظفون مسجلون</div>
+                  <div className="glass-card rounded-2xl p-12 text-center text-slate-500" style={{border:'1px solid rgba(255,255,255,0.06)'}}>لا يوجد موظفون مسجلون</div>
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {monthlyReport.employees.map((emp, idx) => {
                       const rate = emp.attendance_rate
-                      const barColor = rate >= 80 ? 'bg-green-500' : rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
-                      const rateColor = rate >= 80 ? 'text-green-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'
+                      const barColor = rate >= 80 ? '#10b981' : rate >= 50 ? '#f59e0b' : '#ef4444'
+                      const rateColor = rate >= 80 ? 'text-emerald-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'
                       const totalHours = (emp.total_minutes / 60).toFixed(1)
                       const avgHours = (emp.avg_minutes_per_day / 60).toFixed(1)
                       const rankBadge = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`
                       return (
-                        <div key={emp.id} className="glass rounded-xl p-5 hover-lift transition-all">
+                        <div key={emp.id} className="glass-card rounded-2xl p-5 transition-all" style={{border:'1px solid rgba(255,255,255,0.08)'}}>
                           {/* Name + rank */}
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex-1 min-w-0">
@@ -1583,35 +1656,35 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                           {/* Attendance rate bar */}
                           <div className="mb-4">
                             <div className="flex justify-between items-center mb-1.5">
-                              <span className="text-xs text-slate-400">نسبة الحضور</span>
+                              <span className="text-xs text-slate-500">نسبة الحضور</span>
                               <span className={`text-sm font-bold ${rateColor}`}>{rate}%</span>
                             </div>
-                            <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full transition-all ${barColor}`} style={{width:`${Math.min(rate,100)}%`}}/>
+                            <div className="w-full h-1.5 bg-white/8 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full transition-all" style={{width:`${Math.min(rate,100)}%`, background:barColor}}/>
                             </div>
                           </div>
 
                           {/* Stats grid */}
                           <div className="grid grid-cols-3 gap-2 text-center">
-                            <div className="bg-white/5 rounded-lg p-2">
-                              <p className="text-green-400 font-bold text-lg">{emp.days_present}</p>
-                              <p className="text-slate-500 text-xs mt-0.5">حضور</p>
+                            <div className="rounded-xl p-2" style={{background:'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.15)'}}>
+                              <p className="text-emerald-400 font-bold text-lg">{emp.days_present}</p>
+                              <p className="text-slate-500 text-[10px] mt-0.5">حضور</p>
                             </div>
-                            <div className="bg-white/5 rounded-lg p-2">
+                            <div className="rounded-xl p-2" style={{background:'rgba(239,68,68,0.07)', border:'1px solid rgba(239,68,68,0.15)'}}>
                               <p className="text-red-400 font-bold text-lg">{emp.days_absent}</p>
-                              <p className="text-slate-500 text-xs mt-0.5">غياب</p>
+                              <p className="text-slate-500 text-[10px] mt-0.5">غياب</p>
                             </div>
-                            <div className="bg-white/5 rounded-lg p-2">
-                              <p className="text-blue-400 font-bold text-lg">{totalHours}</p>
-                              <p className="text-slate-500 text-xs mt-0.5">ساعة</p>
+                            <div className="rounded-xl p-2" style={{background:'rgba(99,102,241,0.07)', border:'1px solid rgba(99,102,241,0.15)'}}>
+                              <p className="text-indigo-400 font-bold text-lg">{totalHours}</p>
+                              <p className="text-slate-500 text-[10px] mt-0.5">ساعة</p>
                             </div>
                           </div>
 
                           {/* Avg hours */}
                           {emp.days_present > 0 && (
-                            <div className="mt-3 pt-3 border-t border-white/8 flex justify-between text-xs text-slate-400">
+                            <div className="mt-3 pt-3 border-t border-white/8 flex justify-between text-xs text-slate-500">
                               <span>متوسط يومي</span>
-                              <span className="text-white font-medium">{avgHours} ساعة</span>
+                              <span className="text-slate-300 font-medium">{avgHours} ساعة</span>
                             </div>
                           )}
                         </div>
@@ -1621,9 +1694,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 )}
 
                 {/* Table summary */}
-                <div className="glass rounded-xl overflow-hidden">
-                  <div className="p-4 border-b border-white/10">
-                    <h3 className="text-white font-medium text-sm">📋 ملخص تفصيلي</h3>
+                <div className="glass-card rounded-2xl overflow-hidden" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
+                  <div className="p-4 border-b border-white/8">
+                    <h3 className="text-white font-semibold text-sm">📋 ملخص تفصيلي</h3>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm" dir="rtl">
@@ -1667,9 +1740,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
             {/* Empty state before loading */}
             {!loadingReport && !monthlyReport && !reportError && (
-              <div className="glass rounded-xl p-16 text-center">
+              <div className="glass-card rounded-2xl p-16 text-center" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
                 <p className="text-4xl mb-4">📅</p>
-                <p className="text-slate-300 font-medium">اضغط تحديث لعرض التقرير</p>
+                <p className="text-slate-300 font-semibold">اضغط تحديث لعرض التقرير</p>
                 <p className="text-slate-500 text-sm mt-2">اختر الشهر والسنة ثم اضغط تحديث</p>
               </div>
             )}
@@ -1679,12 +1752,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Performance Tab */}
         {tab === 'performance' && (
           <div className="space-y-6">
-            <div className="glass rounded-xl p-6 animate-scaleIn">
+            <div className="glass-card rounded-2xl p-6 animate-scaleIn" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-2xl font-bold text-white flex items-center gap-3"><span className="text-3xl">⭐</span>Member Performance Leaderboard</h2>
-                <div className="text-right"><p className="text-xs text-slate-400 uppercase tracking-wider">Evaluating</p><p className="text-2xl font-bold text-blue-400">{memberPerformance.length}</p><p className="text-xs text-slate-400">Members</p></div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-3"><span className="text-2xl">⭐</span>Member Performance Leaderboard</h2>
+                <div className="text-right"><p className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold">Evaluating</p><p className="text-2xl font-black text-indigo-400">{memberPerformance.length}</p><p className="text-[11px] text-slate-500">Members</p></div>
               </div>
-              <p className="text-slate-400 text-sm">Rankings based on resolution speed (35%), completion rate (30%), volume (20%), and response time (15%)</p>
+              <p className="text-slate-500 text-sm">Rankings based on resolution speed (35%), completion rate (30%), volume (20%), and response time (15%)</p>
             </div>
 
             {memberPerformance.length >= 3 && (
@@ -1694,19 +1767,19 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   const grade = getPerformanceGrade(perf.finalScore)
                   const medals = ['🥇','🥈','🥉']
                   return (
-                    <div key={perf.member.id} className={`glass rounded-xl p-6 hover-lift animate-fadeIn ${rankIdx===0 ? 'md:order-2 md:scale-105 glow-blue' : rankIdx===1 ? 'md:order-1' : 'md:order-3'}`} style={{animationDelay:`${colIdx*0.1}s`}}>
+                    <div key={perf.member.id} className={`glass-card rounded-2xl p-6 animate-fadeIn ${rankIdx===0 ? 'md:order-2 md:scale-105' : rankIdx===1 ? 'md:order-1' : 'md:order-3'}`} style={{border:`1px solid ${rankIdx===0?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.08)'}`, animationDelay:`${colIdx*0.1}s`}}>
                       <div className="text-center">
                         <div className={`text-5xl mb-3 ${rankIdx===0 ? 'text-6xl animate-bounce-slow' : ''}`}>{medals[rankIdx]}</div>
-                        <h3 className="text-white font-bold text-lg mb-1">{perf.member.full_name}</h3>
-                        <p className="text-slate-400 text-xs mb-4">{perf.member.email}</p>
-                        <div className={`inline-block px-4 py-2 rounded-lg ${grade.bg} mb-3`}>
-                          <p className="text-xs text-slate-400 mb-1">Score</p>
-                          <p className={`text-3xl font-bold ${grade.color}`}>{perf.finalScore.toFixed(1)}</p>
-                          <p className={`text-sm font-medium ${grade.color}`}>{grade.grade}</p>
+                        <h3 className="text-white font-bold text-base mb-1">{perf.member.full_name}</h3>
+                        <p className="text-slate-500 text-xs mb-4">{perf.member.email}</p>
+                        <div className={`inline-block px-4 py-2 rounded-xl ${grade.bg} mb-3`}>
+                          <p className="text-[11px] text-slate-500 mb-1">Score</p>
+                          <p className={`text-3xl font-black ${grade.color}`}>{perf.finalScore.toFixed(1)}</p>
+                          <p className={`text-sm font-semibold ${grade.color}`}>{grade.grade}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div><p className="text-slate-500">Solved</p><p className="text-white font-medium">{perf.solvedTickets}</p></div>
-                          <div><p className="text-slate-500">Avg Time</p><p className="text-white font-medium">{formatTime(perf.avgResolutionTime)}</p></div>
+                          <div><p className="text-slate-500">Solved</p><p className="text-white font-semibold">{perf.solvedTickets}</p></div>
+                          <div><p className="text-slate-500">Avg Time</p><p className="text-white font-semibold">{formatTime(perf.avgResolutionTime)}</p></div>
                         </div>
                       </div>
                     </div>
@@ -1715,14 +1788,14 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </div>
             )}
 
-            <div className="glass rounded-xl overflow-hidden animate-fadeIn">
-              <div className="p-4 border-b border-white/10"><h3 className="text-white font-medium flex items-center gap-2">📊 Complete Rankings</h3></div>
+            <div className="glass-card rounded-2xl overflow-hidden animate-fadeIn" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
+              <div className="p-4 border-b border-white/8"><h3 className="text-white font-semibold text-sm flex items-center gap-2">📊 Complete Rankings</h3></div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-white/8 bg-white/5">
+                    <tr className="border-b border-white/8 bg-white/3">
                       {['Rank','Member','Score','Grade','Solved','Total','Rate','Avg Time','Response','Load'].map(h => (
-                        <th key={h} className="text-center text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium first:text-left">{h}</th>
+                        <th key={h} className="text-center text-[11px] text-slate-500 uppercase tracking-widest px-4 py-3 font-semibold first:text-left">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1731,22 +1804,22 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     {memberPerformance.map((perf, index) => {
                       const grade = getPerformanceGrade(perf.finalScore)
                       return (
-                        <tr key={perf.member.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                          <td className="px-4 py-4"><span className="text-2xl">{getRankMedal(index)}</span></td>
-                          <td className="px-4 py-4"><p className="text-white font-medium">{perf.member.full_name}</p><p className="text-slate-400 text-xs">{perf.member.email}</p></td>
-                          <td className="px-4 py-4 text-center"><div className={`inline-block px-3 py-1 rounded-lg ${grade.bg}`}><p className={`text-xl font-bold ${grade.color}`}>{perf.finalScore.toFixed(1)}</p></div></td>
-                          <td className="px-4 py-4 text-center"><span className={`text-lg font-bold ${grade.color}`}>{grade.grade}</span></td>
-                          <td className="px-4 py-4 text-center"><span className="text-green-400 font-medium text-lg">{perf.solvedTickets}</span></td>
-                          <td className="px-4 py-4 text-center"><span className="text-white font-medium">{perf.totalTickets}</span></td>
-                          <td className="px-4 py-4 text-center">
+                        <tr key={perf.member.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
+                          <td className="px-4 py-3"><span className="text-xl">{getRankMedal(index)}</span></td>
+                          <td className="px-4 py-3"><p className="text-white font-semibold text-sm">{perf.member.full_name}</p><p className="text-slate-500 text-xs">{perf.member.email}</p></td>
+                          <td className="px-4 py-3 text-center"><div className={`inline-block px-3 py-1 rounded-xl ${grade.bg}`}><p className={`text-lg font-black ${grade.color}`}>{perf.finalScore.toFixed(1)}</p></div></td>
+                          <td className="px-4 py-3 text-center"><span className={`text-base font-bold ${grade.color}`}>{grade.grade}</span></td>
+                          <td className="px-4 py-3 text-center"><span className="text-emerald-400 font-semibold">{perf.solvedTickets}</span></td>
+                          <td className="px-4 py-3 text-center"><span className="text-slate-300 font-medium">{perf.totalTickets}</span></td>
+                          <td className="px-4 py-3 text-center">
                             <div className="flex flex-col items-center">
-                              <span className="text-blue-400 font-medium">{perf.completionRate.toFixed(0)}%</span>
-                              <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden mt-1"><div className="h-full bg-blue-500 rounded-full" style={{width:`${perf.completionRate}%`}} /></div>
+                              <span className="text-indigo-400 font-semibold text-xs">{perf.completionRate.toFixed(0)}%</span>
+                              <div className="w-16 h-1 bg-white/8 rounded-full overflow-hidden mt-1"><div className="h-full bg-indigo-500 rounded-full" style={{width:`${perf.completionRate}%`}} /></div>
                             </div>
                           </td>
-                          <td className="px-4 py-4 text-center"><span className={`font-medium ${perf.avgResolutionTime < 6 ? 'text-green-400' : perf.avgResolutionTime < 24 ? 'text-yellow-400' : 'text-red-400'}`}>{formatTime(perf.avgResolutionTime)}</span></td>
-                          <td className="px-4 py-4 text-center"><span className={`font-medium text-sm ${perf.avgResponseTime < 2 ? 'text-green-400' : perf.avgResponseTime < 6 ? 'text-yellow-400' : 'text-red-400'}`}>{formatTime(perf.avgResponseTime)}</span></td>
-                          <td className="px-4 py-4 text-center"><span className={`font-medium ${perf.currentLoad === 0 ? 'text-green-400' : perf.currentLoad < 5 ? 'text-yellow-400' : 'text-red-400'}`}>{perf.currentLoad}</span></td>
+                          <td className="px-4 py-3 text-center"><span className={`font-semibold text-xs ${perf.avgResolutionTime < 6 ? 'text-emerald-400' : perf.avgResolutionTime < 24 ? 'text-amber-400' : 'text-red-400'}`}>{formatTime(perf.avgResolutionTime)}</span></td>
+                          <td className="px-4 py-3 text-center"><span className={`font-semibold text-xs ${perf.avgResponseTime < 2 ? 'text-emerald-400' : perf.avgResponseTime < 6 ? 'text-amber-400' : 'text-red-400'}`}>{formatTime(perf.avgResponseTime)}</span></td>
+                          <td className="px-4 py-3 text-center"><span className={`font-semibold text-xs ${perf.currentLoad === 0 ? 'text-emerald-400' : perf.currentLoad < 5 ? 'text-amber-400' : 'text-red-400'}`}>{perf.currentLoad}</span></td>
                         </tr>
                       )
                     })}
@@ -1755,42 +1828,42 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </div>
             </div>
 
-            <div className="glass rounded-xl p-6 animate-fadeIn">
-              <h3 className="text-white font-medium mb-4 flex items-center gap-2">📐 Scoring Methodology</h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                {[['Resolution Speed','How fast tickets are solved','35%','text-blue-400'],['Completion Rate','% of tickets solved','30%','text-green-400'],['Ticket Volume','Total tickets handled','20%','text-yellow-400'],['Response Time','How fast to start work','15%','text-purple-400']].map(([t,d,p,c]) => (
-                  <div key={t} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
-                    <div><p className="text-white font-medium text-sm">{t}</p><p className="text-slate-400 text-xs">{d}</p></div>
-                    <span className={`${c} font-bold text-lg`}>{p}</span>
+            <div className="glass-card rounded-2xl p-6 animate-fadeIn" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
+              <h3 className="text-white font-semibold text-sm mb-4 flex items-center gap-2">📐 Scoring Methodology</h3>
+              <div className="grid md:grid-cols-2 gap-3">
+                {[['Resolution Speed','How fast tickets are solved','35%','text-indigo-400'],['Completion Rate','% of tickets solved','30%','text-emerald-400'],['Ticket Volume','Total tickets handled','20%','text-amber-400'],['Response Time','How fast to start work','15%','text-violet-400']].map(([t,d,p,c]) => (
+                  <div key={t} className="flex items-center justify-between p-3 rounded-xl" style={{background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.06)'}}>
+                    <div><p className="text-white font-semibold text-sm">{t}</p><p className="text-slate-500 text-xs">{d}</p></div>
+                    <span className={`${c} font-black text-lg`}>{p}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
-                <p className="text-red-400 text-sm font-medium">⚠️ Workload Penalty</p>
-                <p className="text-slate-400 text-xs mt-1">High current workload (open/pending tickets) reduces the final score</p>
+              <div className="mt-3 p-3 rounded-xl" style={{background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)'}}>
+                <p className="text-red-400 text-sm font-semibold">⚠️ Workload Penalty</p>
+                <p className="text-slate-500 text-xs mt-1">High current workload (open/pending tickets) reduces the final score</p>
               </div>
             </div>
           </div>
         )}
         {/* Settings Tab */}
         {tab === 'settings' && (
-          <div className="space-y-6 animate-fadeIn">
-            <div className="glass rounded-xl p-6">
+          <div className="space-y-4 animate-fadeIn">
+            <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
               <div className="flex items-center gap-3 mb-1">
-                <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(99,102,241,0.15)', border:'1px solid rgba(99,102,241,0.25)'}}>
+                  <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                   </svg>
                 </div>
                 <div>
-                  <h2 className="text-white font-semibold text-lg">Office Geofence</h2>
-                  <p className="text-slate-400 text-xs">Only employees within the radius can check in or check out</p>
+                  <h2 className="text-white font-semibold">Office Geofence</h2>
+                  <p className="text-slate-500 text-xs">Only employees within the radius can check in or check out</p>
                 </div>
               </div>
             </div>
 
-            <div className="glass rounded-xl p-6">
+            <div className="glass-card rounded-2xl p-6" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
               {loadingSettings ? (
                 <div className="flex items-center justify-center py-8">
                   <svg className="w-6 h-6 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -1836,42 +1909,42 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     </div>
                   )}
 
-                  <div className="grid md:grid-cols-2 gap-5">
+                  <div className="grid md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Latitude</label>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Latitude</label>
                       <input
                         type="number" step="any" required
                         value={officeForm.latitude}
                         onChange={e => setOfficeForm(f => ({ ...f, latitude: e.target.value }))}
                         placeholder="e.g. 30.0726"
-                        className={`w-full bg-white/5 border border-white/10 ${focusBorder} focus:outline-none text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-500`}
+                        className="w-full bg-white/5 border border-white/8 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Longitude</label>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Longitude</label>
                       <input
                         type="number" step="any" required
                         value={officeForm.longitude}
                         onChange={e => setOfficeForm(f => ({ ...f, longitude: e.target.value }))}
                         placeholder="e.g. 31.3211"
-                        className={`w-full bg-white/5 border border-white/10 ${focusBorder} focus:outline-none text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-500`}
+                        className="w-full bg-white/5 border border-white/8 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all"
                       />
                     </div>
                   </div>
 
                   <div className="max-w-xs">
-                    <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Allowed Radius (meters)</label>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Allowed Radius (meters)</label>
                     <input
                       type="number" step="1" min="1" required
                       value={officeForm.radius_meters}
                       onChange={e => setOfficeForm(f => ({ ...f, radius_meters: e.target.value }))}
                       placeholder="e.g. 30"
-                      className={`w-full bg-white/5 border border-white/10 ${focusBorder} focus:outline-none text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-500`}
+                      className="w-full bg-white/5 border border-white/8 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all"
                     />
                   </div>
 
-                  <div className="rounded-xl overflow-hidden border border-white/10">
-                    <div className="flex items-center justify-between px-3 py-2 bg-white/5 border-b border-white/10">
+                  <div className="rounded-xl overflow-hidden" style={{border:'1px solid rgba(255,255,255,0.08)'}}>
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-white/8" style={{background:'rgba(255,255,255,0.03)'}}>
                       <div className="flex items-center gap-2 text-xs text-slate-400">
                         <svg className="w-3.5 h-3.5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
@@ -1913,14 +1986,14 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
 
                   {officeMsg && (
-                    <div className={`px-4 py-3 rounded-lg text-sm ${officeMsg.startsWith('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'}`}>
+                    <div className={`px-4 py-3 rounded-xl text-sm ${officeMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
                       {officeMsg}
                     </div>
                   )}
 
                   <div className="flex items-center gap-3 pt-1 flex-wrap">
                     <button type="submit" disabled={savingOffice}
-                      className={`${btnPrimary} px-5 py-2.5 rounded-lg text-white text-sm font-medium transition-all disabled:opacity-60 flex items-center gap-2`}>
+                      className="btn-primary px-5 py-2.5 disabled:opacity-60 flex items-center gap-2 text-sm">
                       {savingOffice ? (
                         <>
                           <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -1932,7 +2005,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       ) : 'حفظ الإعدادات'}
                     </button>
                     <button type="button" onClick={fetchOfficeSettings}
-                      className="px-4 py-2.5 text-slate-400 hover:text-white border border-white/10 hover:border-white/20 text-sm rounded-lg transition-all">
+                      className="btn-ghost px-4 py-2.5 text-sm">
                       إعادة تحميل
                     </button>
                     <div className="flex items-center gap-1.5 text-xs ml-auto">
@@ -1970,8 +2043,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               )}
             </div>
 
-            <div className="glass rounded-xl p-5">
-              <p className="text-xs text-slate-400 uppercase tracking-wider mb-3 font-medium">How it works</p>
+            <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
+              <p className="text-[11px] text-slate-500 uppercase tracking-widest mb-3 font-semibold">How it works</p>
               <div className="space-y-2">
                 {[
                   ['🗺️', 'انقر على الخريطة أو اسحب الدبوس الأحمر لتحديد موقع المكتب مباشرةً — تُحدَّث الإحداثيات تلقائياً'],
@@ -1979,9 +2052,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   ['📡', 'يمكنك أيضاً استخدام زر "تحديد موقعي تلقائياً" لتعيين موقعك الحالي فوراً'],
                   ['🔒', 'جميع عمليات التحقق تتم على الخادم — لا يمكن للموظفين تجاوز الجيوفنس من التطبيق'],
                 ].map(([icon, text]) => (
-                  <div key={text} className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
-                    <span className="text-lg leading-none mt-0.5">{icon}</span>
-                    <p className="text-slate-300 text-sm">{text}</p>
+                  <div key={text} className="flex items-start gap-3 p-3 rounded-xl" style={{background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.05)'}}>
+                    <span className="text-base leading-none mt-0.5">{icon}</span>
+                    <p className="text-slate-400 text-sm">{text}</p>
                   </div>
                 ))}
               </div>
@@ -1989,9 +2062,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
             {/* GitHub Sync Settings — super admin only */}
             {isSuperAdmin && (
-              <div className="glass rounded-xl p-6 animate-fadeIn border border-amber-500/10">
+              <div className="glass-card rounded-2xl p-6 animate-fadeIn" style={{border:'1px solid rgba(245,158,11,0.15)'}}>
                 <div className="flex items-center gap-3 mb-5">
-                  <div className="w-10 h-10 rounded-xl bg-amber-600/20 border border-amber-500/30 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(245,158,11,0.15)', border:'1px solid rgba(245,158,11,0.25)'}}>
                     <svg className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
                     </svg>
@@ -2011,36 +2084,36 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <span className="text-slate-400 text-sm">Loading settings…</span>
                   </div>
                 ) : (
-                  <form onSubmit={handleSaveGithubSync} className="space-y-5">
+                  <form onSubmit={handleSaveGithubSync} className="space-y-4">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Repository URL</label>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Repository URL</label>
                       <input
                         type="url"
                         required
                         value={githubSyncForm.repo_url}
                         onChange={e => setGithubSyncForm(f => ({ ...f, repo_url: e.target.value }))}
                         placeholder="https://github.com/your-org/your-repo.git"
-                        className="w-full bg-white/5 border border-white/10 focus:border-amber-500 focus:outline-none text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-500"
+                        className="w-full bg-white/5 border border-white/8 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 placeholder-slate-600 transition-all"
                       />
-                      <p className="text-slate-500 text-xs mt-1">HTTPS format recommended (e.g. https://github.com/owner/repo.git)</p>
+                      <p className="text-slate-600 text-xs mt-1">HTTPS format recommended (e.g. https://github.com/owner/repo.git)</p>
                     </div>
 
                     <div className="max-w-xs">
-                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">Branch to sync</label>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Branch to sync</label>
                       <input
                         type="text"
                         required
                         value={githubSyncForm.branch}
                         onChange={e => setGithubSyncForm(f => ({ ...f, branch: e.target.value }))}
                         placeholder="main"
-                        className="w-full bg-white/5 border border-white/10 focus:border-amber-500 focus:outline-none text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-500"
+                        className="w-full bg-white/5 border border-white/8 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 placeholder-slate-600 transition-all"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">
                         GitHub Personal Access Token
-                        {githubSyncHasToken && <span className="ml-2 text-green-400 normal-case tracking-normal">(token saved — leave blank to keep existing)</span>}
+                        {githubSyncHasToken && <span className="ml-2 text-emerald-400 normal-case tracking-normal font-normal">(token saved — leave blank to keep existing)</span>}
                       </label>
                       <input
                         type="password"
@@ -2048,20 +2121,20 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                         onChange={e => setGithubSyncForm(f => ({ ...f, token: e.target.value }))}
                         placeholder={githubSyncHasToken ? '••••••••••••••••••••••••••••••••••••••••' : 'ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}
                         autoComplete="new-password"
-                        className="w-full bg-white/5 border border-white/10 focus:border-amber-500 focus:outline-none text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-500 font-mono"
+                        className="w-full bg-white/5 border border-white/8 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 placeholder-slate-600 font-mono transition-all"
                       />
-                      <p className="text-slate-500 text-xs mt-1">Needs <code className="bg-white/10 px-1 rounded">repo</code> scope. Create at GitHub → Settings → Developer settings → Personal access tokens.</p>
+                      <p className="text-slate-600 text-xs mt-1">Needs <code className="bg-white/8 px-1 rounded">repo</code> scope. Create at GitHub → Settings → Developer settings → Personal access tokens.</p>
                     </div>
 
                     {githubSyncTestResult && (
-                      <div className={`px-4 py-3 rounded-lg text-sm flex items-start gap-2 ${githubSyncTestResult.ok ? 'bg-green-900/30 text-green-400 border border-green-500/20' : 'bg-red-900/30 text-red-400 border border-red-500/20'}`}>
+                      <div className={`px-4 py-3 rounded-xl text-sm flex items-start gap-2 ${githubSyncTestResult.ok ? 'bg-emerald-900/20 text-emerald-400 border border-emerald-500/20' : 'bg-red-900/20 text-red-400 border border-red-500/20'}`}>
                         <span>{githubSyncTestResult.ok ? '✓' : '✗'}</span>
                         <span>{githubSyncTestResult.message}</span>
                       </div>
                     )}
 
                     {githubSyncMsg && (
-                      <div className={`px-4 py-3 rounded-lg text-sm ${githubSyncMsg.startsWith('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'}`}>
+                      <div className={`px-4 py-3 rounded-xl text-sm ${githubSyncMsg.startsWith('Error') ? 'bg-red-900/20 text-red-400 border border-red-500/20' : 'bg-emerald-900/20 text-emerald-400 border border-emerald-500/20'}`}>
                         {githubSyncMsg}
                       </div>
                     )}
@@ -2070,7 +2143,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <button
                         type="submit"
                         disabled={savingGithubSync}
-                        className="bg-amber-600 hover:bg-amber-500 disabled:opacity-60 px-5 py-2.5 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2"
+                        className="bg-amber-900/50 hover:bg-amber-800/70 border border-amber-500/25 disabled:opacity-60 px-5 py-2.5 rounded-xl text-amber-300 text-sm font-semibold transition-all flex items-center gap-2"
                       >
                         {savingGithubSync ? (
                           <>
@@ -2086,7 +2159,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                         type="button"
                         onClick={handleTestGithubSync}
                         disabled={testingGithubSync || !githubSyncForm.repo_url}
-                        className="border border-amber-500/30 hover:border-amber-400/50 bg-amber-600/10 hover:bg-amber-600/20 disabled:opacity-50 text-amber-300 hover:text-amber-200 px-5 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
+                        className="border border-amber-500/20 hover:border-amber-400/40 bg-amber-900/20 hover:bg-amber-900/40 disabled:opacity-50 text-amber-400 hover:text-amber-300 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-2"
                       >
                         {testingGithubSync ? (
                           <>
@@ -2112,15 +2185,15 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
             )}
 
             {/* Audit Log */}
-            <div className="glass rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+            <div className="glass-card rounded-2xl overflow-hidden" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
                 <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
                   </svg>
-                  <h3 className="text-white font-medium text-sm">Change History</h3>
+                  <h3 className="text-white font-semibold text-sm">Change History</h3>
                 </div>
-                <button onClick={fetchSettingsLog} className="text-xs text-slate-400 hover:text-white transition-colors flex items-center gap-1">
+                <button onClick={fetchSettingsLog} className="text-xs text-slate-500 hover:text-white transition-colors flex items-center gap-1">
                   <svg className={`w-3.5 h-3.5 ${loadingLog ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                   </svg>
@@ -2194,10 +2267,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
       {/* ── Reset Password Modal ── */}
       {resetPwdTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.7)', backdropFilter:'blur(8px)'}}>
-          <div className="w-full max-w-sm glass rounded-2xl p-6 animate-scaleIn border border-white/10 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.75)', backdropFilter:'blur(12px)'}}>
+          <div className="w-full max-w-sm glass-card rounded-2xl p-6 animate-scaleIn shadow-2xl" style={{border:'1px solid rgba(245,158,11,0.2)'}}>
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-amber-600/20 border border-amber-500/30 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(245,158,11,0.15)', border:'1px solid rgba(245,158,11,0.25)'}}>
                 <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                 </svg>
@@ -2210,7 +2283,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
             <form onSubmit={submitResetPwd} className="space-y-4">
               <div>
-                <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">New Password</label>
+                <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">New Password</label>
                 <div className="relative">
                   <input
                     type={resetPwdShow ? 'text' : 'password'}
@@ -2219,7 +2292,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     autoFocus
                     autoComplete="new-password"
                     placeholder="Min. 6 characters"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500 pr-10 transition-all"
+                    className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 placeholder-slate-600 pr-10 transition-all"
                   />
                   <button type="button" onClick={() => setResetPwdShow(v => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors">
@@ -2239,7 +2312,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={resettingUserId === resetPwdTarget.id || !resetPwdValue}
-                  className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-sm font-medium py-2.5 rounded-lg transition-all">
+                  className="flex-1 bg-amber-900/50 hover:bg-amber-800/70 border border-amber-500/25 disabled:opacity-40 text-amber-300 text-sm font-semibold py-2.5 rounded-xl transition-all">
                   {resettingUserId === resetPwdTarget.id ? (
                     <span className="flex items-center justify-center gap-2">
                       <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
@@ -2248,7 +2321,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   ) : 'Reset Password'}
                 </button>
                 <button type="button" onClick={() => setResetPwdTarget(null)}
-                  className="px-4 py-2.5 text-slate-400 hover:text-white border border-white/10 hover:border-white/20 text-sm rounded-lg transition-all">
+                  className="btn-ghost px-4 py-2.5 text-sm">
                   Cancel
                 </button>
               </div>

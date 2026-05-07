@@ -326,7 +326,7 @@ export default function MemberDashboard() {
     const canChangeStatus = (isMyTicket(selectedTicket) || isAssignee) && selectedTicket.status !== 'solved'
     const statuses = ['opened', 'pending', 'solved']
     return (
-      <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
+      <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 60% -10%, rgba(49,46,129,0.45) 0%, transparent 55%), #05050a'}}>
         <Navbar title="Finest" />
         <div className="max-w-4xl mx-auto p-6">
           <button onClick={()=>setSelectedTicket(null)} className="group flex items-center gap-2 text-slate-400 hover:text-white text-sm mb-6 transition-colors">
@@ -480,28 +480,28 @@ export default function MemberDashboard() {
   }
 
   const tabs = ['tickets', 'myTickets', 'requests', 'leave', ...(profile?.can_view_attendance ? ['attendance'] : [])]
-  const tabLabels = { tickets: 'Assigned Tickets', myTickets: 'My Tickets', requests: 'Requests', leave: 'Leave', attendance: 'Attendance' }
+  const tabLabels = { tickets: 'Assigned', myTickets: 'My Tickets', requests: 'Requests', leave: 'Leave', attendance: 'Attendance' }
 
   return (
-    <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 70% 0%, #0d1a3a 0%, #0a0a0f 50%)'}}>
+    <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 60% -10%, rgba(49,46,129,0.45) 0%, transparent 55%), #05050a'}}>
       <Navbar title="Finest" />
       <div className="max-w-4xl mx-auto p-6">
 
         {/* Attendance */}
-        <div className="glass rounded-xl p-5 mb-6">
+        <div className="glass-card rounded-2xl p-5 mb-6" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1">
-              <p className="text-slate-400 text-sm mb-2 uppercase tracking-wider font-medium">Today's Attendance</p>
+              <p className="text-[11px] text-slate-500 mb-2 uppercase tracking-widest font-semibold">Today's Attendance</p>
               {todayLogin ? (
                 <div className="space-y-1">
                   <p className="text-white font-medium flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-green-400 inline-block"></span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse-slow"></span>
                     Check-in: {new Date(todayLogin.login_time).toLocaleTimeString()}
                   </p>
                   <p className="text-slate-300 text-sm">
                     Check-out: {todayLogin.logout_time ? new Date(todayLogin.logout_time).toLocaleTimeString() : <span className="text-amber-400">Pending</span>}
                   </p>
-                  {todayLogin.logout_time && <p className="text-green-400 text-xs font-medium">⏱ Worked: {formatWorkDuration(todayLogin.login_time, todayLogin.logout_time)}</p>}
+                  {todayLogin.logout_time && <p className="text-emerald-400 text-xs font-medium">⏱ Worked: {formatWorkDuration(todayLogin.login_time, todayLogin.logout_time)}</p>}
                   {todayLogin.latitude && <p className="text-slate-500 text-xs">📍 {todayLogin.latitude.toFixed(4)}, {todayLogin.longitude.toFixed(4)}</p>}
                 </div>
               ) : <p className="text-slate-500 text-sm">No check-in recorded today</p>}
@@ -519,16 +519,20 @@ export default function MemberDashboard() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 p-1 rounded-xl overflow-x-auto border border-white/8" style={{background:'rgba(255,255,255,0.02)'}}>
+        <div className="flex gap-1 mb-6 p-1 rounded-2xl overflow-x-auto"
+          style={{background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.06)'}}>
           {tabs.map(t => (
             <button
               key={t}
               onClick={()=>setActiveTab(t)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${activeTab===t ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${activeTab===t ? 'tab-active-indigo' : 'tab-inactive'}`}
             >
               {tabLabels[t]}
               {t === 'myTickets' && myRequests.length > 0 && (
-                <span className="ml-2 bg-amber-500/20 text-amber-400 text-xs px-1.5 py-0.5 rounded-full">{myRequests.length}</span>
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold"
+                  style={{background:'rgba(99,102,241,0.3)', color:'#a5b4fc'}}>
+                  {myRequests.length}
+                </span>
               )}
             </button>
           ))}
@@ -537,16 +541,18 @@ export default function MemberDashboard() {
         {/* Assigned Tickets Tab */}
         {activeTab === 'tickets' && (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
               {[
-                { label: 'Total',   val: assignedTickets.length,                                          color: 'text-slate-200', acc: 'rgba(148,163,184,0.08)', bd: 'rgba(148,163,184,0.15)' },
-                { label: 'Opened',  val: assignedTickets.filter(t=>t.status==='opened').length,           color: 'text-blue-400',  acc: 'rgba(59,130,246,0.08)',  bd: 'rgba(59,130,246,0.2)' },
-                { label: 'Pending', val: assignedTickets.filter(t=>t.status==='pending').length,          color: 'text-amber-400', acc: 'rgba(245,158,11,0.08)',  bd: 'rgba(245,158,11,0.2)' },
-                { label: 'Solved',  val: assignedTickets.filter(t=>t.status==='solved').length,           color: 'text-emerald-400',acc:'rgba(52,211,153,0.08)',  bd: 'rgba(52,211,153,0.2)' },
-              ].map(s => (
-                <div key={s.label} className="rounded-xl p-4 border" style={{background:s.acc, borderColor:s.bd}}>
-                  <p className="text-xs text-slate-500 mb-2 uppercase tracking-wider font-medium">{s.label}</p>
-                  <p className={`text-2xl font-bold ${s.color}`}>{s.val}</p>
+                { label: 'Total',   val: assignedTickets.length,                                 color: '#94a3b8', acc: 'rgba(99,102,241,0.06)',  bd: 'rgba(99,102,241,0.14)',  bar: 'rgba(99,102,241,0.5)' },
+                { label: 'Opened',  val: assignedTickets.filter(t=>t.status==='opened').length,  color: '#60a5fa', acc: 'rgba(59,130,246,0.07)',  bd: 'rgba(59,130,246,0.16)',  bar: '#3b82f6' },
+                { label: 'Pending', val: assignedTickets.filter(t=>t.status==='pending').length, color: '#fbbf24', acc: 'rgba(245,158,11,0.07)',  bd: 'rgba(245,158,11,0.16)',  bar: '#f59e0b' },
+                { label: 'Solved',  val: assignedTickets.filter(t=>t.status==='solved').length,  color: '#34d399', acc: 'rgba(16,185,129,0.07)',  bd: 'rgba(16,185,129,0.16)',  bar: '#10b981' },
+              ].map((s, i) => (
+                <div key={s.label} className="relative rounded-2xl p-4 overflow-hidden glass-card animate-fadeIn"
+                  style={{border:`1px solid ${s.bd}`, background:s.acc, animationDelay:`${i*0.07}s`}}>
+                  <div className="absolute top-0 left-0 w-0.5 h-full" style={{background:s.bar}} />
+                  <p className="text-[11px] text-slate-500 mb-2 uppercase tracking-widest font-semibold pl-2">{s.label}</p>
+                  <p className="text-2xl font-black pl-2" style={{color:s.color}}>{s.val}</p>
                 </div>
               ))}
             </div>
@@ -559,23 +565,35 @@ export default function MemberDashboard() {
                   value={ticketSearch}
                   onChange={e => setTicketSearch(e.target.value)}
                   placeholder="Search tickets..."
-                  className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500"
+                  className="w-full bg-white/5 border border-white/8 rounded-xl pl-9 pr-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all"
                 />
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-1.5">
                 {['all','opened','pending','solved'].map(f => (
-                  <button key={f} onClick={()=>setFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${filter===f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>{f}</button>
+                  <button key={f} onClick={()=>setFilter(f)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${filter===f ? 'tab-active-indigo' : 'tab-inactive border border-white/8'}`}>{f}</button>
                 ))}
               </div>
             </div>
-            <div className="space-y-3">
-              {filteredAssigned.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">{assignedTickets.length === 0 ? 'No tickets' : 'No tickets match your search'}</div>}
+            <div className="space-y-2.5">
+              {filteredAssigned.length === 0 && (
+                <div className="glass-card rounded-2xl py-12 text-center" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
+                  <div className="empty-state">
+                    <div className="empty-state-icon">
+                      <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a3 3 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z" />
+                      </svg>
+                    </div>
+                    <p className="text-slate-500 text-sm">{assignedTickets.length === 0 ? 'No tickets assigned' : 'No tickets match your search'}</p>
+                  </div>
+                </div>
+              )}
               {filteredAssigned.map((t, i) => (
                 <div key={t.id}
-                  className="group rounded-xl p-4 cursor-pointer transition-all border border-white/6 hover:border-white/14 animate-fadeIn"
-                  style={{background:'rgba(255,255,255,0.03)', animationDelay:`${i*0.05}s`}}
-                  onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.055)'}
-                  onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
+                  className="group rounded-2xl p-4 cursor-pointer transition-all animate-fadeIn glass-card"
+                  style={{border:'1px solid rgba(255,255,255,0.06)', animationDelay:`${i*0.05}s`}}
+                  onMouseEnter={e=>{ e.currentTarget.style.background='rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.1)' }}
+                  onMouseLeave={e=>{ e.currentTarget.style.background=''; e.currentTarget.style.borderColor='rgba(255,255,255,0.06)' }}
                   onClick={()=>setSelectedTicket(t)}
                 >
                   <div className="flex items-start gap-3">
@@ -607,49 +625,49 @@ export default function MemberDashboard() {
               </div>
               <button
                 onClick={()=>{setShowRequestForm(v=>!v); setRequestMsg('')}}
-                className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg font-medium"
+                className="btn-primary text-sm px-4 py-2"
               >
                 {showRequestForm ? 'Close' : '+ New Ticket'}
               </button>
             </div>
 
             {showRequestForm && (
-              <form onSubmit={submitRequest} className="glass rounded-xl p-5 mb-6 space-y-4 border border-blue-500/20">
-                <h3 className="text-white font-medium">Send Ticket to Admin</h3>
-                {requestMsg && <div className={`${requestMsg.includes('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'} text-sm rounded-lg p-3`}>{requestMsg}</div>}
+              <form onSubmit={submitRequest} className="glass-card rounded-2xl p-5 mb-6 space-y-4" style={{border:'1px solid rgba(99,102,241,0.2)'}}>
+                <h3 className="text-white font-semibold text-sm">Send Ticket to Admin</h3>
+                {requestMsg && <div className={`text-sm rounded-xl p-3 ${requestMsg.includes('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{requestMsg}</div>}
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Title *</label>
-                  <input type="text" required placeholder="Brief description..." value={requestForm.title} onChange={e=>setRequestForm(f=>({...f,title:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Title *</label>
+                  <input type="text" required placeholder="Brief description..." value={requestForm.title} onChange={e=>setRequestForm(f=>({...f,title:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Description</label>
-                  <textarea placeholder="Explain the issue..." rows={3} value={requestForm.description} onChange={e=>setRequestForm(f=>({...f,description:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" />
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Description</label>
+                  <textarea placeholder="Explain the issue..." rows={3} value={requestForm.description} onChange={e=>setRequestForm(f=>({...f,description:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 resize-none transition-all" />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Affected Person</label>
-                  <input type="text" placeholder="Who is affected? (optional)" value={requestForm.affected_person} onChange={e=>setRequestForm(f=>({...f,affected_person:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Affected Person</label>
+                  <input type="text" placeholder="Who is affected? (optional)" value={requestForm.affected_person} onChange={e=>setRequestForm(f=>({...f,affected_person:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" />
                 </div>
                 <div className="flex gap-2">
-                  <button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-5 py-2 rounded-lg font-medium">{loading ? 'Submitting...' : 'Send to Admin'}</button>
-                  <button type="button" onClick={()=>setShowRequestForm(false)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
+                  <button type="submit" disabled={loading} className="btn-primary disabled:opacity-50 text-sm px-5 py-2">{loading ? 'Submitting...' : 'Send to Admin'}</button>
+                  <button type="button" onClick={()=>setShowRequestForm(false)} className="btn-ghost text-sm px-4 py-2">Cancel</button>
                 </div>
               </form>
             )}
 
             {myRequests.length > 0 && (
               <div className="mb-6">
-                <h3 className="text-slate-400 text-xs uppercase tracking-wider mb-3">Pending Requests</h3>
-                <div className="space-y-3">
+                <h3 className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold mb-3">Pending Requests</h3>
+                <div className="space-y-2">
                   {myRequests.map(r => {
                     const info = requestStatusInfo(r.request_status)
                     return (
-                      <div key={r.id} className="glass rounded-xl p-4">
+                      <div key={r.id} className="glass-card rounded-2xl p-4" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${info.cls}`}>{info.label}</span>
-                          <span className="text-slate-500 text-xs">{new Date(r.created_at).toLocaleDateString()}</span>
+                          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${info.cls}`}>{info.label}</span>
+                          <span className="text-slate-500 text-[11px]">{new Date(r.created_at).toLocaleDateString()}</span>
                         </div>
-                        <h3 className="text-white font-medium">{r.title}</h3>
-                        {r.description && <p className="text-slate-400 text-sm mt-1">{r.description}</p>}
+                        <h3 className="text-slate-100 font-semibold text-sm">{r.title}</h3>
+                        {r.description && <p className="text-slate-500 text-xs mt-1">{r.description}</p>}
                       </div>
                     )
                   })}
@@ -659,94 +677,110 @@ export default function MemberDashboard() {
 
             {myOwnTickets.length > 0 && (
               <div>
-                <h3 className="text-slate-400 text-xs uppercase tracking-wider mb-3">Accepted Tickets</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                <h3 className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold mb-3">Accepted Tickets</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                   {[
-                    { label: 'Total', val: myOwnTickets.length, color: 'text-white', icon: '📊' },
-                    { label: 'Opened', val: myOwnTickets.filter(t=>t.status==='opened').length, color: 'text-blue-400', icon: '🔵' },
-                    { label: 'Pending', val: myOwnTickets.filter(t=>t.status==='pending').length, color: 'text-yellow-400', icon: '🟡' },
-                    { label: 'Solved', val: myOwnTickets.filter(t=>t.status==='solved').length, color: 'text-green-400', icon: '✅' },
-                  ].map(s => (
-                    <div key={s.label} className="glass rounded-xl p-3">
-                      <p className="text-xs text-slate-400 mb-1 flex items-center gap-1"><span>{s.icon}</span>{s.label}</p>
-                      <p className={`text-xl font-semibold ${s.color}`}>{s.val}</p>
+                    { label: 'Total',   val: myOwnTickets.length,                                color: '#94a3b8', bar: 'rgba(99,102,241,0.5)',  acc: 'rgba(99,102,241,0.06)',  bd: 'rgba(99,102,241,0.14)' },
+                    { label: 'Opened',  val: myOwnTickets.filter(t=>t.status==='opened').length,  color: '#60a5fa', bar: '#3b82f6',               acc: 'rgba(59,130,246,0.07)',  bd: 'rgba(59,130,246,0.16)' },
+                    { label: 'Pending', val: myOwnTickets.filter(t=>t.status==='pending').length, color: '#fbbf24', bar: '#f59e0b',               acc: 'rgba(245,158,11,0.07)',  bd: 'rgba(245,158,11,0.16)' },
+                    { label: 'Solved',  val: myOwnTickets.filter(t=>t.status==='solved').length,  color: '#34d399', bar: '#10b981',               acc: 'rgba(16,185,129,0.07)',  bd: 'rgba(16,185,129,0.16)' },
+                  ].map((s, i) => (
+                    <div key={s.label} className="relative rounded-2xl p-4 overflow-hidden glass-card animate-fadeIn"
+                      style={{border:`1px solid ${s.bd}`, background:s.acc, animationDelay:`${i*0.07}s`}}>
+                      <div className="absolute top-0 left-0 w-0.5 h-full" style={{background:s.bar}} />
+                      <p className="text-[11px] text-slate-500 mb-2 uppercase tracking-widest font-semibold pl-2">{s.label}</p>
+                      <p className="text-2xl font-black pl-2" style={{color:s.color}}>{s.val}</p>
                     </div>
                   ))}
                 </div>
                 <div className="flex flex-col gap-2 mb-3">
                   <div className="relative">
-                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                     </svg>
                     <input
                       value={myTicketSearch}
                       onChange={e => setMyTicketSearch(e.target.value)}
                       placeholder="Search my tickets..."
-                      className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 placeholder-slate-500"
+                      className="w-full bg-white/5 border border-white/8 rounded-xl pl-9 pr-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all"
                     />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5">
                     {['all','opened','pending','solved'].map(f => (
-                      <button key={f} onClick={()=>setMyFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${myFilter===f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white border border-white/10'}`}>{f}</button>
+                      <button key={f} onClick={()=>setMyFilter(f)} className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize transition-all ${myFilter===f ? 'tab-active-indigo' : 'tab-inactive border border-white/8'}`}>{f}</button>
                     ))}
                   </div>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {filteredMy.map((t, i) => (
                     <div key={t.id}
-                      className="group rounded-xl p-4 cursor-pointer transition-all border border-white/6 hover:border-white/14 animate-fadeIn"
-                      style={{background:'rgba(255,255,255,0.03)', animationDelay:`${i*0.05}s`}}
-                      onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.055)'}
-                      onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
+                      className="group rounded-2xl p-4 cursor-pointer transition-all animate-fadeIn glass-card"
+                      style={{border:'1px solid rgba(255,255,255,0.06)', animationDelay:`${i*0.05}s`}}
+                      onMouseEnter={e=>{ e.currentTarget.style.background='rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.1)' }}
+                      onMouseLeave={e=>{ e.currentTarget.style.background=''; e.currentTarget.style.borderColor='rgba(255,255,255,0.06)' }}
                       onClick={()=>setSelectedTicket(t)}
                     >
                       <div className="flex items-start gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <StatusBadge status={t.status} />
-                            <span className="text-[11px] px-2 py-0.5 rounded-full border" style={{background:'rgba(59,130,246,0.1)',color:'#60a5fa',borderColor:'rgba(59,130,246,0.2)'}}>My Ticket</span>
-                            <span className="text-slate-600 text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
+                            <span className="text-[11px] px-2 py-0.5 rounded-full border" style={{background:'rgba(99,102,241,0.1)',color:'#a5b4fc',borderColor:'rgba(99,102,241,0.2)'}}>My Ticket</span>
+                            <span className="text-slate-600 text-[11px]">{new Date(t.created_at).toLocaleDateString()}</span>
                           </div>
-                          <h3 className="text-white text-sm font-medium group-hover:text-blue-200 transition-colors leading-snug">{t.title}</h3>
+                          <h3 className="text-slate-100 text-sm font-semibold group-hover:text-white transition-colors leading-snug">{t.title}</h3>
                           {t.description && <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 leading-relaxed">{t.description}</p>}
                         </div>
-                        <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 flex-shrink-0 mt-1 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 flex-shrink-0 mt-0.5 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                         </svg>
                       </div>
                     </div>
                   ))}
-                  {filteredMy.length === 0 && <div className="rounded-xl py-8 text-center text-slate-500 text-sm border border-white/6" style={{background:'rgba(255,255,255,0.02)'}}>No tickets with this status</div>}
+                  {filteredMy.length === 0 && (
+                    <div className="glass-card rounded-2xl py-8 text-center" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
+                      <p className="text-slate-500 text-sm">No tickets with this status</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
             {myRequests.length === 0 && myOwnTickets.length === 0 && !showRequestForm && (
-              <div className="glass rounded-xl py-16 text-center">
-                <p className="text-slate-400 text-4xl mb-4">🎫</p>
-                <p className="text-white font-medium mb-2">No tickets yet</p>
-                <p className="text-slate-500 text-sm mb-5">Create a ticket and send it to admin for review</p>
-                <button onClick={()=>setShowRequestForm(true)} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-5 py-2 rounded-lg font-medium">+ Create First Ticket</button>
+              <div className="glass-card rounded-2xl py-16" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
+                <div className="empty-state">
+                  <div className="empty-state-icon">
+                    <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a3 3 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z" />
+                    </svg>
+                  </div>
+                  <p className="text-white font-semibold mb-1">No tickets yet</p>
+                  <p className="text-slate-500 text-sm mb-5">Create a ticket and send it to admin for review</p>
+                  <button onClick={()=>setShowRequestForm(true)} className="btn-primary text-sm px-5 py-2">+ Create First Ticket</button>
+                </div>
               </div>
             )}
           </>
         )}
 
-        {/* Requests tab (old pending requests only) */}
+        {/* Requests tab */}
         {activeTab === 'requests' && (
           <>
-            <div className="space-y-3">
-              {myRequests.length === 0 && <div className="glass rounded-xl py-12 text-center text-slate-500">No requests yet</div>}
+            <div className="space-y-2">
+              {myRequests.length === 0 && (
+                <div className="glass-card rounded-2xl py-12" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
+                  <div className="empty-state"><p className="text-slate-500 text-sm">No requests yet</p></div>
+                </div>
+              )}
               {myRequests.map(r => {
                 const info = requestStatusInfo(r.request_status)
                 return (
-                  <div key={r.id} className="glass rounded-xl p-4">
+                  <div key={r.id} className="glass-card rounded-2xl p-4" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${info.cls}`}>{info.label}</span>
-                      <span className="text-slate-500 text-xs">{new Date(r.created_at).toLocaleDateString()}</span>
+                      <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${info.cls}`}>{info.label}</span>
+                      <span className="text-slate-500 text-[11px]">{new Date(r.created_at).toLocaleDateString()}</span>
                     </div>
-                    <h3 className="text-white font-medium">{r.title}</h3>
-                    {r.description && <p className="text-slate-400 text-sm mt-1">{r.description}</p>}
+                    <h3 className="text-slate-100 font-semibold text-sm">{r.title}</h3>
+                    {r.description && <p className="text-slate-500 text-xs mt-1">{r.description}</p>}
                   </div>
                 )
               })}
@@ -757,46 +791,50 @@ export default function MemberDashboard() {
         {activeTab === 'leave' && (
           <>
             <div className="mb-4 flex items-center justify-between">
-              <button onClick={()=>{setShowLeaveForm(v=>!v);setLeaveMsg('')}} className="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded-lg">
+              <button onClick={()=>{setShowLeaveForm(v=>!v);setLeaveMsg('')}} className="btn-primary text-sm px-4 py-2">
                 {showLeaveForm ? 'Close' : '+ Request Leave'}
               </button>
-              <div className="text-xs text-slate-400 flex gap-3">
-                <span>Pending: <span className="text-yellow-400 font-medium">{leaveRequests.filter(r=>r.status==='pending').length}</span></span>
-                <span>Approved: <span className="text-green-400 font-medium">{leaveRequests.filter(r=>r.status==='approved').length}</span></span>
+              <div className="text-xs text-slate-500 flex gap-3">
+                <span>Pending: <span className="text-amber-400 font-semibold">{leaveRequests.filter(r=>r.status==='pending').length}</span></span>
+                <span>Approved: <span className="text-emerald-400 font-semibold">{leaveRequests.filter(r=>r.status==='approved').length}</span></span>
               </div>
             </div>
             {showLeaveForm && (
-              <form onSubmit={submitLeaveRequest} className="glass rounded-xl p-5 mb-4 space-y-3">
-                {leaveMsg && <div className={`${leaveMsg.startsWith('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'} text-sm rounded-lg p-3`}>{leaveMsg}</div>}
+              <form onSubmit={submitLeaveRequest} className="rounded-2xl p-5 mb-4 space-y-3" style={{background:'rgba(99,102,241,0.05)', border:'1px solid rgba(99,102,241,0.2)'}}>
+                {leaveMsg && <div className={`text-sm rounded-xl p-3 ${leaveMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{leaveMsg}</div>}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Start Date</label>
-                    <input type="date" required value={leaveForm.start_date} onChange={e=>setLeaveForm(f=>({...f,start_date:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Start Date</label>
+                    <input type="date" required value={leaveForm.start_date} onChange={e=>setLeaveForm(f=>({...f,start_date:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">End Date</label>
-                    <input type="date" required value={leaveForm.end_date} onChange={e=>setLeaveForm(f=>({...f,end_date:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">End Date</label>
+                    <input type="date" required value={leaveForm.end_date} onChange={e=>setLeaveForm(f=>({...f,end_date:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
                   </div>
                 </div>
-                <textarea placeholder="Reason (optional)" rows={2} value={leaveForm.reason} onChange={e=>setLeaveForm(f=>({...f,reason:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none" />
+                <textarea placeholder="Reason (optional)" rows={2} value={leaveForm.reason} onChange={e=>setLeaveForm(f=>({...f,reason:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 resize-none transition-all" />
                 <div className="flex gap-2">
-                  <button type="submit" disabled={submittingLeave} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">{submittingLeave ? 'Submitting...' : 'Submit'}</button>
-                  <button type="button" onClick={()=>setShowLeaveForm(false)} className="text-slate-400 hover:text-white border border-white/10 text-sm px-4 py-2 rounded-lg">Cancel</button>
+                  <button type="submit" disabled={submittingLeave} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{submittingLeave ? 'Submitting...' : 'Submit'}</button>
+                  <button type="button" onClick={()=>setShowLeaveForm(false)} className="btn-ghost text-sm px-4 py-2">Cancel</button>
                 </div>
               </form>
             )}
             <div className="space-y-2">
-              {leaveRequests.length === 0 && <p className="text-slate-500 text-sm text-center py-4">No leave requests yet</p>}
+              {leaveRequests.length === 0 && (
+                <div className="empty-state py-10">
+                  <p className="text-slate-500 text-sm">No leave requests yet</p>
+                </div>
+              )}
               {leaveRequests.map(r => (
-                <div key={r.id} className={`bg-white/5 rounded-lg p-3 border ${r.status==='pending' ? 'border-yellow-500/20' : r.status==='approved' ? 'border-green-500/20' : 'border-red-500/20'}`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${r.status==='approved' ? 'bg-green-900/30 text-green-400' : r.status==='rejected' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
-                      {r.status==='pending' ? '⏳ Pending' : r.status==='approved' ? '✅ Approved' : '❌ Rejected'}
+                <div key={r.id} className="rounded-2xl p-3.5 glass-card" style={{border: r.status==='pending' ? '1px solid rgba(245,158,11,0.2)' : r.status==='approved' ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(239,68,68,0.2)'}}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${r.status==='approved' ? 'bg-emerald-900/30 text-emerald-400' : r.status==='rejected' ? 'bg-red-900/30 text-red-400' : 'bg-amber-900/30 text-amber-400'}`}>
+                      {r.status==='pending' ? 'Pending' : r.status==='approved' ? 'Approved' : 'Rejected'}
                     </span>
-                    <span className="text-slate-300 text-sm">{new Date(r.start_date).toLocaleDateString()} → {new Date(r.end_date).toLocaleDateString()}</span>
+                    <span className="text-slate-400 text-sm">{new Date(r.start_date).toLocaleDateString()} — {new Date(r.end_date).toLocaleDateString()}</span>
                   </div>
-                  {r.reason && <p className="text-slate-400 text-xs mt-1">{r.reason}</p>}
-                  {r.admin_note && <p className="text-slate-300 text-xs mt-2 bg-white/5 rounded p-2"><span className="text-slate-500">Admin note: </span>{r.admin_note}</p>}
+                  {r.reason && <p className="text-slate-500 text-xs mt-1">{r.reason}</p>}
+                  {r.admin_note && <p className="text-slate-400 text-xs mt-2 rounded-xl px-3 py-2" style={{background:'rgba(255,255,255,0.04)'}}><span className="text-slate-500">Note: </span>{r.admin_note}</p>}
                 </div>
               ))}
             </div>
@@ -806,10 +844,10 @@ export default function MemberDashboard() {
         {activeTab === 'attendance' && profile?.can_view_attendance && (
           <>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-white font-medium">Attendance Table</h2>
-              <input type="date" value={attendanceDate} onChange={e=>setAttendanceDate(e.target.value)} className="bg-white/5 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500" />
+              <h2 className="text-white font-semibold text-sm">Attendance Table</h2>
+              <input type="date" value={attendanceDate} onChange={e=>setAttendanceDate(e.target.value)} className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 transition-all" />
             </div>
-            <div className="glass rounded-2xl overflow-hidden">
+            <div className="glass-card rounded-2xl overflow-hidden" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
