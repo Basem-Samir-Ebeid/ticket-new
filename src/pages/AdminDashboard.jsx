@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
-import Navbar from '../components/Navbar'
+import Sidebar from '../components/Sidebar'
 import StatusBadge from '../components/StatusBadge'
 import AttendanceButton from '../components/AttendanceButton'
 import FileAttachment from '../components/FileAttachment'
@@ -18,7 +18,6 @@ function getLocalDateString(date = new Date()) {
 export default function AdminDashboard({ isSuperAdmin = false }) {
   const { user } = useAuth()
   const btnPrimary = isSuperAdmin ? 'bg-amber-600 hover:bg-amber-500' : 'bg-indigo-600 hover:bg-indigo-500'
-  const tabActiveCls = isSuperAdmin ? 'tab-active-amber' : 'tab-active-indigo'
   const bgGrad = isSuperAdmin
     ? 'radial-gradient(ellipse at 60% -10%, rgba(120,53,15,0.5) 0%, transparent 55%), radial-gradient(ellipse at 90% 60%, rgba(80,30,5,0.25) 0%, transparent 45%), #05050a'
     : 'radial-gradient(ellipse at 60% -10%, rgba(49,46,129,0.5) 0%, transparent 55%), radial-gradient(ellipse at 10% 80%, rgba(30,15,80,0.25) 0%, transparent 45%), #05050a'
@@ -703,12 +702,28 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2)
   })
 
+  const adminTabs = [
+    { key: 'dashboard',   label: 'Dashboard',   icon: 'dashboard' },
+    { key: 'tickets',     label: 'Tickets',     icon: 'tickets' },
+    { key: 'requests',    label: 'Requests',    icon: 'requests',    badge: requests.filter(r=>r.request_status==='pending_review').length },
+    { key: 'leave',       label: 'Leave',       icon: 'leave',       badge: leaveRequests.filter(r=>r.status==='pending').length },
+    { key: 'users',       label: 'Users',       icon: 'users' },
+    { key: 'attendance',  label: 'Attendance',  icon: 'attendance' },
+    { key: 'performance', label: 'Performance', icon: 'performance' },
+    { key: 'settings',    label: 'Settings',    icon: 'settings' },
+  ]
+  function handleAdminTabChange(t) {
+    setTab(t); setSelectedTicket(null)
+    if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings() }
+  }
+
   // ── Ticket detail view ──
   if (selectedTicket) {
     return (
       <div className="min-h-screen" style={{background: bgGrad}}>
-        <Navbar title="Finest" />
-        <div className="max-w-4xl mx-auto p-6">
+        <Sidebar tabs={adminTabs} activeTab={tab} onTabChange={handleAdminTabChange} isSuperAdmin={isSuperAdmin} />
+        <div className="lg:ml-64">
+        <div className="max-w-4xl mx-auto p-4 pt-16 lg:pt-6 lg:p-6 pb-24 lg:pb-6">
           <button onClick={() => setSelectedTicket(null)} className="group flex items-center gap-2 text-slate-400 hover:text-white text-sm mb-6 transition-colors">
             <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
@@ -818,49 +833,21 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
             </form>
           </div>
         </div>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="min-h-screen" style={{background: bgGrad}}>
-      <Navbar title="Finest" />
-
-      <div className="max-w-7xl mx-auto p-6">
+      <Sidebar tabs={adminTabs} activeTab={tab} onTabChange={handleAdminTabChange} isSuperAdmin={isSuperAdmin} />
+      <div className="lg:ml-64">
+      <div className="max-w-7xl mx-auto p-4 pt-16 lg:pt-6 lg:p-6 pb-24 lg:pb-6">
         {msg && (
           <div className={`mb-4 px-4 py-3 rounded-lg animate-fadeIn ${msg.startsWith('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'}`}>
             {msg}
           </div>
         )}
-
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 p-1 rounded-2xl overflow-x-auto"
-          style={{background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.06)'}}>
-          {[
-            { key: 'dashboard',     label: 'Dashboard' },
-            { key: 'tickets',       label: 'Tickets' },
-            { key: 'requests',      label: 'Requests',  badge: requests.filter(r=>r.request_status==='pending_review').length },
-            { key: 'leave',         label: 'Leave',     badge: leaveRequests.filter(r=>r.status==='pending').length },
-            { key: 'users',         label: 'Users' },
-            { key: 'attendance',    label: 'Attendance' },
-            { key: 'performance',   label: 'Performance' },
-            { key: 'settings',      label: 'Settings' },
-          ].map(({ key: t, label, badge }) => (
-            <button key={t} onClick={() => {
-              setTab(t); setSelectedTicket(null)
-              if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings() }
-            }}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${tab === t ? tabActiveCls : 'tab-inactive'}`}>
-              {label}
-              {badge > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold"
-                  style={{background: isSuperAdmin ? 'rgba(245,158,11,0.25)' : 'rgba(99,102,241,0.3)', color: isSuperAdmin ? '#fbbf24' : '#a5b4fc'}}>
-                  {badge}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
 
         {/* Dashboard Tab */}
         {tab === 'dashboard' && (
@@ -2237,6 +2224,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
           </div>
         )}
 
+      </div>
       </div>
 
       {/* ── Reset Password Modal ── */}

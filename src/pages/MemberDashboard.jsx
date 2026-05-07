@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { playNotificationSound, showBrowserNotification } from '../lib/sound'
-import Navbar from '../components/Navbar'
+import Sidebar from '../components/Sidebar'
 import StatusBadge from '../components/StatusBadge'
 import AttendanceButton from '../components/AttendanceButton'
 import FileAttachment from '../components/FileAttachment'
@@ -354,14 +354,23 @@ export default function MemberDashboard() {
     return { label: '⏳ Pending Review', cls: 'bg-yellow-900/30 text-yellow-400 border border-yellow-500/20' }
   }
 
+  const memberTabs = [
+    { key: 'tickets',     label: 'Assigned',    icon: 'assigned' },
+    { key: 'myTickets',   label: 'My Tickets',  icon: 'myTickets' },
+    { key: 'requests',    label: 'Requests',    icon: 'requests' },
+    { key: 'leave',       label: 'Leave',       icon: 'leave' },
+    ...(profile?.can_view_attendance ? [{ key: 'attendance', label: 'Attendance', icon: 'attendance' }] : []),
+  ]
+
   if (selectedTicket) {
     const isAssignee = selectedTicket.assigned_to === user?.id
     const canChangeStatus = (isMyTicket(selectedTicket) || isAssignee) && selectedTicket.status !== 'solved'
     const statuses = ['opened', 'pending', 'solved']
     return (
       <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 60% -10%, rgba(49,46,129,0.45) 0%, transparent 55%), #05050a'}}>
-        <Navbar title="Finest" />
-        <div className="max-w-4xl mx-auto p-6">
+        <Sidebar tabs={memberTabs} activeTab={activeTab} onTabChange={(t) => { setActiveTab(t); setSelectedTicket(null) }} />
+        <div className="lg:ml-64">
+        <div className="max-w-4xl mx-auto p-4 pt-16 lg:pt-6 lg:p-6 pb-24 lg:pb-6">
           <button onClick={()=>setSelectedTicket(null)} className="group flex items-center gap-2 text-slate-400 hover:text-white text-sm mb-6 transition-colors">
             <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
@@ -543,17 +552,16 @@ export default function MemberDashboard() {
             </div>
           )}
         </div>
+        </div>
       </div>
     )
   }
 
-  const tabs = ['tickets', 'myTickets', 'requests', 'leave', ...(profile?.can_view_attendance ? ['attendance'] : [])]
-  const tabLabels = { tickets: 'Assigned', myTickets: 'My Tickets', requests: 'Requests', leave: 'Leave', attendance: 'Attendance' }
-
   return (
     <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 60% -10%, rgba(49,46,129,0.45) 0%, transparent 55%), #05050a'}}>
-      <Navbar title="Finest" />
-      <div className="max-w-4xl mx-auto p-6">
+      <Sidebar tabs={memberTabs} activeTab={activeTab} onTabChange={(t) => setActiveTab(t)} />
+      <div className="lg:ml-64">
+      <div className="max-w-4xl mx-auto p-4 pt-16 lg:pt-6 lg:p-6 pb-24 lg:pb-6">
 
         {/* Attendance */}
         <div className="glass-card rounded-2xl p-5 mb-6" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
@@ -586,25 +594,7 @@ export default function MemberDashboard() {
           )}
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 p-1 rounded-2xl overflow-x-auto"
-          style={{background:'rgba(255,255,255,0.025)', border:'1px solid rgba(255,255,255,0.06)'}}>
-          {tabs.map(t => (
-            <button
-              key={t}
-              onClick={()=>setActiveTab(t)}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${activeTab===t ? 'tab-active-indigo' : 'tab-inactive'}`}
-            >
-              {tabLabels[t]}
-              {t === 'myTickets' && myRequests.length > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold"
-                  style={{background:'rgba(99,102,241,0.3)', color:'#a5b4fc'}}>
-                  {myRequests.length}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+
 
         {/* Assigned Tickets Tab */}
         {activeTab === 'tickets' && (
@@ -968,6 +958,7 @@ export default function MemberDashboard() {
             </div>
           </>
         )}
+      </div>
       </div>
     </div>
   )
