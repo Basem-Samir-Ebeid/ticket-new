@@ -157,7 +157,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     if (!isSuperAdmin) return
     const interval = setInterval(fetchGithubSyncStatus, 60000)
     return () => clearInterval(interval)
-  }, [])
+  }, [isSuperAdmin])
 
   useEffect(() => {
     if (!officeSettingsLoadedRef.current) return
