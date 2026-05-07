@@ -244,7 +244,7 @@ export default function MemberDashboard() {
   const getPriorityBadge = (p) => {
     if (p === 'low') return { label: 'Low', cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25' }
     if (p === 'high') return { label: 'High', cls: 'bg-orange-500/10 text-orange-400 border-orange-500/25' }
-    if (p === 'critical') return { label: 'Critical', cls: 'bg-red-500/10 text-red-400 border-red-500/25' }
+    if (p === 'urgent') return { label: 'Urgent', cls: 'bg-red-500/10 text-red-400 border-red-500/25' }
     return { label: 'Medium', cls: 'bg-blue-500/10 text-blue-400 border-blue-500/25' }
   }
 
@@ -733,7 +733,7 @@ export default function MemberDashboard() {
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
                       <option value="high">High</option>
-                      <option value="critical">Critical</option>
+                      <option value="urgent">Urgent</option>
                     </select>
                   </div>
                 </div>

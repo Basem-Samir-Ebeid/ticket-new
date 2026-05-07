@@ -62,6 +62,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [ticketSearch, setTicketSearch] = useState('')
   const [ticketStatusFilter, setTicketStatusFilter] = useState('all')
   const [ticketPriorityFilter, setTicketPriorityFilter] = useState('all')
+  const [ticketSortByPriority, setTicketSortByPriority] = useState(false)
   const [templates, setTemplates] = useState([])
   const [showTemplateForm, setShowTemplateForm] = useState(false)
   const [templateForm, setTemplateForm] = useState({ name: '', title: '', description: '', priority: 'medium' })
@@ -661,12 +662,14 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
   function getPriorityBadge(priority) {
     switch (priority) {
-      case 'critical': return { label: 'Critical', cls: 'bg-red-900/40 text-red-400 border-red-500/30' }
-      case 'high':     return { label: 'High',     cls: 'bg-orange-900/40 text-orange-400 border-orange-500/30' }
-      case 'low':      return { label: 'Low',       cls: 'bg-emerald-900/40 text-emerald-400 border-emerald-500/30' }
-      default:         return { label: 'Medium',    cls: 'bg-blue-900/40 text-blue-400 border-blue-500/30' }
+      case 'urgent': return { label: 'Urgent',  cls: 'bg-red-900/40 text-red-400 border-red-500/30' }
+      case 'high':   return { label: 'High',    cls: 'bg-orange-900/40 text-orange-400 border-orange-500/30' }
+      case 'low':    return { label: 'Low',     cls: 'bg-emerald-900/40 text-emerald-400 border-emerald-500/30' }
+      default:       return { label: 'Medium',  cls: 'bg-blue-900/40 text-blue-400 border-blue-500/30' }
     }
   }
+
+  const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 }
 
   function formatTime(hours) {
     if (!hours || hours === 0) return '—'
@@ -688,6 +691,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     const matchesStatus = ticketStatusFilter === 'all' || t.status === ticketStatusFilter
     const matchesPriority = ticketPriorityFilter === 'all' || t.priority === ticketPriorityFilter
     return matchesSearch && matchesStatus && matchesPriority
+  }).sort((a, b) => {
+    if (!ticketSortByPriority) return 0
+    return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2)
   })
 
   // ── Ticket detail view ──
@@ -1038,7 +1044,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
                       <option value="high">High</option>
-                      <option value="critical">Critical</option>
+                      <option value="urgent">Urgent</option>
                     </select>
                   </div>
                   <div>
@@ -1082,12 +1088,17 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </button>
                 ))}
                 <span className="text-slate-600 text-xs self-center ml-3 mr-1">Priority:</span>
-                {['all','low','medium','high','critical'].map(f => (
+                {['all','low','medium','high','urgent'].map(f => (
                   <button key={f} onClick={() => setTicketPriorityFilter(f)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize transition-all ${ticketPriorityFilter === f ? (isSuperAdmin ? 'tab-active-amber' : 'tab-active-indigo') : 'tab-inactive border border-white/8'}`}>
                     {f}
                   </button>
                 ))}
+                <span className="text-slate-600 text-xs self-center ml-3 mr-1">Sort:</span>
+                <button onClick={() => setTicketSortByPriority(v => !v)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${ticketSortByPriority ? (isSuperAdmin ? 'tab-active-amber' : 'tab-active-indigo') : 'tab-inactive border border-white/8'}`}>
+                  Priority ↑
+                </button>
               </div>
             </div>
 
@@ -1918,7 +1929,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                         <option value="low">Low</option>
                         <option value="medium">Medium</option>
                         <option value="high">High</option>
-                        <option value="critical">Critical</option>
+                        <option value="urgent">Urgent</option>
                       </select>
                     </div>
                   </div>

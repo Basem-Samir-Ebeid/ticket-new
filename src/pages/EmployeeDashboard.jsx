@@ -639,7 +639,7 @@ export default function EmployeeDashboard() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <StatusBadge status={t.status} />
-                        {(() => { const p = t.priority; const cls = p==='low'?'bg-emerald-500/10 text-emerald-400 border-emerald-500/25':p==='high'?'bg-orange-500/10 text-orange-400 border-orange-500/25':p==='critical'?'bg-red-500/10 text-red-400 border-red-500/25':'bg-blue-500/10 text-blue-400 border-blue-500/25'; const lbl = p==='low'?'Low':p==='high'?'High':p==='critical'?'Critical':'Medium'; return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls}`}>{lbl}</span> })()}
+                        {(() => { const p = t.priority; const cls = p==='low'?'bg-emerald-500/10 text-emerald-400 border-emerald-500/25':p==='high'?'bg-orange-500/10 text-orange-400 border-orange-500/25':p==='urgent'?'bg-red-500/10 text-red-400 border-red-500/25':'bg-blue-500/10 text-blue-400 border-blue-500/25'; const lbl = p==='low'?'Low':p==='high'?'High':p==='urgent'?'Urgent':'Medium'; return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls}`}>{lbl}</span> })()}
                         <span className="text-slate-600 text-[11px]">{new Date(t.created_at).toLocaleDateString()}</span>
                       </div>
                       <h3 className="text-slate-100 text-sm font-semibold group-hover:text-white transition-colors leading-snug">{t.title}</h3>
@@ -728,7 +728,7 @@ export default function EmployeeDashboard() {
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
                       <option value="high">High</option>
-                      <option value="critical">Critical</option>
+                      <option value="urgent">Urgent</option>
                     </select>
                   </div>
                 </div>
@@ -819,7 +819,7 @@ export default function EmployeeDashboard() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <StatusBadge status={t.status} />
-                            {(() => { const p = t.priority; const cls = p==='low'?'bg-emerald-500/10 text-emerald-400 border-emerald-500/25':p==='high'?'bg-orange-500/10 text-orange-400 border-orange-500/25':p==='critical'?'bg-red-500/10 text-red-400 border-red-500/25':'bg-blue-500/10 text-blue-400 border-blue-500/25'; const lbl = p==='low'?'Low':p==='high'?'High':p==='critical'?'Critical':'Medium'; return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls}`}>{lbl}</span> })()}
+                            {(() => { const p = t.priority; const cls = p==='low'?'bg-emerald-500/10 text-emerald-400 border-emerald-500/25':p==='high'?'bg-orange-500/10 text-orange-400 border-orange-500/25':p==='urgent'?'bg-red-500/10 text-red-400 border-red-500/25':'bg-blue-500/10 text-blue-400 border-blue-500/25'; const lbl = p==='low'?'Low':p==='high'?'High':p==='urgent'?'Urgent':'Medium'; return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls}`}>{lbl}</span> })()}
                             <span className="text-[11px] px-2 py-0.5 rounded-full border" style={{background:'rgba(59,130,246,0.1)',color:'#60a5fa',borderColor:'rgba(59,130,246,0.2)'}}>My Ticket</span>
                             <span className="text-slate-600 text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
                             {t.rating && <span className="text-amber-400 text-[10px]">{'★'.repeat(t.rating)}{'☆'.repeat(5-t.rating)}</span>}
