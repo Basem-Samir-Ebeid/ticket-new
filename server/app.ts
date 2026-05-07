@@ -35,9 +35,9 @@ app.use('/api/internal/github-sync', githubSyncRoutes)
 app.use('/api/github-sync-status', githubSyncStatusRoutes)
 
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
-  app.use(express.static(path.join(process.cwd(), 'public')))
+  app.use(express.static(path.join(process.cwd(), 'dist')))
   app.get('*', (_req, res) => {
-    res.sendFile(path.join(process.cwd(), 'public', 'index.html'))
+    res.sendFile(path.join(process.cwd(), 'dist', 'index.html'))
   })
 }
 
