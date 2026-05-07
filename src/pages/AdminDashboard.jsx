@@ -780,7 +780,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       <div className="min-h-screen" style={{background: bgGrad}}>
         <Sidebar tabs={adminTabs} activeTab={tab} onTabChange={handleAdminTabChange} isSuperAdmin={isSuperAdmin} />
         <div className="lg:ml-64">
-        <div className="max-w-4xl mx-auto p-4 pt-16 lg:pt-6 lg:p-6 pb-24 lg:pb-6">
+        <div className="max-w-4xl mx-auto p-4 pt-16 lg:pt-16 lg:p-6 pb-24 lg:pb-6">
           <button onClick={() => setSelectedTicket(null)} className="group flex items-center gap-2 text-slate-400 hover:text-white text-sm mb-6 transition-colors">
             <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
@@ -899,7 +899,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     <div className="min-h-screen" style={{background: bgGrad}}>
       <Sidebar tabs={adminTabs} activeTab={tab} onTabChange={handleAdminTabChange} isSuperAdmin={isSuperAdmin} />
       <div className="lg:ml-64">
-      <div className="max-w-7xl mx-auto p-4 pt-16 lg:pt-6 lg:p-6 pb-24 lg:pb-6">
+      <div className="max-w-7xl mx-auto p-4 pt-16 lg:pt-16 lg:p-6 pb-24 lg:pb-6">
         {msg && (
           <div className={`mb-4 px-4 py-3 rounded-lg animate-fadeIn ${msg.startsWith('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'}`}>
             {msg}

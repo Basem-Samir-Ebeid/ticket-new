@@ -59,7 +59,6 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
     return () => { document.body.style.overflow = '' }
   }, [open])
 
-  // Fetch notifications on mount and on WS events
   useEffect(() => {
     fetchNotifications()
     const intervalId = setInterval(fetchNotifications, 30000)
@@ -71,7 +70,6 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
     }
   }, [])
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handler = (e) => {
       if (notifRef.current && !notifRef.current.contains(e.target)) {
@@ -105,6 +103,13 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
   function handleTabClick(key) {
     onTabChange(key)
     setOpen(false)
+  }
+
+  const topBarStyle = {
+    background: 'rgba(6,6,14,0.97)',
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
+    borderBottom: '1px solid rgba(255,255,255,0.065)',
   }
 
   const sidebarStyle = {
@@ -174,20 +179,12 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className="px-5 py-5 flex items-center gap-3 flex-shrink-0">
-        <div className="relative flex-shrink-0">
-          <div className="absolute inset-0 rounded-xl blur-md opacity-50"
-            style={{ background: isAmber ? 'linear-gradient(135deg,#d97706,#92400e)' : 'linear-gradient(135deg,#4f46e5,#7c3aed)' }} />
-          <LogoWithStars imgClassName="relative w-8 h-8 rounded-xl object-cover" />
-        </div>
-        <div>
-          <p className="text-white font-bold text-sm tracking-tight leading-none mb-0.5">Finest</p>
-          <p className="text-slate-500 text-[10px] leading-none tracking-wide">IT Management</p>
-        </div>
+      {/* Close button (mobile only) */}
+      <div className="flex items-center justify-between px-4 py-3 flex-shrink-0 lg:hidden">
+        <p className="text-[9px] uppercase tracking-[0.12em] text-slate-600 font-semibold">Navigation</p>
         <button
           onClick={() => setOpen(false)}
-          className="ml-auto lg:hidden w-7 h-7 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/8 transition-all"
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/8 transition-all"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -195,35 +192,8 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
         </button>
       </div>
 
-      {/* Divider */}
-      <div className="mx-4 mb-3 h-px" style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.07),transparent)' }} />
-
-      {/* User profile */}
-      {profile && (
-        <div className="mx-3 mb-3 px-3 py-2.5 rounded-xl flex items-center gap-3 flex-shrink-0"
-          style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.06)' }}>
-          {profile?.profile_picture_url ? (
-            <img src={profile.profile_picture_url} alt={profile.full_name || 'User'}
-              className="w-8 h-8 rounded-full object-cover border border-white/10 flex-shrink-0" />
-          ) : (
-            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
-              style={{ background: isAmber ? 'linear-gradient(135deg,#d97706,#92400e)' : 'linear-gradient(135deg,#4f46e5,#7c3aed)' }}>
-              {(profile?.full_name || profile?.email || '?')[0].toUpperCase()}
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="text-white text-xs font-semibold truncate leading-tight">{profile?.full_name || profile?.email}</p>
-            <p className="text-slate-500 text-[10px] capitalize leading-tight mt-0.5"
-              style={{ color: isAmber ? '#d97706' : '#6366f1' }}>
-              {profile?.role?.replace('_', ' ')}
-            </p>
-          </div>
-          <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" style={{ boxShadow: '0 0 6px rgba(52,211,153,0.6)' }} />
-        </div>
-      )}
-
-      {/* Section label */}
-      <p className="px-5 mb-2 text-[9px] uppercase tracking-[0.12em] text-slate-600 font-semibold flex-shrink-0">Navigation</p>
+      {/* Section label (desktop only) */}
+      <p className="hidden lg:block px-5 pt-4 pb-2 text-[9px] uppercase tracking-[0.12em] text-slate-600 font-semibold flex-shrink-0">Navigation</p>
 
       {/* Nav items */}
       <nav className="flex-1 overflow-y-auto px-3 space-y-0.5 pb-2" style={{ scrollbarWidth: 'none' }}>
@@ -315,31 +285,87 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
 
   return (
     <>
-      {/* ── Desktop sidebar (always visible) ── */}
+      {/* ── Top Bar (always visible, full width) ── */}
+      <header
+        className="fixed top-0 left-0 right-0 z-50 h-14 flex items-center px-4 gap-4"
+        style={topBarStyle}
+      >
+        {/* Mobile hamburger */}
+        <button
+          onClick={() => setOpen(true)}
+          className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl transition-all flex-shrink-0"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)' }}
+        >
+          <div className="relative">
+            <svg className="w-4.5 h-4.5 text-slate-300 w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 flex items-center justify-center text-[8px] font-bold text-white">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </div>
+        </button>
+
+        {/* Logo + App name */}
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          <div className="relative flex-shrink-0">
+            <div
+              className="absolute inset-0 rounded-xl blur-md opacity-50"
+              style={{ background: isAmber ? 'linear-gradient(135deg,#d97706,#92400e)' : 'linear-gradient(135deg,#4f46e5,#7c3aed)' }}
+            />
+            <LogoWithStars imgClassName="relative w-8 h-8 rounded-xl object-cover" />
+          </div>
+          <div>
+            <p className="text-white font-bold text-sm tracking-tight leading-none mb-0.5">Finest</p>
+            <p className="text-slate-500 text-[10px] leading-none tracking-wide">IT Management</p>
+          </div>
+        </div>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* User avatar + info */}
+        {profile && (
+          <div className="flex items-center gap-2.5">
+            <div className="hidden sm:block text-right">
+              <p className="text-white text-xs font-semibold leading-tight truncate max-w-[140px]">{profile?.full_name || profile?.email}</p>
+              <p className="text-[10px] leading-tight mt-0.5 capitalize"
+                style={{ color: isAmber ? '#d97706' : '#6366f1' }}>
+                {profile?.role?.replace('_', ' ')}
+              </p>
+            </div>
+            {profile?.profile_picture_url ? (
+              <img
+                src={profile.profile_picture_url}
+                alt={profile.full_name || 'User'}
+                className="w-8 h-8 rounded-full object-cover border-2 flex-shrink-0"
+                style={{ borderColor: isAmber ? 'rgba(245,158,11,0.4)' : 'rgba(99,102,241,0.4)' }}
+              />
+            ) : (
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold border-2"
+                style={{
+                  background: isAmber ? 'linear-gradient(135deg,#d97706,#92400e)' : 'linear-gradient(135deg,#4f46e5,#7c3aed)',
+                  borderColor: isAmber ? 'rgba(245,158,11,0.35)' : 'rgba(99,102,241,0.35)',
+                }}
+              >
+                {(profile?.full_name || profile?.email || '?')[0].toUpperCase()}
+              </div>
+            )}
+            <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" style={{ boxShadow: '0 0 6px rgba(52,211,153,0.6)' }} />
+          </div>
+        )}
+      </header>
+
+      {/* ── Desktop sidebar (starts below top bar) ── */}
       <aside
-        className="hidden lg:flex flex-col fixed inset-y-0 left-0 z-40 w-64"
-        style={sidebarStyle}
+        className="hidden lg:flex flex-col fixed left-0 z-40 w-64"
+        style={{ ...sidebarStyle, top: '56px', bottom: 0 }}
       >
         <SidebarContent />
       </aside>
-
-      {/* ── Mobile: hamburger button ── */}
-      <button
-        onClick={() => setOpen(true)}
-        className="lg:hidden fixed top-3 left-3 z-50 w-10 h-10 flex items-center justify-center rounded-xl transition-all"
-        style={{ background: 'rgba(6,6,14,0.92)', border: '1px solid rgba(255,255,255,0.09)', backdropFilter: 'blur(16px)' }}
-      >
-        <div className="relative">
-          <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-          </svg>
-          {unreadCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 flex items-center justify-center text-[8px] font-bold text-white">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </div>
-      </button>
 
       {/* ── Mobile: overlay ── */}
       {open && (
@@ -350,10 +376,10 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
         />
       )}
 
-      {/* ── Mobile: slide-in sidebar ── */}
+      {/* ── Mobile: slide-in sidebar (starts below top bar) ── */}
       <aside
-        className={`lg:hidden fixed inset-y-0 left-0 z-50 w-72 flex flex-col transition-transform duration-300 ease-out ${open ? 'translate-x-0' : '-translate-x-full'}`}
-        style={sidebarStyle}
+        className={`lg:hidden fixed left-0 z-50 w-72 flex flex-col transition-transform duration-300 ease-out ${open ? 'translate-x-0' : '-translate-x-full'}`}
+        style={{ ...sidebarStyle, top: '56px', bottom: 0 }}
       >
         <SidebarContent />
       </aside>
