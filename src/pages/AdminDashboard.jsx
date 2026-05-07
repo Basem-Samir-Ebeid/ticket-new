@@ -134,6 +134,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       playNotificationSound()
       showBrowserNotification('Finest — إشعار جديد', 'لديك إشعار جديد')
       fetchTickets(); fetchRequests(); fetchLeaveRequests()
+      if (isSuperAdmin) fetchGithubSyncStatus()
     }
     window.addEventListener('ws:ticket_update', onTicketUpdate)
     window.addEventListener('ws:ticket_reply', onTicketReply)
@@ -151,6 +152,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
   useEffect(() => { if (selectedTicket) fetchReplies(selectedTicket.id) }, [selectedTicket])
   useEffect(() => { if (selectedDate) fetchLoginTimes() }, [selectedDate])
+
+  useEffect(() => {
+    if (!isSuperAdmin) return
+    const interval = setInterval(fetchGithubSyncStatus, 60000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     if (!officeSettingsLoadedRef.current) return
@@ -955,25 +962,35 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 {githubSyncStatus === null ? (
                   <p className="text-slate-500 text-sm">Loading...</p>
                 ) : (
-                  <div className="flex flex-wrap items-center gap-3 mt-2">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                      githubSyncStatus.result === 'SUCCESS' ? 'bg-green-900/40 text-green-400 border border-green-500/30'
-                      : githubSyncStatus.result === 'FAILED' ? 'bg-red-900/40 text-red-400 border border-red-500/30'
-                      : githubSyncStatus.result === 'SKIPPED' ? 'bg-yellow-900/40 text-yellow-400 border border-yellow-500/30'
-                      : 'bg-white/10 text-slate-400 border border-white/10'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        githubSyncStatus.result === 'SUCCESS' ? 'bg-green-400'
-                        : githubSyncStatus.result === 'FAILED' ? 'bg-red-400'
-                        : githubSyncStatus.result === 'SKIPPED' ? 'bg-yellow-400'
-                        : 'bg-slate-400'
-                      }`}></span>
-                      {githubSyncStatus.result || 'Unknown'}
-                    </span>
-                    {githubSyncStatus.timestamp && (
-                      <span className="text-slate-400 text-xs">{githubSyncStatus.timestamp}</span>
+                  <div className="mt-2 space-y-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                        githubSyncStatus.result === 'SUCCESS' ? 'bg-green-900/40 text-green-400 border border-green-500/30'
+                        : githubSyncStatus.result === 'FAILED' ? 'bg-red-900/40 text-red-400 border border-red-500/30'
+                        : githubSyncStatus.result === 'SKIPPED' ? 'bg-yellow-900/40 text-yellow-400 border border-yellow-500/30'
+                        : 'bg-white/10 text-slate-400 border border-white/10'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          githubSyncStatus.result === 'SUCCESS' ? 'bg-green-400'
+                          : githubSyncStatus.result === 'FAILED' ? 'bg-red-400 animate-pulse'
+                          : githubSyncStatus.result === 'SKIPPED' ? 'bg-yellow-400'
+                          : 'bg-slate-400'
+                        }`} />
+                        {githubSyncStatus.result || 'Unknown'}
+                      </span>
+                      {githubSyncStatus.timestamp && (
+                        <span className="text-slate-400 text-xs">{githubSyncStatus.timestamp}</span>
+                      )}
+                    </div>
+                    <p className={`text-xs leading-relaxed ${githubSyncStatus.result === 'FAILED' ? 'text-red-300' : 'text-slate-400'}`}>
+                      {githubSyncStatus.message}
+                    </p>
+                    {githubSyncStatus.result === 'FAILED' && (
+                      <p className="text-[11px] text-amber-400/80 flex items-center gap-1.5">
+                        <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                        Go to Settings → GitHub Sync to update your token or repository URL.
+                      </p>
                     )}
-                    <span className="text-slate-300 text-xs">{githubSyncStatus.message}</span>
                   </div>
                 )}
               </div>
@@ -1985,6 +2002,51 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <h2 className="text-white font-semibold text-lg">GitHub Sync</h2>
                     <p className="text-slate-400 text-xs">Configure the GitHub repository and token used for automatic code sync</p>
                   </div>
+                </div>
+
+                {/* Last Sync Status */}
+                <div className="mb-5 p-4 rounded-xl" style={{background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)'}}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold">Last Sync Result</span>
+                    <button onClick={fetchGithubSyncStatus} className="text-slate-500 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+                      Refresh
+                    </button>
+                  </div>
+                  {!githubSyncStatus ? (
+                    <p className="text-slate-600 text-xs">Loading…</p>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          githubSyncStatus.result === 'SUCCESS' ? 'bg-green-900/40 text-green-400 border border-green-500/30'
+                          : githubSyncStatus.result === 'FAILED' ? 'bg-red-900/40 text-red-400 border border-red-500/30'
+                          : githubSyncStatus.result === 'SKIPPED' ? 'bg-yellow-900/40 text-yellow-400 border border-yellow-500/30'
+                          : 'bg-white/8 text-slate-400 border border-white/10'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            githubSyncStatus.result === 'SUCCESS' ? 'bg-green-400'
+                            : githubSyncStatus.result === 'FAILED' ? 'bg-red-400 animate-pulse'
+                            : githubSyncStatus.result === 'SKIPPED' ? 'bg-yellow-400'
+                            : 'bg-slate-400'
+                          }`} />
+                          {githubSyncStatus.result || 'Unknown'}
+                        </span>
+                        {githubSyncStatus.timestamp && (
+                          <span className="text-slate-500 text-xs">{githubSyncStatus.timestamp}</span>
+                        )}
+                      </div>
+                      <p className={`text-xs ${githubSyncStatus.result === 'FAILED' ? 'text-red-300' : 'text-slate-400'}`}>
+                        {githubSyncStatus.message}
+                      </p>
+                      {githubSyncStatus.result === 'FAILED' && (
+                        <p className="text-[11px] text-amber-400/80 flex items-center gap-1.5 mt-1">
+                          <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                          Check your token and repository URL below, then save to retry on the next commit.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {!githubSyncLoaded ? (
