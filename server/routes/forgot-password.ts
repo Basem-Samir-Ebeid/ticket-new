@@ -17,7 +17,7 @@ function getTransporter() {
 
   if (!host || !user || !pass) return null
 
-  return { transporter: nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } }), from }
+  return { transporter: nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass }, tls: { rejectUnauthorized: false } }), from }
 }
 
 router.post('/forgot-password', async (req, res) => {
