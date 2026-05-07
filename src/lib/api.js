@@ -97,6 +97,12 @@ export const api = {
   refuseRequest: (id) => request('POST', `/tickets/${id}/refuse`),
   getReplies: (ticketId) => request('GET', `/tickets/${ticketId}/replies`),
   createReply: (ticketId, data) => request('POST', `/tickets/${ticketId}/replies`, data),
+  rateTicket: (id, rating, rating_comment) => request('POST', `/tickets/${id}/rate`, { rating, rating_comment }),
+
+  // Templates
+  getTemplates: () => request('GET', '/tickets/templates'),
+  createTemplate: (data) => request('POST', '/tickets/templates', data),
+  deleteTemplate: (id) => request('DELETE', `/tickets/templates/${id}`),
 
   // Attendance
   getAttendance: (date) => request('GET', `/attendance?date=${date}`),

@@ -31,9 +31,14 @@ export default function EmployeeDashboard() {
   const [myTicketSearch, setMyTicketSearch] = useState('')
 
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [createForm, setCreateForm] = useState({ title: '', description: '', affected_person: '' })
+  const [createForm, setCreateForm] = useState({ title: '', description: '', affected_person: '', priority: 'medium' })
   const [createMsg, setCreateMsg] = useState('')
   const [creating, setCreating] = useState(false)
+  const [templates, setTemplates] = useState([])
+  const [ratingTicketId, setRatingTicketId] = useState(null)
+  const [ratingValue, setRatingValue] = useState(0)
+  const [ratingComment, setRatingComment] = useState('')
+  const [submittingRating, setSubmittingRating] = useState(false)
 
   const [todayLogin, setTodayLogin] = useState(null)
   const [loggingIn, setLoggingIn] = useState(false)
@@ -56,6 +61,7 @@ export default function EmployeeDashboard() {
       fetchMyRequests()
       checkTodayLogin()
       fetchLeaveRequests()
+      fetchTemplates()
     }
   }, [user])
 
@@ -200,6 +206,26 @@ export default function EmployeeDashboard() {
     try { setMyRequests(await api.getRequests()) } catch {}
   }
 
+  async function fetchTemplates() {
+    try { setTemplates(await api.getTemplates()) } catch {}
+  }
+
+  function applyTemplate(tmpl) {
+    setCreateForm(f => ({ ...f, title: tmpl.title, description: tmpl.description || '', priority: tmpl.priority || 'medium' }))
+  }
+
+  async function submitRating(ticketId) {
+    if (!ratingValue) return
+    setSubmittingRating(true)
+    try {
+      await api.rateTicket(ticketId, ratingValue, ratingComment)
+      setRatingTicketId(null); setRatingValue(0); setRatingComment('')
+      fetchTickets()
+      if (selectedTicket?.id === ticketId) setSelectedTicket(p => ({...p, rating: ratingValue, rating_comment: ratingComment || null}))
+    } catch {}
+    setSubmittingRating(false)
+  }
+
   async function fetchLeaveRequests() {
     try { setLeaveRequests(await api.getLeaves()) } catch {}
   }
@@ -269,10 +295,11 @@ export default function EmployeeDashboard() {
         title: createForm.title,
         description: createForm.description,
         affected_person: createForm.affected_person,
+        priority: createForm.priority || 'medium',
         is_request: true,
       })
       setCreateMsg('✓ Ticket submitted to admin for review!')
-      setCreateForm({ title: '', description: '', affected_person: '' })
+      setCreateForm({ title: '', description: '', affected_person: '', priority: 'medium' })
       setShowCreateForm(false)
       fetchMyRequests()
     } catch (err) { setCreateMsg('Error: ' + err.message) }
@@ -334,11 +361,46 @@ export default function EmployeeDashboard() {
             {(isMyTicket(selectedTicket) || isAssignee) && (
               <div className="mt-4 pt-4 border-t border-white/10">
                 {selectedTicket.status === 'solved' ? (
-                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-900/20 border border-green-500/20 w-fit">
-                    <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                    </svg>
-                    <span className="text-green-400 text-sm font-medium">✅ تم حل التيكت — الحالة مُقفلة</span>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-900/20 border border-green-500/20 w-fit">
+                      <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                      </svg>
+                      <span className="text-green-400 text-sm font-medium">✅ تم حل التيكت — الحالة مُقفلة</span>
+                    </div>
+                    {isMyTicket(selectedTicket) && (
+                      selectedTicket.rating ? (
+                        <div className="p-3 rounded-xl" style={{background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.2)'}}>
+                          <p className="text-amber-400 text-xs font-semibold mb-1">Your Rating</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-amber-400 text-lg">{'★'.repeat(selectedTicket.rating)}{'☆'.repeat(5-selectedTicket.rating)}</span>
+                            <span className="text-amber-300 font-bold">{selectedTicket.rating}/5</span>
+                          </div>
+                          {selectedTicket.rating_comment && <p className="text-slate-400 text-xs mt-1">{selectedTicket.rating_comment}</p>}
+                        </div>
+                      ) : (
+                        ratingTicketId === selectedTicket.id ? (
+                          <div className="p-4 rounded-xl space-y-3" style={{background:'rgba(245,158,11,0.06)', border:'1px solid rgba(245,158,11,0.2)'}}>
+                            <p className="text-amber-400 text-sm font-semibold">Rate this ticket</p>
+                            <div className="flex gap-2">
+                              {[1,2,3,4,5].map(star => (
+                                <button key={star} type="button" onClick={()=>setRatingValue(star)}
+                                  className={`text-2xl transition-all ${ratingValue >= star ? 'text-amber-400' : 'text-slate-600 hover:text-amber-300'}`}>★</button>
+                              ))}
+                            </div>
+                            <textarea value={ratingComment} onChange={e=>setRatingComment(e.target.value)} placeholder="Comment (optional)..." rows={2} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500/50 placeholder-slate-600 resize-none transition-all" />
+                            <div className="flex gap-2">
+                              <button onClick={()=>submitRating(selectedTicket.id)} disabled={!ratingValue||submittingRating} className="bg-amber-600/20 hover:bg-amber-600/35 border border-amber-500/30 text-amber-300 text-sm px-4 py-2 rounded-xl transition-all disabled:opacity-50">{submittingRating ? 'Submitting...' : 'Submit Rating'}</button>
+                              <button onClick={()=>{setRatingTicketId(null);setRatingValue(0);setRatingComment('')}} className="btn-ghost text-sm px-3 py-2">Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button onClick={()=>setRatingTicketId(selectedTicket.id)} className="flex items-center gap-2 text-sm text-slate-400 hover:text-amber-400 border border-white/8 hover:border-amber-500/30 px-4 py-2 rounded-xl transition-all" style={{background:'rgba(255,255,255,0.03)'}}>
+                            <span>⭐</span> Rate this ticket
+                          </button>
+                        )
+                      )
+                    )}
                   </div>
                 ) : (
                   <>
@@ -575,8 +637,9 @@ export default function EmployeeDashboard() {
                 >
                   <div className="flex items-start gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <StatusBadge status={t.status} />
+                        {(() => { const p = t.priority; const cls = p==='low'?'bg-emerald-500/10 text-emerald-400 border-emerald-500/25':p==='high'?'bg-orange-500/10 text-orange-400 border-orange-500/25':p==='critical'?'bg-red-500/10 text-red-400 border-red-500/25':'bg-blue-500/10 text-blue-400 border-blue-500/25'; const lbl = p==='low'?'Low':p==='high'?'High':p==='critical'?'Critical':'Medium'; return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls}`}>{lbl}</span> })()}
                         <span className="text-slate-600 text-[11px]">{new Date(t.created_at).toLocaleDateString()}</span>
                       </div>
                       <h3 className="text-slate-100 text-sm font-semibold group-hover:text-white transition-colors leading-snug">{t.title}</h3>
@@ -610,7 +673,18 @@ export default function EmployeeDashboard() {
 
             {showCreateForm && (
               <form onSubmit={submitCreateTicket} className="glass-card rounded-2xl p-5 mb-6 space-y-4" style={{border:'1px solid rgba(99,102,241,0.2)'}}>
-                <h3 className="text-white font-semibold text-sm">Send Ticket to Admin</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white font-semibold text-sm">Send Ticket to Admin</h3>
+                  {templates.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500 text-xs">Template:</span>
+                      <select onChange={e => { if(e.target.value) { const t = templates.find(t=>t.id===e.target.value); if(t) applyTemplate(t) } }} defaultValue="" className="bg-white/5 border border-white/8 rounded-lg px-2 py-1.5 text-slate-300 text-xs focus:outline-none focus:border-indigo-500/50 transition-all">
+                        <option value="">— Use Template —</option>
+                        {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
                 {createMsg && (
                   <div className={`text-sm rounded-xl p-3 ${createMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
                     {createMsg}
@@ -637,15 +711,26 @@ export default function EmployeeDashboard() {
                     className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 resize-none transition-all"
                   />
                 </div>
-                <div>
-                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Affected Person</label>
-                  <input
-                    type="text"
-                    placeholder="Who is affected? (optional)"
-                    value={createForm.affected_person}
-                    onChange={e=>setCreateForm(f=>({...f,affected_person:e.target.value}))}
-                    className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Affected Person</label>
+                    <input
+                      type="text"
+                      placeholder="Who is affected? (optional)"
+                      value={createForm.affected_person}
+                      onChange={e=>setCreateForm(f=>({...f,affected_person:e.target.value}))}
+                      className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Priority</label>
+                    <select value={createForm.priority} onChange={e=>setCreateForm(f=>({...f,priority:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button type="submit" disabled={creating} className="btn-primary disabled:opacity-50 text-sm px-5 py-2">
@@ -734,8 +819,10 @@ export default function EmployeeDashboard() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <StatusBadge status={t.status} />
+                            {(() => { const p = t.priority; const cls = p==='low'?'bg-emerald-500/10 text-emerald-400 border-emerald-500/25':p==='high'?'bg-orange-500/10 text-orange-400 border-orange-500/25':p==='critical'?'bg-red-500/10 text-red-400 border-red-500/25':'bg-blue-500/10 text-blue-400 border-blue-500/25'; const lbl = p==='low'?'Low':p==='high'?'High':p==='critical'?'Critical':'Medium'; return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls}`}>{lbl}</span> })()}
                             <span className="text-[11px] px-2 py-0.5 rounded-full border" style={{background:'rgba(59,130,246,0.1)',color:'#60a5fa',borderColor:'rgba(59,130,246,0.2)'}}>My Ticket</span>
                             <span className="text-slate-600 text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
+                            {t.rating && <span className="text-amber-400 text-[10px]">{'★'.repeat(t.rating)}{'☆'.repeat(5-t.rating)}</span>}
                           </div>
                           <h3 className="text-white text-sm font-medium group-hover:text-blue-200 transition-colors leading-snug">{t.title}</h3>
                           {t.description && <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 leading-relaxed">{t.description}</p>}

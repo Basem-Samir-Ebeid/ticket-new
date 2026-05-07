@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { db } from '../db'
-import { tickets, ticketReplies, profiles, notifications } from '../../shared/schema'
+import { tickets, ticketReplies, profiles, notifications, ticketTemplates } from '../../shared/schema'
 import { eq, and, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
@@ -68,9 +68,50 @@ router.get('/requests', requireAuth as any, async (req: any, res) => {
   }
 })
 
+// ─── Templates ───────────────────────────────────────────────────────────────
+
+router.get('/templates', requireAuth as any, async (req: any, res) => {
+  try {
+    const rows = await db.select().from(ticketTemplates).orderBy(ticketTemplates.created_at)
+    res.json(rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to get templates' })
+  }
+})
+
+router.post('/templates', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { name, title, description, priority } = req.body
+    if (!name?.trim() || !title?.trim()) return res.status(400).json({ error: 'Name and title are required' })
+    const [tmpl] = await db.insert(ticketTemplates).values({
+      name: name.trim(),
+      title: title.trim(),
+      description: description?.trim() || null,
+      priority: priority || 'medium',
+      created_by: req.user.id,
+    }).returning()
+    res.json(tmpl)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to create template' })
+  }
+})
+
+router.delete('/templates/:id', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    await db.delete(ticketTemplates).where(eq(ticketTemplates.id, req.params.id))
+    res.json({ success: true })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to delete template' })
+  }
+})
+
+// ─── Create ticket ────────────────────────────────────────────────────────────
+
 router.post('/', requireAuth as any, async (req: any, res) => {
   try {
-    const { title, description, affected_person, assigned_to, status, is_request } = req.body
+    const { title, description, affected_person, assigned_to, status, is_request, priority } = req.body
     const now = new Date()
     const [ticket] = await db.insert(tickets).values({
       title,
@@ -79,6 +120,7 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       assigned_to: assigned_to || null,
       created_by: req.user.id,
       status: status || 'opened',
+      priority: priority || 'medium',
       is_request: is_request || false,
       request_status: is_request ? 'pending_review' : null,
       opened_at: now,
@@ -104,7 +146,6 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       sendPushToAdmins('🎫 New Ticket', title, '/')
     }
 
-    // Send email notifications (fire-and-forget)
     notifyAdminsNewTicket(ticket, creatorName).catch(() => {})
     if (assigned_to) {
       notifyAssigned(ticket, assigned_to, creatorName).catch(() => {})
@@ -120,7 +161,7 @@ router.post('/', requireAuth as any, async (req: any, res) => {
 
 router.patch('/:id', requireAuth as any, async (req: any, res) => {
   try {
-    const { status, request_status, assigned_to, is_request, opened_at, review } = req.body
+    const { status, request_status, assigned_to, is_request, opened_at, review, priority } = req.body
     const updates: any = {}
     if (status !== undefined) {
       const isAdmin = req.profile?.role === 'admin' || req.profile?.role === 'super_admin'
@@ -139,6 +180,7 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
     if (is_request !== undefined) updates.is_request = is_request
     if (opened_at !== undefined) updates.opened_at = opened_at
     if (review !== undefined) updates.review = review
+    if (priority !== undefined) updates.priority = priority
 
     const [ticket] = await db.update(tickets).set(updates).where(eq(tickets.id, req.params.id)).returning()
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
@@ -159,11 +201,9 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
         }).returning()
         broadcast(userId, 'notification', notif)
       }
-      // Email notification for status change
       notifyStatusChanged(ticket, status, changerName, [...notifyIds]).catch(() => {})
     }
 
-    // Email notification when ticket is assigned
     if (assigned_to !== undefined && assigned_to && assigned_to !== req.user.id) {
       notifyAssigned(ticket, assigned_to, changerName).catch(() => {})
     }
@@ -173,6 +213,31 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
   } catch (err: any) {
     console.error('PATCH /tickets/:id error:', err)
     res.status(500).json({ error: err?.message || 'Failed to update ticket' })
+  }
+})
+
+// ─── Rate a solved ticket ─────────────────────────────────────────────────────
+
+router.post('/:id/rate', requireAuth as any, async (req: any, res) => {
+  try {
+    const { rating, rating_comment } = req.body
+    if (!rating || rating < 1 || rating > 5) return res.status(400).json({ error: 'Rating must be 1-5' })
+
+    const [existing] = await db.select().from(tickets).where(eq(tickets.id, req.params.id)).limit(1)
+    if (!existing) return res.status(404).json({ error: 'Ticket not found' })
+    if (existing.status !== 'solved') return res.status(400).json({ error: 'Can only rate solved tickets' })
+    if (existing.created_by !== req.user.id) return res.status(403).json({ error: 'Only the ticket creator can rate' })
+
+    const [ticket] = await db.update(tickets)
+      .set({ rating: Number(rating), rating_comment: rating_comment?.trim() || null })
+      .where(eq(tickets.id, req.params.id))
+      .returning()
+
+    broadcastAll('ticket_update', { action: 'rated', ticket_id: ticket.id })
+    res.json(ticket)
+  } catch (err: any) {
+    console.error('POST /tickets/:id/rate error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to rate ticket' })
   }
 })
 
@@ -287,7 +352,6 @@ router.post('/:id/replies', requireAuth as any, async (req: any, res) => {
         notifyIds.add(ticket.assigned_to)
       }
       broadcastAll('ticket_reply', { ticket_id: req.params.id, reply_id: reply.id })
-      // Email notification for new reply (fire-and-forget)
       if (ticket) {
         notifyNewReply(ticket, replierName, message || null, [...notifyIds]).catch(() => {})
       }

@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, date, doublePrecision } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, boolean, timestamp, date, doublePrecision, integer } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 export const profiles = pgTable('profiles', {
@@ -22,12 +22,25 @@ export const tickets = pgTable('tickets', {
   assigned_to: uuid('assigned_to').references(() => profiles.id, { onDelete: 'set null' }),
   created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'cascade' }),
   status: text('status').notNull().default('opened'),
+  priority: text('priority').notNull().default('medium'),
   is_request: boolean('is_request').notNull().default(false),
   request_status: text('request_status').default('pending_review'),
   review: text('review'),
+  rating: integer('rating'),
+  rating_comment: text('rating_comment'),
   opened_at: timestamp('opened_at', { withTimezone: true }),
   pending_at: timestamp('pending_at', { withTimezone: true }),
   solved_at: timestamp('solved_at', { withTimezone: true }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const ticketTemplates = pgTable('ticket_templates', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name: text('name').notNull(),
+  title: text('title').notNull(),
+  description: text('description'),
+  priority: text('priority').notNull().default('medium'),
+  created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 

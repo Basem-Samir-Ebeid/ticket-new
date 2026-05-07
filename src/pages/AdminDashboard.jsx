@@ -61,6 +61,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [userSearch, setUserSearch] = useState('')
   const [ticketSearch, setTicketSearch] = useState('')
   const [ticketStatusFilter, setTicketStatusFilter] = useState('all')
+  const [ticketPriorityFilter, setTicketPriorityFilter] = useState('all')
+  const [templates, setTemplates] = useState([])
+  const [showTemplateForm, setShowTemplateForm] = useState(false)
+  const [templateForm, setTemplateForm] = useState({ name: '', title: '', description: '', priority: 'medium' })
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [templateMsg, setTemplateMsg] = useState('')
   const [officeForm, setOfficeForm] = useState({ latitude: '', longitude: '', radius_meters: '' })
   const [officeMsg, setOfficeMsg] = useState('')
   const [savingOffice, setSavingOffice] = useState(false)
@@ -97,6 +103,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     fetchLoginTimes()
     checkTodayLogin()
     fetchLeaveRequests()
+    fetchTemplates()
     if (isSuperAdmin) fetchGithubSyncStatus()
   }, [])
 
@@ -243,6 +250,29 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   }
   async function fetchGithubSyncStatus() {
     try { setGithubSyncStatus(await api.getGithubSyncStatus()) } catch { setGithubSyncStatus({ result: null, timestamp: null, message: 'Unable to fetch sync status' }) }
+  }
+
+  async function fetchTemplates() {
+    try { setTemplates(await api.getTemplates()) } catch {}
+  }
+
+  async function createTemplate(e) {
+    e.preventDefault()
+    if (!templateForm.name.trim() || !templateForm.title.trim()) return
+    setSavingTemplate(true); setTemplateMsg('')
+    try {
+      await api.createTemplate(templateForm)
+      setTemplateMsg('✓ Template created!')
+      setTemplateForm({ name: '', title: '', description: '', priority: 'medium' })
+      setShowTemplateForm(false)
+      fetchTemplates()
+    } catch (err) { setTemplateMsg('Error: ' + err.message) }
+    setSavingTemplate(false)
+  }
+
+  async function deleteTemplate(id) {
+    if (!confirm('Delete this template?')) return
+    try { await api.deleteTemplate(id); fetchTemplates() } catch {}
   }
 
   async function fetchGithubSyncSettings() {
@@ -629,6 +659,15 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     return { grade: 'D', color: 'text-red-400', bg: 'bg-red-900/30' }
   }
 
+  function getPriorityBadge(priority) {
+    switch (priority) {
+      case 'critical': return { label: 'Critical', cls: 'bg-red-900/40 text-red-400 border-red-500/30' }
+      case 'high':     return { label: 'High',     cls: 'bg-orange-900/40 text-orange-400 border-orange-500/30' }
+      case 'low':      return { label: 'Low',       cls: 'bg-emerald-900/40 text-emerald-400 border-emerald-500/30' }
+      default:         return { label: 'Medium',    cls: 'bg-blue-900/40 text-blue-400 border-blue-500/30' }
+    }
+  }
+
   function formatTime(hours) {
     if (!hours || hours === 0) return '—'
     if (hours < 1) return `${Math.round(hours * 60)}m`
@@ -647,7 +686,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     const q = ticketSearch.toLowerCase().trim()
     const matchesSearch = !q || (t.title||'').toLowerCase().includes(q) || (t.description||'').toLowerCase().includes(q) || (t.affected_person||'').toLowerCase().includes(q)
     const matchesStatus = ticketStatusFilter === 'all' || t.status === ticketStatusFilter
-    return matchesSearch && matchesStatus
+    const matchesPriority = ticketPriorityFilter === 'all' || t.priority === ticketPriorityFilter
+    return matchesSearch && matchesStatus && matchesPriority
   })
 
   // ── Ticket detail view ──
@@ -666,8 +706,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
           <div className="glass rounded-xl p-5 mb-5">
             <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <StatusBadge status={selectedTicket.status} />
+                  {(() => { const pb = getPriorityBadge(selectedTicket.priority); return <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${pb.cls}`}>{pb.label}</span> })()}
                   <span className="text-slate-500 text-xs">{new Date(selectedTicket.created_at).toLocaleDateString()}</span>
                 </div>
                 <h2 className="text-white text-xl font-semibold">{selectedTicket.title}</h2>
@@ -992,6 +1033,15 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     </select>
                   </div>
                   <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Priority</label>
+                    <select value={ticketForm.priority||'medium'} onChange={e=>setTicketForm(f=>({...f,priority:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
+                  <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Status</label>
                     <select value={ticketForm.status} onChange={e=>setTicketForm(f=>({...f,status:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
                       <option value="opened">Opened</option>
@@ -1011,8 +1061,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </form>
             )}
 
-            <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
-              <div className="relative flex-1">
+            <div className="flex flex-col gap-2.5 mb-4">
+              <div className="relative">
                 <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                 </svg>
@@ -1023,17 +1073,25 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   className="w-full bg-white/5 border border-white/8 rounded-xl pl-9 pr-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all"
                 />
               </div>
-              <div className="flex gap-1.5 shrink-0">
+              <div className="flex flex-wrap gap-1.5">
+                <span className="text-slate-600 text-xs self-center mr-1">Status:</span>
                 {['all','opened','pending','solved'].map(f => (
                   <button key={f} onClick={() => setTicketStatusFilter(f)}
-                    className={`px-3 py-2 rounded-xl text-xs font-semibold capitalize transition-all ${ticketStatusFilter === f ? (isSuperAdmin ? 'tab-active-amber' : 'tab-active-indigo') : 'tab-inactive border border-white/8'}`}>
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize transition-all ${ticketStatusFilter === f ? (isSuperAdmin ? 'tab-active-amber' : 'tab-active-indigo') : 'tab-inactive border border-white/8'}`}>
+                    {f}
+                  </button>
+                ))}
+                <span className="text-slate-600 text-xs self-center ml-3 mr-1">Priority:</span>
+                {['all','low','medium','high','critical'].map(f => (
+                  <button key={f} onClick={() => setTicketPriorityFilter(f)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize transition-all ${ticketPriorityFilter === f ? (isSuperAdmin ? 'tab-active-amber' : 'tab-active-indigo') : 'tab-inactive border border-white/8'}`}>
                     {f}
                   </button>
                 ))}
               </div>
             </div>
 
-            {(ticketSearch || ticketStatusFilter !== 'all') && (
+            {(ticketSearch || ticketStatusFilter !== 'all' || ticketPriorityFilter !== 'all') && (
               <p className="text-slate-600 text-xs mb-3">
                 Showing {filteredTickets.length} of {tickets.length} tickets
                 {ticketSearch && <> matching "<span className="text-slate-400">{ticketSearch}</span>"</>}
@@ -1062,9 +1120,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0 cursor-pointer" onClick={()=>setSelectedTicket(t)}>
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <StatusBadge status={t.status} />
+                        {(() => { const pb = getPriorityBadge(t.priority); return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${pb.cls}`}>{pb.label}</span> })()}
                         <span className="text-slate-600 text-[11px]">{new Date(t.created_at).toLocaleDateString()}</span>
+                        {t.rating && <span className="text-amber-400 text-[10px]">{'★'.repeat(t.rating)}{'☆'.repeat(5-t.rating)}</span>}
                       </div>
                       <h3 className="text-slate-100 text-sm font-semibold group-hover:text-white transition-colors leading-snug">{t.title}</h3>
                       {t.description && <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 leading-relaxed">{t.description}</p>}
@@ -1552,6 +1612,49 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </div>
             </div>
 
+            <div className="glass-card rounded-2xl overflow-hidden animate-fadeIn" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
+              <div className="p-4 border-b border-white/8"><h3 className="text-white font-semibold text-sm flex items-center gap-2">⭐ Member Ratings</h3></div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/8 bg-white/3">
+                      {['Member','Tickets Rated','Avg Rating','Distribution'].map(h => (
+                        <th key={h} className="text-left text-[11px] text-slate-500 uppercase tracking-widest px-4 py-3 font-semibold">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.filter(u => u.role === 'member').map(member => {
+                      const memberTickets = tickets.filter(t => t.assigned_to === member.id && t.rating != null)
+                      const avgRating = memberTickets.length > 0 ? memberTickets.reduce((a, t) => a + t.rating, 0) / memberTickets.length : null
+                      return (
+                        <tr key={member.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
+                          <td className="px-4 py-3"><p className="text-white font-semibold text-sm">{member.full_name}</p><p className="text-slate-500 text-xs">{member.email}</p></td>
+                          <td className="px-4 py-3 text-slate-300">{memberTickets.length}</td>
+                          <td className="px-4 py-3">
+                            {avgRating != null ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-amber-400 font-bold">{avgRating.toFixed(1)}</span>
+                                <span className="text-amber-400">{'★'.repeat(Math.round(avgRating))}{'☆'.repeat(5-Math.round(avgRating))}</span>
+                              </div>
+                            ) : <span className="text-slate-600 text-xs">No ratings</span>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
+                              {[1,2,3,4,5].map(star => {
+                                const count = memberTickets.filter(t => t.rating === star).length
+                                return <span key={star} className="text-[10px] text-slate-500">{star}★:{count}</span>
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <div className="glass-card rounded-2xl p-6 animate-fadeIn" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
               <h3 className="text-white font-semibold text-sm mb-4 flex items-center gap-2">📐 Scoring Methodology</h3>
               <div className="grid md:grid-cols-2 gap-3">
@@ -1782,6 +1885,80 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Ticket Templates */}
+            <div className="glass-card rounded-2xl p-6 animate-fadeIn" style={{border:'1px solid rgba(99,102,241,0.15)'}}>
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(99,102,241,0.15)', border:'1px solid rgba(99,102,241,0.25)'}}>
+                    <span className="text-lg">📋</span>
+                  </div>
+                  <div>
+                    <h2 className="text-white font-semibold">Ticket Templates</h2>
+                    <p className="text-slate-500 text-xs">Pre-fill ticket forms for common issues</p>
+                  </div>
+                </div>
+                <button onClick={()=>{setShowTemplateForm(v=>!v);setTemplateMsg('')}} className="btn-primary text-sm px-4 py-2">
+                  {showTemplateForm ? 'Close' : '+ Add Template'}
+                </button>
+              </div>
+
+              {showTemplateForm && (
+                <form onSubmit={createTemplate} className="rounded-2xl p-4 mb-5 space-y-3 animate-scaleIn" style={{background:'rgba(99,102,241,0.05)', border:'1px solid rgba(99,102,241,0.2)'}}>
+                  {templateMsg && <div className={`text-sm rounded-xl p-3 ${templateMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{templateMsg}</div>}
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Template Name *</label>
+                      <input required value={templateForm.name} onChange={e=>setTemplateForm(f=>({...f,name:e.target.value}))} placeholder="e.g. Password Reset" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Priority</label>
+                      <select value={templateForm.priority} onChange={e=>setTemplateForm(f=>({...f,priority:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Ticket Title *</label>
+                    <input required value={templateForm.title} onChange={e=>setTemplateForm(f=>({...f,title:e.target.value}))} placeholder="e.g. [User] needs password reset" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Description Template</label>
+                    <textarea rows={2} value={templateForm.description} onChange={e=>setTemplateForm(f=>({...f,description:e.target.value}))} placeholder="Pre-filled description..." className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 resize-none transition-all" />
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={savingTemplate} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{savingTemplate ? 'Saving...' : 'Save Template'}</button>
+                    <button type="button" onClick={()=>setShowTemplateForm(false)} className="btn-ghost text-sm px-4 py-2">Cancel</button>
+                  </div>
+                </form>
+              )}
+
+              {templates.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-sm">No templates yet. Add one to help employees fill tickets faster.</div>
+              ) : (
+                <div className="space-y-2">
+                  {templates.map(tmpl => {
+                    const pb = getPriorityBadge(tmpl.priority)
+                    return (
+                      <div key={tmpl.id} className="flex items-center justify-between gap-4 p-3.5 rounded-xl" style={{background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)'}}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-white font-semibold text-sm">{tmpl.name}</span>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${pb.cls}`}>{pb.label}</span>
+                          </div>
+                          <p className="text-slate-400 text-xs truncate">{tmpl.title}</p>
+                          {tmpl.description && <p className="text-slate-600 text-xs truncate mt-0.5">{tmpl.description}</p>}
+                        </div>
+                        <button onClick={()=>deleteTemplate(tmpl.id)} className="text-xs text-red-400/70 hover:text-red-400 border border-red-500/10 hover:border-red-500/25 rounded-xl px-2.5 py-1.5 transition-all flex-shrink-0" style={{background:'rgba(239,68,68,0.04)'}}>Delete</button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
             {/* GitHub Sync Settings — super admin only */}
