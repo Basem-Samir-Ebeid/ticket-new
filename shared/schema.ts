@@ -111,3 +111,12 @@ export const officeSettings = pgTable('office_settings', {
   radius_meters: doublePrecision('radius_meters').notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  token: text('token').notNull().unique(),
+  expires_at: timestamp('expires_at', { withTimezone: true }).notNull(),
+  used: boolean('used').notNull().default(false),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})

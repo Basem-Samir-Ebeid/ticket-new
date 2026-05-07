@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import LogoWithStars from '../components/LogoWithStars'
 
@@ -156,6 +157,13 @@ export default function Login() {
                     )}
                   </button>
                 </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Link to="/forgot-password"
+                  className="text-[11px] text-slate-500 hover:text-indigo-400 transition-colors">
+                  Forgot password?
+                </Link>
               </div>
 
               <button

@@ -8,6 +8,8 @@ import SuperAdminDashboard from './pages/SuperAdminDashboard'
 import EmployeeDashboard from './pages/EmployeeDashboard'
 import MemberDashboard from './pages/MemberDashboard'
 import ForceChangePassword from './components/ForceChangePassword'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -34,6 +36,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
+      <Route path="/forgot-password" element={!user ? <ForgotPassword /> : <Navigate to="/" />} />
+      <Route path="/reset-password" element={!user ? <ResetPassword /> : <Navigate to="/" />} />
       <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
