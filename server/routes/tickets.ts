@@ -5,6 +5,14 @@ import { eq, and, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { sendPushToAdmins } from './push'
+import {
+  notifyAdminsNewTicket,
+  notifyAssigned,
+  notifyStatusChanged,
+  notifyTicketAccepted,
+  notifyTicketRefused,
+  notifyNewReply,
+} from '../mailer'
 
 const router = Router()
 
@@ -78,6 +86,8 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       solved_at: status === 'solved' ? now : null,
     }).returning()
 
+    const creatorName = req.profile?.full_name || req.profile?.email || 'Someone'
+
     if (is_request) {
       const adminProfiles = await db.select({ id: profiles.id, role: profiles.role }).from(profiles)
       const adminTargets = adminProfiles.filter(p => isAdminRole(p.role))
@@ -92,6 +102,12 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       sendPushToAdmins('📝 New Ticket Request', title, '/')
     } else {
       sendPushToAdmins('🎫 New Ticket', title, '/')
+    }
+
+    // Send email notifications (fire-and-forget)
+    notifyAdminsNewTicket(ticket, creatorName).catch(() => {})
+    if (assigned_to) {
+      notifyAssigned(ticket, assigned_to, creatorName).catch(() => {})
     }
 
     broadcastAll('ticket_update', { action: 'created', ticket_id: ticket.id, is_request: ticket.is_request })
@@ -127,8 +143,9 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
     const [ticket] = await db.update(tickets).set(updates).where(eq(tickets.id, req.params.id)).returning()
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
 
+    const changerName = req.profile?.full_name || 'Someone'
+
     if (status !== undefined) {
-      const changerName = req.profile?.full_name || 'Someone'
       const statusLabel = status === 'solved' ? '✅ Solved' : status === 'pending' ? '🟡 Pending' : '🔵 Opened'
       const notifMessage = `${statusLabel}: Ticket "${ticket.title}" was marked as ${status} by ${changerName}`
       const notifyIds = new Set<string>()
@@ -142,6 +159,13 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
         }).returning()
         broadcast(userId, 'notification', notif)
       }
+      // Email notification for status change
+      notifyStatusChanged(ticket, status, changerName, [...notifyIds]).catch(() => {})
+    }
+
+    // Email notification when ticket is assigned
+    if (assigned_to !== undefined && assigned_to && assigned_to !== req.user.id) {
+      notifyAssigned(ticket, assigned_to, changerName).catch(() => {})
     }
 
     broadcastAll('ticket_update', { action: 'updated', ticket_id: ticket.id, status: ticket.status })
@@ -182,6 +206,8 @@ router.post('/:id/accept', requireAuth as any, async (req: any, res) => {
       broadcast(ticket.created_by, 'notification', notif)
     }
 
+    notifyTicketAccepted(ticket).catch(() => {})
+
     broadcastAll('ticket_update', { action: 'accepted', ticket_id: ticket?.id })
     res.json(ticket)
   } catch (err: any) {
@@ -203,6 +229,8 @@ router.post('/:id/refuse', requireAuth as any, async (req: any, res) => {
       }).returning()
       broadcast(ticket.created_by, 'notification', notif)
     }
+
+    notifyTicketRefused(ticket).catch(() => {})
 
     broadcastAll('ticket_update', { action: 'refused', ticket_id: ticket?.id })
     res.json(ticket)
@@ -244,7 +272,10 @@ router.post('/:id/replies', requireAuth as any, async (req: any, res) => {
 
     try {
       const [ticket] = await db.select().from(tickets).where(eq(tickets.id, req.params.id))
+      const replierName = req.profile?.full_name || req.profile?.email || 'Someone'
+      const notifyIds = new Set<string>()
       if (ticket?.created_by && ticket.created_by !== req.user.id) {
+        notifyIds.add(ticket.created_by)
         const [notif] = await db.insert(notifications).values({
           user_id: ticket.created_by,
           message: `New reply on ticket: ${ticket.title}`,
@@ -252,7 +283,14 @@ router.post('/:id/replies', requireAuth as any, async (req: any, res) => {
         }).returning()
         broadcast(ticket.created_by, 'notification', notif)
       }
+      if (ticket?.assigned_to && ticket.assigned_to !== req.user.id) {
+        notifyIds.add(ticket.assigned_to)
+      }
       broadcastAll('ticket_reply', { ticket_id: req.params.id, reply_id: reply.id })
+      // Email notification for new reply (fire-and-forget)
+      if (ticket) {
+        notifyNewReply(ticket, replierName, message || null, [...notifyIds]).catch(() => {})
+      }
     } catch {}
 
     res.json(reply)
