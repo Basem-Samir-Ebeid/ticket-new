@@ -57,6 +57,7 @@ Required env vars:
 ## User preferences
 
 - Keep existing JWT-based auth (not replaced with Replit Auth)
+- Default admin account: `admin@finest.com` / `admin123` (super_admin role, created during migration)
 
 ## Gotchas
 
