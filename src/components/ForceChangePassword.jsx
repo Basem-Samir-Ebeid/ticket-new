@@ -18,12 +18,24 @@ export default function ForceChangePassword({ onDone }) {
     if (newPassword.length < 6) { setError('الباسورد لازم يكون 6 حروف على الأقل'); return }
     if (newPassword !== confirmPassword) { setError('الباسوردين مش متطابقين'); return }
     setLoading(true)
-    try {
-      await api.forceChangePassword(newPassword)
-      onDone()
-    } catch (err) {
-      setError(err.message)
+    let lastErr = null
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await api.forceChangePassword(newPassword)
+        setLoading(false)
+        onDone()
+        return
+      } catch (err) {
+        lastErr = err
+        const isTransient = err.status === 503 || err.status === 502 || !err.status
+        if (isTransient && attempt < 3) {
+          await new Promise(r => setTimeout(r, 1200 * attempt))
+          continue
+        }
+        break
+      }
     }
+    setError(lastErr?.message || 'حدث خطأ، يرجى المحاولة مرة أخرى')
     setLoading(false)
   }
 

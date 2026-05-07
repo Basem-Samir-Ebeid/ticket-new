@@ -56,17 +56,18 @@ router.post('/change-password', requireAuth as any, async (req: any, res) => {
 })
 
 router.post('/force-change-password', requireAuth as any, async (req: any, res) => {
+  res.setHeader('Content-Type', 'application/json')
   try {
     const { newPassword } = req.body
-    if (!newPassword) return res.status(400).json({ error: 'New password required' })
-    if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+    if (!newPassword) return res.status(400).json({ error: 'يجب إدخال كلمة المرور الجديدة.' })
+    if (newPassword.length < 6) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.' })
 
     const password_hash = await bcrypt.hash(newPassword, 10)
     await db.update(profiles).set({ password_hash, plain_password: newPassword, must_change_password: false }).where(eq(profiles.id, req.user.id))
     res.json({ success: true })
   } catch (err: any) {
     console.error('POST /force-change-password error:', err)
-    res.status(500).json({ error: err?.message || 'Failed to change password' })
+    res.status(500).json({ error: err?.message || 'فشل تغيير كلمة المرور، يرجى المحاولة مرة أخرى.' })
   }
 })
 
