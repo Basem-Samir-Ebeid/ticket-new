@@ -62,27 +62,45 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
   }, [open])
 
   useEffect(() => {
+    // null = waiting, 'h' = horizontal swipe, 'v' = vertical scroll (cancelled)
+    const intent = { current: null }
+
     const onTouchStart = (e) => {
       if (open) return
       swipeStartX.current = e.touches[0].clientX
       swipeStartY.current = e.touches[0].clientY
+      intent.current = null
+    }
+    const onTouchMove = (e) => {
+      if (open || intent.current !== null || swipeStartX.current === null) return
+      const dx = Math.abs(e.touches[0].clientX - swipeStartX.current)
+      const dy = Math.abs(e.touches[0].clientY - swipeStartY.current)
+      // Decide intent on first meaningful movement (>8px)
+      if (dx < 8 && dy < 8) return
+      intent.current = dy > dx ? 'v' : 'h'
     }
     const onTouchEnd = (e) => {
-      if (open || swipeStartX.current === null) return
+      if (open || intent.current !== 'h' || swipeStartX.current === null) {
+        swipeStartX.current = null
+        swipeStartY.current = null
+        intent.current = null
+        return
+      }
       const dx = e.changedTouches[0].clientX - swipeStartX.current
-      const dy = e.changedTouches[0].clientY - swipeStartY.current
       swipeStartX.current = null
       swipeStartY.current = null
-      // Only trigger if clearly horizontal: dx > 90px AND horizontal is at least 3x vertical
-      if (Math.abs(dx) < 90 || Math.abs(dy) > Math.abs(dx) * 0.33) return
+      intent.current = null
+      if (Math.abs(dx) < 60) return
       const idx = tabs.findIndex(t => t.key === activeTab)
       if (dx < 0 && idx < tabs.length - 1) onTabChange(tabs[idx + 1].key)
       else if (dx > 0 && idx > 0) onTabChange(tabs[idx - 1].key)
     }
     document.addEventListener('touchstart', onTouchStart, { passive: true })
+    document.addEventListener('touchmove', onTouchMove, { passive: true })
     document.addEventListener('touchend', onTouchEnd, { passive: true })
     return () => {
       document.removeEventListener('touchstart', onTouchStart)
+      document.removeEventListener('touchmove', onTouchMove)
       document.removeEventListener('touchend', onTouchEnd)
     }
   }, [open, tabs, activeTab, onTabChange])
