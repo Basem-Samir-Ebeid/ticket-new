@@ -73,7 +73,8 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
       const dy = e.changedTouches[0].clientY - swipeStartY.current
       swipeStartX.current = null
       swipeStartY.current = null
-      if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.8) return
+      // Only trigger if clearly horizontal: dx > 90px AND horizontal is at least 3x vertical
+      if (Math.abs(dx) < 90 || Math.abs(dy) > Math.abs(dx) * 0.33) return
       const idx = tabs.findIndex(t => t.key === activeTab)
       if (dx < 0 && idx < tabs.length - 1) onTabChange(tabs[idx + 1].key)
       else if (dx > 0 && idx > 0) onTabChange(tabs[idx - 1].key)
