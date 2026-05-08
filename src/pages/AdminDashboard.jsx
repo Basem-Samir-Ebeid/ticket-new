@@ -7,6 +7,7 @@ import AttendanceButton from '../components/AttendanceButton'
 import FileAttachment from '../components/FileAttachment'
 import DraggableOfficeMap from '../components/DraggableOfficeMap'
 import { playNotificationSound, showBrowserNotification } from '../lib/sound'
+import AssetsPage from './AssetsPage'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -764,6 +765,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     { key: 'tickets',     label: 'Tickets',     icon: 'tickets' },
     { key: 'requests',    label: 'Requests',    icon: 'requests',    badge: requests.filter(r=>r.request_status==='pending_review').length },
     { key: 'leave',       label: 'Leave',       icon: 'leave',       badge: leaveRequests.filter(r=>r.status==='pending').length },
+    { key: 'assets',      label: 'Assets',      icon: 'assets' },
     { key: 'users',       label: 'Users',       icon: 'users' },
     { key: 'attendance',  label: 'Attendance',  icon: 'attendance' },
     { key: 'performance', label: 'Performance', icon: 'performance' },
@@ -1418,6 +1420,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </div>
             ))}
           </div>
+        )}
+
+        {/* Assets Tab */}
+        {tab === 'assets' && (
+          <AssetsPage isSuperAdmin={isSuperAdmin} />
         )}
 
         {/* Users Tab */}

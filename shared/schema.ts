@@ -148,3 +148,36 @@ export const passwordResetTokens = pgTable('password_reset_tokens', {
   used: boolean('used').notNull().default(false),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const assets = pgTable('assets', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name: text('name').notNull(),
+  type: text('type').notNull().default('other'),
+  serial_number: text('serial_number').unique(),
+  brand: text('brand'),
+  model: text('model'),
+  status: text('status').notNull().default('active'),
+  condition: text('condition').notNull().default('good'),
+  purchase_date: date('purchase_date'),
+  warranty_expires: date('warranty_expires'),
+  purchase_price: doublePrecision('purchase_price'),
+  location: text('location'),
+  notes: text('notes'),
+  image_url: text('image_url'),
+  assigned_to: uuid('assigned_to').references(() => profiles.id, { onDelete: 'set null' }),
+  created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const assetHistory = pgTable('asset_history', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  asset_id: uuid('asset_id').notNull().references(() => assets.id, { onDelete: 'cascade' }),
+  changed_by: uuid('changed_by').references(() => profiles.id, { onDelete: 'set null' }),
+  changed_by_name: text('changed_by_name'),
+  action: text('action').notNull(),
+  description: text('description'),
+  old_value: text('old_value'),
+  new_value: text('new_value'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})

@@ -163,6 +163,15 @@ export const api = {
   getGithubSyncSettings: () => request('GET', '/settings/github-sync'),
   saveGithubSyncSettings: (data) => request('POST', '/settings/github-sync', data),
   testGithubSyncConnection: (data) => request('POST', '/settings/github-sync/test', data),
+
+  // Assets
+  getAssets: () => request('GET', '/assets'),
+  getAssetStats: () => request('GET', '/assets/stats'),
+  getAsset: (id) => request('GET', `/assets/${id}`),
+  createAsset: (data) => request('POST', '/assets', data),
+  updateAsset: (id, data) => request('PATCH', `/assets/${id}`, data),
+  deleteAsset: (id) => request('DELETE', `/assets/${id}`),
+  getAssetHistory: (id) => request('GET', `/assets/${id}/history`),
 }
 
 // ─── CSV Export helper ───────────────────────────────────────────────────────

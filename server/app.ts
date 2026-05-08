@@ -14,6 +14,7 @@ import settingsRoutes from './routes/settings'
 import githubSyncRoutes from './routes/github-sync'
 import githubSyncStatusRoutes from './routes/github-sync-status'
 import forgotPasswordRoutes from './routes/forgot-password'
+import assetRoutes from './routes/assets'
 
 const app = express()
 
@@ -35,6 +36,7 @@ app.use('/api/settings', settingsRoutes)
 app.use('/api/internal/github-sync', githubSyncRoutes)
 app.use('/api/github-sync-status', githubSyncStatusRoutes)
 app.use('/api/auth', forgotPasswordRoutes)
+app.use('/api/assets', assetRoutes)
 
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(process.cwd(), 'dist')))
