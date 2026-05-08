@@ -4,36 +4,71 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import webpush from 'web-push'
 import multer from 'multer'
+import { neon, neonConfig } from '@neondatabase/serverless'
 import pg from 'pg'
 
-const { Pool } = pg
+// ── Neon serverless config (uses HTTP fetch — no TCP timeouts on Vercel) ──────
+neonConfig.fetchConnectionCache = true
+
 const app = express()
 
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// ── DB SINGLETON ──────────────────────────────────────────────────────────────
-// Use global to persist across warm serverless invocations
-if (!global._pgPool) {
-  const connectionString = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL
-  if (!connectionString) {
-    console.error('[DB] FATAL: No database URL found (NEON_DATABASE_URL or DATABASE_URL not set)')
-  }
-  global._pgPool = new Pool({
-    connectionString,
-    ssl: { rejectUnauthorized: false },
-    max: 3,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-  })
-  global._pgPool.on('error', (err) => {
-    console.error('[DB] Pool error:', err.message)
-  })
+// ── DB: try Neon serverless HTTP first, fall back to standard pg Pool ─────────
+const NEON_URL = process.env.NEON_DATABASE_URL
+const PG_URL   = process.env.DATABASE_URL
+
+if (!NEON_URL && !PG_URL) {
+  console.error('[DB] FATAL: Neither NEON_DATABASE_URL nor DATABASE_URL is set')
 }
 
+// Neon HTTP client (serverless-safe, works on Vercel with no TCP timeouts)
+let _neonSql = null
+function getNeonSql() {
+  if (!_neonSql && NEON_URL) {
+    _neonSql = neon(NEON_URL)
+  }
+  return _neonSql
+}
+
+// Fallback pg Pool for local dev (Replit) where Neon HTTP isn't needed
+if (!global._pgPool) {
+  const connStr = PG_URL || NEON_URL
+  if (connStr) {
+    const { Pool } = pg
+    global._pgPool = new Pool({
+      connectionString: connStr,
+      ssl: connStr.includes('neon.tech') ? { rejectUnauthorized: false } : false,
+      max: 3,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    })
+    global._pgPool.on('error', (err) => console.error('[DB] Pool error:', err.message))
+  }
+}
+
+// ── Unified query helper ───────────────────────────────────────────────────────
+// On Vercel (NEON_URL set, no PG_URL): uses Neon HTTP → no TCP timeout
+// On Replit  (PG_URL set):             uses pg Pool   → normal local dev
+async function query(text, params = []) {
+  // Prefer pg Pool when available (local Replit dev)
+  if (global._pgPool && PG_URL) {
+    return global._pgPool.query(text, params)
+  }
+  // Neon HTTP for Vercel serverless
+  const sql = getNeonSql()
+  if (sql) {
+    const rows = await sql(text, params)
+    return { rows }
+  }
+  throw new Error('No database connection available')
+}
+
+// Keep getPool() for any legacy callers — wraps the unified query
 function getPool() {
-  return global._pgPool
+  return { query }
 }
 
 // ── SCHEMA INIT ───────────────────────────────────────────────────────────────
