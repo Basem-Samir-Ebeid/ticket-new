@@ -31,7 +31,8 @@ export default function EmployeeDashboard() {
   const [myTicketSearch, setMyTicketSearch] = useState('')
 
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [createForm, setCreateForm] = useState({ title: '', description: '', affected_person: '', priority: 'medium' })
+  const [createForm, setCreateForm] = useState({ title: '', description: '', affected_person: '', priority: 'medium', asset_id: '' })
+  const [myAssets, setMyAssets] = useState([])
   const [createMsg, setCreateMsg] = useState('')
   const [creating, setCreating] = useState(false)
   const [templates, setTemplates] = useState([])
@@ -68,8 +69,16 @@ export default function EmployeeDashboard() {
       checkTodayLogin()
       fetchLeaveRequests()
       fetchTemplates()
+      fetchMyAssets()
     }
   }, [user])
+
+  async function fetchMyAssets() {
+    try {
+      const all = await api.getAssets()
+      setMyAssets(all.filter(a => a.assigned_to === user?.id && a.status === 'active'))
+    } catch {}
+  }
 
   useEffect(() => {
     const onTicketUpdate = () => {
@@ -306,10 +315,11 @@ export default function EmployeeDashboard() {
         description: createForm.description,
         affected_person: createForm.affected_person,
         priority: createForm.priority || 'medium',
+        asset_id: createForm.asset_id || null,
         is_request: true,
       })
       setCreateMsg('✓ Ticket submitted to admin for review!')
-      setCreateForm({ title: '', description: '', affected_person: '', priority: 'medium' })
+      setCreateForm({ title: '', description: '', affected_person: '', priority: 'medium', asset_id: '' })
       setShowCreateForm(false)
       fetchMyRequests()
     } catch (err) { setCreateMsg('Error: ' + err.message) }
@@ -758,6 +768,15 @@ export default function EmployeeDashboard() {
                     </select>
                   </div>
                 </div>
+                {myAssets.length > 0 && (
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Related Asset (Optional)</label>
+                    <select value={createForm.asset_id} onChange={e=>setCreateForm(f=>({...f,asset_id:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+                      <option value="">No linked asset</option>
+                      {myAssets.map(a => <option key={a.id} value={a.id}>{a.name}{a.serial_number ? ` (${a.serial_number})` : ''}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <button type="submit" disabled={creating} className="btn-primary disabled:opacity-50 text-sm px-5 py-2">
                     {creating ? 'Submitting...' : 'Send to Admin'}

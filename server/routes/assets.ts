@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { db } from '../db'
-import { assets, assetHistory, profiles, notifications } from '../../shared/schema'
+import { assets, assetHistory, profiles, notifications, tickets } from '../../shared/schema'
 import { eq, desc, and, isNull } from 'drizzle-orm'
 import { requireAuth, requireAdmin } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
@@ -251,6 +251,27 @@ router.delete('/:id', requireAuth as any, requireAdmin as any, async (req: any, 
   } catch (err: any) {
     console.error('DELETE /assets/:id error:', err)
     res.status(500).json({ error: err?.message || 'Failed to delete asset' })
+  }
+})
+
+// GET /api/assets/:id/tickets — tickets linked to this asset
+router.get('/:id/tickets', requireAuth as any, async (req: any, res) => {
+  try {
+    const rows = await db.select().from(tickets)
+      .where(eq(tickets.asset_id, req.params.id))
+      .orderBy(desc(tickets.created_at))
+    const allProfiles = await db.select({
+      id: profiles.id, full_name: profiles.full_name, email: profiles.email
+    }).from(profiles)
+    const profileMap = new Map(allProfiles.map(p => [p.id, p]))
+    res.json(rows.map(t => ({
+      ...t,
+      created_by_profile: profileMap.get(t.created_by) || null,
+      assigned_to_profile: profileMap.get(t.assigned_to) || null,
+    })))
+  } catch (err: any) {
+    console.error('GET /assets/:id/tickets error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get tickets' })
   }
 })
 

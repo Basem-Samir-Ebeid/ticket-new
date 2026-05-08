@@ -32,7 +32,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [showCreateTicket, setShowCreateTicket] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '' })
-  const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '' })
+  const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
+  const [ticketAssets, setTicketAssets] = useState([])
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
   const [requests, setRequests] = useState([])
@@ -261,6 +262,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   }
   async function fetchUsers() {
     try { setUsers(await api.getUsers()) } catch {}
+  }
+  async function fetchTicketAssets() {
+    try { setTicketAssets(await api.getAssets()) } catch {}
   }
   async function fetchReplies(ticketId) {
     try { setReplies(await api.getReplies(ticketId)) } catch {}
@@ -588,9 +592,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         priority: ticketForm.priority || 'medium',
         category: ticketForm.category || null,
         due_date: ticketForm.due_date || null,
+        asset_id: ticketForm.asset_id || null,
       })
       setMsg('✓ Ticket created!')
-      setTicketForm({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '' })
+      setTicketForm({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
       setShowCreateTicket(false)
       fetchTickets()
     } catch (e) { setMsg('Error: ' + e.message) }
@@ -801,6 +806,15 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 <h2 className="text-white text-xl font-semibold">{selectedTicket.title}</h2>
                 {selectedTicket.description && <p className="text-slate-400 mt-2">{selectedTicket.description}</p>}
                 {selectedTicket.affected_person && <p className="text-slate-500 text-sm mt-2">👤 {selectedTicket.affected_person}</p>}
+                {selectedTicket.asset && (
+                  <div className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-lg text-xs font-medium"
+                    style={{background:'rgba(99,102,241,0.12)',border:'1px solid rgba(99,102,241,0.25)',color:'#818cf8'}}>
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H3.75A2.25 2.25 0 011.5 15V5.25m19.5 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 7.409A2.25 2.25 0 012.25 5.493V5.25" />
+                    </svg>
+                    {selectedTicket.asset.name}{selectedTicket.asset.serial_number ? ` · ${selectedTicket.asset.serial_number}` : ''}
+                  </div>
+                )}
                 <p className="text-slate-500 text-xs mt-2">Assigned to: <span className="text-slate-300">{selectedTicket.assigned_to_profile?.full_name || 'Unassigned'}</span></p>
               </div>
               <select value={selectedTicket.status} onChange={e => { updateStatus(selectedTicket.id, e.target.value); setSelectedTicket(p => ({...p, status: e.target.value})) }}
@@ -1105,6 +1119,13 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <select value={ticketForm.assigned_to} onChange={e=>setTicketForm(f=>({...f,assigned_to:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
                       <option value="">Unassigned</option>
                       {users.map(u => <option key={u.id} value={u.id}>{u.full_name||u.email} ({u.role})</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Related Asset</label>
+                    <select value={ticketForm.asset_id} onChange={e=>{if(!ticketAssets.length)fetchTicketAssets();setTicketForm(f=>({...f,asset_id:e.target.value}))}} onFocus={()=>{if(!ticketAssets.length)fetchTicketAssets()}} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+                      <option value="">No linked asset</option>
+                      {ticketAssets.map(a => <option key={a.id} value={a.id}>{a.name}{a.serial_number ? ` (${a.serial_number})` : ''}</option>)}
                     </select>
                   </div>
                   <div>

@@ -172,6 +172,7 @@ export const api = {
   updateAsset: (id, data) => request('PATCH', `/assets/${id}`, data),
   deleteAsset: (id) => request('DELETE', `/assets/${id}`),
   getAssetHistory: (id) => request('GET', `/assets/${id}/history`),
+  getAssetTickets: (id) => request('GET', `/assets/${id}/tickets`),
 }
 
 // ─── CSV Export helper ───────────────────────────────────────────────────────

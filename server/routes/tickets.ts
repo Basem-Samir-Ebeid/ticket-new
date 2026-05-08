@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { db } from '../db'
-import { tickets, ticketReplies, profiles, notifications, ticketTemplates, ticketHistory } from '../../shared/schema'
+import { tickets, ticketReplies, profiles, notifications, ticketTemplates, ticketHistory, assets } from '../../shared/schema'
 import { eq, and, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
@@ -22,10 +22,18 @@ async function withProfiles(rows: any[]) {
   }).from(profiles)
   const profileMap = new Map(allProfiles.map(p => [p.id, p]))
 
+  const assetIds = [...new Set(rows.map(t => t.asset_id).filter(Boolean))]
+  let assetMap = new Map<string, any>()
+  if (assetIds.length > 0) {
+    const allAssets = await db.select({ id: assets.id, name: assets.name, type: assets.type, serial_number: assets.serial_number }).from(assets)
+    allAssets.forEach(a => assetMap.set(a.id, a))
+  }
+
   return rows.map(t => ({
     ...t,
     created_by_profile: profileMap.get(t.created_by) || null,
     assigned_to_profile: profileMap.get(t.assigned_to) || null,
+    asset: t.asset_id ? assetMap.get(t.asset_id) || null : null,
   }))
 }
 
@@ -111,13 +119,14 @@ router.delete('/templates/:id', requireAuth as any, async (req: any, res) => {
 
 router.post('/', requireAuth as any, async (req: any, res) => {
   try {
-    const { title, description, affected_person, assigned_to, status, is_request, priority, category, due_date } = req.body
+    const { title, description, affected_person, assigned_to, status, is_request, priority, category, due_date, asset_id } = req.body
     const now = new Date()
     const [ticket] = await db.insert(tickets).values({
       title,
       description: description || null,
       affected_person: affected_person || null,
       assigned_to: assigned_to || null,
+      asset_id: asset_id || null,
       created_by: req.user.id,
       status: status || 'opened',
       priority: priority || 'medium',
@@ -163,7 +172,7 @@ router.post('/', requireAuth as any, async (req: any, res) => {
 
 router.patch('/:id', requireAuth as any, async (req: any, res) => {
   try {
-    const { status, request_status, assigned_to, is_request, opened_at, review, priority, category, due_date, title, description } = req.body
+    const { status, request_status, assigned_to, is_request, opened_at, review, priority, category, due_date, title, description, asset_id } = req.body
     const updates: any = {}
     const changerName = req.profile?.full_name || req.profile?.email || 'Someone'
 
@@ -221,6 +230,12 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
     }
     if (description !== undefined) {
       updates.description = description
+    }
+    if (asset_id !== undefined) {
+      if (existing.asset_id !== asset_id) {
+        historyEntries.push({ field: 'asset_id', old_value: existing.asset_id || '', new_value: asset_id || '' })
+      }
+      updates.asset_id = asset_id || null
     }
 
     const [ticket] = await db.update(tickets).set(updates).where(eq(tickets.id, req.params.id)).returning()

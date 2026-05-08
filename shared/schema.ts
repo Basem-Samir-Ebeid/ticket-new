@@ -20,6 +20,7 @@ export const tickets = pgTable('tickets', {
   title: text('title').notNull(),
   description: text('description'),
   affected_person: text('affected_person'),
+  asset_id: uuid('asset_id'),
   category: text('category'),
   due_date: date('due_date'),
   assigned_to: uuid('assigned_to').references(() => profiles.id, { onDelete: 'set null' }),

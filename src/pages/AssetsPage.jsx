@@ -128,6 +128,8 @@ export default function AssetsPage({ isSuperAdmin = false }) {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [uploadingImg, setUploadingImg] = useState(false)
   const [detailTab, setDetailTab] = useState('info')
+  const [assetTickets, setAssetTickets] = useState([])
+  const [ticketsLoading, setTicketsLoading] = useState(false)
   const imgInputRef = useRef(null)
 
   useEffect(() => {
@@ -142,7 +144,12 @@ export default function AssetsPage({ isSuperAdmin = false }) {
   }, [])
 
   useEffect(() => {
-    if (selectedAsset) fetchHistory(selectedAsset.id)
+    if (selectedAsset) {
+      fetchHistory(selectedAsset.id)
+      fetchAssetTickets(selectedAsset.id)
+    } else {
+      setAssetTickets([])
+    }
   }, [selectedAsset])
 
   async function fetchAll() {
@@ -157,6 +164,12 @@ export default function AssetsPage({ isSuperAdmin = false }) {
 
   async function fetchUsers() {
     try { setUsers(await api.getUsers()) } catch {}
+  }
+
+  async function fetchAssetTickets(id) {
+    setTicketsLoading(true)
+    try { setAssetTickets(await api.getAssetTickets(id)) } catch {}
+    setTicketsLoading(false)
   }
 
   async function fetchHistory(id) {
@@ -563,21 +576,72 @@ export default function AssetsPage({ isSuperAdmin = false }) {
 
               {/* Tabs */}
               <div className="flex border-b border-white/6">
-                {['info', 'history'].map(t => (
+                {['info', 'history', 'tickets'].map(t => (
                   <button key={t} onClick={() => setDetailTab(t)}
                     className="flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-all"
                     style={{
                       color: detailTab === t ? accent : '#475569',
                       borderBottom: detailTab === t ? `2px solid ${accent}` : '2px solid transparent',
                     }}>
-                    {t === 'info' ? 'Details' : 'History'}
+                    {t === 'info' ? 'Details' : t === 'history' ? 'History' : `Tickets${assetTickets.length ? ` (${assetTickets.length})` : ''}`}
                   </button>
                 ))}
               </div>
 
               {/* Detail content */}
               <div className="p-4 max-h-[60vh] overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
-                {detailTab === 'info' ? (
+                {detailTab === 'tickets' ? (
+                  <div>
+                    {ticketsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <svg className="w-5 h-5 animate-spin text-slate-500" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      </div>
+                    ) : assetTickets.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 gap-2">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                          <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a3 3 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z" />
+                          </svg>
+                        </div>
+                        <p className="text-slate-500 text-sm">No tickets linked to this asset</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {assetTickets.map(t => {
+                          const statusColors = { opened: { bg: 'rgba(99,102,241,0.12)', color: '#818cf8', border: 'rgba(99,102,241,0.25)' }, pending: { bg: 'rgba(245,158,11,0.12)', color: '#fbbf24', border: 'rgba(245,158,11,0.25)' }, solved: { bg: 'rgba(16,185,129,0.12)', color: '#34d399', border: 'rgba(16,185,129,0.25)' } }
+                          const sc = statusColors[t.status] || statusColors.opened
+                          return (
+                            <div key={t.id} className="rounded-xl p-3 flex flex-col gap-1.5"
+                              style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                              <div className="flex items-start justify-between gap-2">
+                                <span className="text-slate-200 text-xs font-medium leading-snug flex-1">{t.title}</span>
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0"
+                                  style={{color: sc.color, background: sc.bg, border: `1px solid ${sc.border}`}}>
+                                  {t.status}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {t.created_by_profile && (
+                                  <span className="text-slate-500 text-[10px]">by {t.created_by_profile.full_name || t.created_by_profile.email}</span>
+                                )}
+                                <span className="text-slate-600 text-[10px]">{new Date(t.created_at).toLocaleDateString()}</span>
+                                {t.priority && t.priority !== 'medium' && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full capitalize"
+                                    style={{background: t.priority==='urgent'?'rgba(239,68,68,0.12)':t.priority==='high'?'rgba(249,115,22,0.12)':'rgba(100,116,139,0.12)', color: t.priority==='urgent'?'#f87171':t.priority==='high'?'#fb923c':'#94a3b8'}}>
+                                    {t.priority}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : detailTab === 'info' ? (
                   <div className="space-y-3">
                     {[
                       { label: 'Serial Number', value: selectedAsset.serial_number || '—' },
