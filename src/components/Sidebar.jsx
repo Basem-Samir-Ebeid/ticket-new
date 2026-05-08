@@ -65,8 +65,23 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
     // null = waiting, 'h' = horizontal swipe, 'v' = vertical scroll (cancelled)
     const intent = { current: null }
 
+    function hasHorizontalScroll(el) {
+      while (el && el !== document.body) {
+        const style = window.getComputedStyle(el)
+        const ox = style.overflowX
+        if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth) return true
+        el = el.parentElement
+      }
+      return false
+    }
+
     const onTouchStart = (e) => {
       if (open) return
+      // If touched element is inside a horizontally scrollable container, ignore swipe
+      if (hasHorizontalScroll(e.target)) {
+        swipeStartX.current = null
+        return
+      }
       swipeStartX.current = e.touches[0].clientX
       swipeStartY.current = e.touches[0].clientY
       intent.current = null
