@@ -10,18 +10,27 @@ A full-stack web app for managing IT support tickets, employee attendance (GPS-b
 - `npm run db:push` — push Drizzle schema changes to the database
 
 **Required env vars** (already set in Replit secrets):
-- `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`
+- `NEON_DATABASE_URL` — Neon PostgreSQL connection string (primary database)
 - `JWT_SECRET` — token signing secret
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_EMAIL` — web push notifications
 
-**Default admin account** (created on migration):
-- Email: `admin@company.com` / Password: `Admin123!`
+**Super admin accounts:**
+- Email: `basem.samir@finest-his.com`
+- Email: `admin@system.com`
+
+## Database
+
+The project uses **Neon PostgreSQL** as its database, connected via the `NEON_DATABASE_URL` secret.
+
+- Connection is defined in `server/db.ts` — always reads from `NEON_DATABASE_URL`
+- Schema is defined in `shared/schema.ts` — run `npm run db:push` after any changes
+- Drizzle config in `drizzle.config.ts` — also reads from `NEON_DATABASE_URL`
 
 ## Stack
 
 - **Frontend**: React 18 + Vite + React Router v6 + TailwindCSS
 - **Backend**: Node.js + Express + TypeScript (tsx)
-- **Database**: PostgreSQL via Replit built-in DB + Drizzle ORM
+- **Database**: Neon PostgreSQL + Drizzle ORM (connection via `NEON_DATABASE_URL` secret)
 - **Auth**: JWT (bcryptjs password hashing)
 - **Real-time**: WebSocket server (`ws`) — broadcasts ticket/attendance/notification events
 - **Push**: Web Push (`web-push`) with VAPID keys
