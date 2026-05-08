@@ -2,18 +2,19 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import * as schema from '../shared/schema'
 
-const connectionString = process.env.NEON_DATABASE_URL
+const connectionString = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL
 
 if (!connectionString) {
   throw new Error(
-    '[DB] NEON_DATABASE_URL is not set. Please add it to your Replit Secrets.\n' +
-    '     You can find it in your Neon dashboard under Connection Details.'
+    '[DB] No database URL found. Please set NEON_DATABASE_URL or DATABASE_URL in your Replit Secrets.'
   )
 }
 
+const isNeon = connectionString.includes('neon.tech')
+
 export const pool = new Pool({
   connectionString,
-  ssl: { rejectUnauthorized: false },
+  ssl: isNeon ? { rejectUnauthorized: false } : false,
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
@@ -24,7 +25,7 @@ pool.on('error', (err) => {
 })
 
 pool.on('connect', () => {
-  console.log('[DB] Connected to Neon database')
+  console.log('[DB] Connected to database')
 })
 
 export const db = drizzle(pool, { schema })
