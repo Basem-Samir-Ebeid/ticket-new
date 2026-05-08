@@ -216,7 +216,47 @@ async function ensureSchema() {
   }
 }
 
-ensureSchema().catch(err => console.error('[schema-init] Failed:', err))
+// ── SEED SUPER ADMINS ─────────────────────────────────────────────────────────
+async function seedAdmins() {
+  try {
+    const db = getPool()
+    const superAdmins = [
+      {
+        email: 'basem.samir@finest-his.com',
+        password: process.env.SEED_ADMIN1_PASSWORD || 'Basem.s.ebeid#@55!',
+        full_name: 'Basem Samir',
+      },
+      {
+        email: 'admin@system.com',
+        password: process.env.SEED_ADMIN2_PASSWORD || 'Admin@System#2024',
+        full_name: 'System Admin',
+      },
+    ]
+    for (const admin of superAdmins) {
+      const { rows } = await db.query('SELECT id FROM profiles WHERE email = $1', [admin.email])
+      if (rows.length === 0) {
+        const password_hash = await bcrypt.hash(admin.password, 10)
+        await db.query(
+          `INSERT INTO profiles (email, password_hash, plain_password, full_name, role, must_change_password)
+           VALUES ($1, $2, $3, $4, 'super_admin', false)`,
+          [admin.email, password_hash, admin.password, admin.full_name]
+        )
+        console.log(`[seed] Created super admin: ${admin.email}`)
+      } else {
+        console.log(`[seed] Super admin already exists: ${admin.email}`)
+      }
+    }
+  } catch (err) {
+    console.error('[seed] Failed to seed admins:', err.message)
+  }
+}
+
+async function initDb() {
+  await ensureSchema()
+  await seedAdmins()
+}
+
+initDb().catch(err => console.error('[init] Failed:', err))
 
 // ── AUTH HELPERS ──────────────────────────────────────────────────────────────
 const JWT_SECRET = process.env.JWT_SECRET || 'it-ticket-secret-key-2024'
