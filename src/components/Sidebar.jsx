@@ -37,6 +37,8 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
   const [notifOpen, setNotifOpen] = useState(false)
   const [markingAll, setMarkingAll] = useState(false)
   const notifRef = useRef(null)
+  const swipeStartX = useRef(null)
+  const swipeStartY = useRef(null)
 
   const isAmber = isSuperAdmin
   const accentActive = isAmber
@@ -58,6 +60,31 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
     else document.body.style.overflow = ''
     return () => { document.body.style.overflow = '' }
   }, [open])
+
+  useEffect(() => {
+    const onTouchStart = (e) => {
+      if (open) return
+      swipeStartX.current = e.touches[0].clientX
+      swipeStartY.current = e.touches[0].clientY
+    }
+    const onTouchEnd = (e) => {
+      if (open || swipeStartX.current === null) return
+      const dx = e.changedTouches[0].clientX - swipeStartX.current
+      const dy = e.changedTouches[0].clientY - swipeStartY.current
+      swipeStartX.current = null
+      swipeStartY.current = null
+      if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.8) return
+      const idx = tabs.findIndex(t => t.key === activeTab)
+      if (dx < 0 && idx < tabs.length - 1) onTabChange(tabs[idx + 1].key)
+      else if (dx > 0 && idx > 0) onTabChange(tabs[idx - 1].key)
+    }
+    document.addEventListener('touchstart', onTouchStart, { passive: true })
+    document.addEventListener('touchend', onTouchEnd, { passive: true })
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart)
+      document.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [open, tabs, activeTab, onTabChange])
 
   useEffect(() => {
     fetchNotifications()
