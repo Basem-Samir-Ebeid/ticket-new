@@ -141,9 +141,31 @@ router.post('/', requireAuth as any, async (req: any, res) => {
 
     const creatorName = req.profile?.full_name || req.profile?.email || 'Someone'
 
-    if (is_request) {
-      const adminProfiles = await db.select({ id: profiles.id, role: profiles.role }).from(profiles)
-      const adminTargets = adminProfiles.filter(p => isAdminRole(p.role))
+    // Check if linked asset is under maintenance → urgent alert to admins
+    let linkedAsset: any = null
+    if (asset_id) {
+      const [found] = await db.select().from(assets).where(eq(assets.id, asset_id)).limit(1)
+      linkedAsset = found || null
+    }
+
+    const adminProfiles = await db.select({ id: profiles.id, role: profiles.role }).from(profiles)
+    const adminTargets = adminProfiles.filter(p => isAdminRole(p.role))
+
+    if (linkedAsset?.status === 'under_maintenance') {
+      for (const admin of adminTargets) {
+        const [notif] = await db.insert(notifications).values({
+          user_id: admin.id,
+          ticket_id: ticket.id,
+          message: `🔧 تنبيه: تذكرة جديدة مرتبطة بجهاز تحت الصيانة — "${linkedAsset.name}". أنشأها: ${creatorName}`,
+        }).returning()
+        broadcast(admin.id, 'notification', notif)
+      }
+      sendPushToAdmins(
+        '🔧 جهاز تحت الصيانة — تذكرة عاجلة',
+        `${linkedAsset.name}: ${title}`,
+        '/'
+      )
+    } else if (is_request) {
       for (const admin of adminTargets) {
         const [notif] = await db.insert(notifications).values({
           user_id: admin.id,
