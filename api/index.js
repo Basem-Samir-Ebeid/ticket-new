@@ -1059,6 +1059,15 @@ app.patch('/api/notifications/:id/read', requireAuth, async (req, res) => {
   }
 })
 
+app.patch('/api/notifications/mark-all-read', requireAuth, async (req, res) => {
+  try {
+    await getPool().query('UPDATE notifications SET read=true WHERE user_id=$1', [req.user.id])
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to mark all as read' })
+  }
+})
+
 app.patch('/api/notifications/read-all', requireAuth, async (req, res) => {
   try {
     await getPool().query('UPDATE notifications SET read=true WHERE user_id=$1', [req.user.id])

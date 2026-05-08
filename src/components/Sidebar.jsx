@@ -384,37 +384,6 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
         <SidebarContent />
       </aside>
 
-      {/* ── Mobile: bottom navigation ── */}
-      <nav
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around px-2 py-2"
-        style={{ background: 'rgba(5,5,10,0.97)', borderTop: '1px solid rgba(255,255,255,0.07)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
-      >
-        {tabs.slice(0, 5).map(({ key, label, icon, badge }) => {
-          const isActive = activeTab === key
-          return (
-            <button
-              key={key}
-              onClick={() => handleTabClick(key)}
-              className="relative flex flex-col items-center gap-1 px-2 py-1.5 rounded-xl min-w-0 flex-1 transition-all duration-150"
-              style={isActive ? { color: isAmber ? '#fbbf24' : '#a5b4fc' } : { color: '#475569' }}
-            >
-              {isActive && (
-                <span className="absolute inset-0 rounded-xl" style={{ background: isAmber ? 'rgba(245,158,11,0.1)' : 'rgba(99,102,241,0.1)' }} />
-              )}
-              <span className="relative">
-                <NavIcon name={icon} size="w-5 h-5" />
-                {badge > 0 && (
-                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold"
-                    style={{ background: badgeBg, color: badgeColor }}>
-                    {badge > 9 ? '9+' : badge}
-                  </span>
-                )}
-              </span>
-              <span className="relative text-[9px] font-semibold tracking-wide truncate w-full text-center leading-none">{label.split(' ')[0]}</span>
-            </button>
-          )
-        })}
-      </nav>
     </>
   )
 }

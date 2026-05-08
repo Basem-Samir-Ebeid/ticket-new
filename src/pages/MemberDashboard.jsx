@@ -370,7 +370,7 @@ export default function MemberDashboard() {
       <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 60% -10%, rgba(49,46,129,0.45) 0%, transparent 55%), #05050a'}}>
         <Sidebar tabs={memberTabs} activeTab={activeTab} onTabChange={(t) => { setActiveTab(t); setSelectedTicket(null) }} />
         <div className="lg:ml-64">
-        <div className="max-w-4xl mx-auto p-4 pt-16 lg:pt-16 lg:p-6 pb-24 lg:pb-6">
+        <div className="max-w-4xl mx-auto p-4 pt-16 lg:pt-16 lg:p-6 pb-6">
           <button onClick={()=>setSelectedTicket(null)} className="group flex items-center gap-2 text-slate-400 hover:text-white text-sm mb-6 transition-colors">
             <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
@@ -561,7 +561,7 @@ export default function MemberDashboard() {
     <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 60% -10%, rgba(49,46,129,0.45) 0%, transparent 55%), #05050a'}}>
       <Sidebar tabs={memberTabs} activeTab={activeTab} onTabChange={(t) => setActiveTab(t)} />
       <div className="lg:ml-64">
-      <div className="max-w-4xl mx-auto p-4 pt-16 lg:pt-16 lg:p-6 pb-24 lg:pb-6">
+      <div className="max-w-4xl mx-auto p-4 pt-16 lg:pt-16 lg:p-6 pb-6">
 
         {/* Attendance */}
         <div className="glass-card rounded-2xl p-5 mb-6" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
