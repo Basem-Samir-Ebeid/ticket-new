@@ -24,6 +24,28 @@ const TYPE_LABELS = Object.fromEntries(
 
 const AMOUNT_TYPES = new Set(PENALTY_TYPES.filter(t => t.hasAmount).map(t => t.value))
 
+// ── Escalation logic ──────────────────────────────────────────────────
+const ESCALATION_CHAIN = [
+  { minSeverity: 0, minTotal: 0, suggest: 'verbal_warning',    reason: 'لا توجد جزاءات سابقة — يُنصح بالبدء بتنبيه شفهي' },
+  { minSeverity: 1, minTotal: 1, suggest: 'warning',           reason: 'يوجد جزاء سابق خفيف — يُنصح بإنذار' },
+  { minSeverity: 1, minTotal: 3, suggest: 'final_warning',     reason: '3 جزاءات أو أكثر — يُنصح بإنذار نهائي' },
+  { minSeverity: 2, minTotal: 1, suggest: 'deduction',         reason: 'سبق صدور إنذار — يُنصح بالخصم المالي' },
+  { minSeverity: 2, minTotal: 3, suggest: 'suspension',        reason: '3 جزاءات إنذار أو أكثر — يُنصح بالإيقاف' },
+  { minSeverity: 3, minTotal: 1, suggest: 'suspension',        reason: 'سبق خصم الراتب — يُنصح بالإيقاف عن العمل' },
+  { minSeverity: 4, minTotal: 1, suggest: 'termination',       reason: 'سبق الإيقاف أو التخفيض — يُنصح بإنهاء الخدمة' },
+]
+
+function getEscalationSuggestion(userPenalties) {
+  if (!userPenalties.length) return null
+  const maxSeverity = Math.max(...userPenalties.map(p => PENALTY_TYPES.find(t => t.value === p.type)?.severity || 1))
+  const total = userPenalties.length
+  // Walk chain from highest to lowest threshold — first match wins
+  const match = [...ESCALATION_CHAIN].reverse().find(r => maxSeverity >= r.minSeverity && total >= r.minTotal)
+  if (!match) return null
+  const pt = PENALTY_TYPES.find(t => t.value === match.suggest)
+  return pt ? { ...pt, reason: match.reason, total, maxSeverity } : null
+}
+
 function EmployeeSummary({ penalties, users, onFilterEmployee }) {
   const [sortBy, setSortBy] = useState('total')
 
@@ -157,11 +179,18 @@ export default function PenaltiesPage({ isSuperAdmin = false, isEmployee = false
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [view, setView] = useState('log')
+  const [escalation, setEscalation] = useState(null)
 
   useEffect(() => {
     fetchPenalties()
     if (isAdmin) fetchUsers()
   }, [])
+
+  useEffect(() => {
+    if (!form.user_id) { setEscalation(null); return }
+    const userPenalties = penalties.filter(p => p.user_id === form.user_id)
+    setEscalation(getEscalationSuggestion(userPenalties))
+  }, [form.user_id, penalties])
 
   async function fetchPenalties() {
     setLoading(true)
@@ -329,15 +358,63 @@ export default function PenaltiesPage({ isSuperAdmin = false, isEmployee = false
           {isAdmin && showForm && (
             <form onSubmit={handleCreate} className="glass-card rounded-2xl p-5 mb-4 space-y-4 animate-scaleIn" style={{border:'1px solid rgba(99,102,241,0.2)'}}>
               <h3 className="text-white font-semibold text-sm">إضافة جزاء جديد</h3>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الموظف</label>
-                  <select required value={form.user_id} onChange={e => setForm(f => ({...f, user_id: e.target.value}))}
-                    className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50">
-                    <option value="">اختر موظف</option>
-                    {users.map(u => <option key={u.id} value={u.id}>{u.full_name || u.email}</option>)}
-                  </select>
+
+              {/* Employee selector */}
+              <div>
+                <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الموظف</label>
+                <select required value={form.user_id} onChange={e => setForm(f => ({...f, user_id: e.target.value}))}
+                  className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50">
+                  <option value="">اختر موظف</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.full_name || u.email}</option>)}
+                </select>
+              </div>
+
+              {/* Escalation Banner */}
+              {form.user_id && escalation && (
+                <div className={`rounded-2xl p-4 border ${escalation.severity >= 4 ? 'bg-red-950/40 border-red-600/30' : escalation.severity >= 3 ? 'bg-orange-950/40 border-orange-600/30' : 'bg-amber-950/30 border-amber-500/25'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-lg ${escalation.bg} border ${escalation.border}`}>
+                      {escalation.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-white text-xs font-semibold">اقتراح التصعيد التلقائي</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${escalation.bg} ${escalation.color} border ${escalation.border}`}>
+                          {escalation.icon} {escalation.label}
+                        </span>
+                      </div>
+                      <p className={`text-xs ${escalation.severity >= 4 ? 'text-red-300' : escalation.severity >= 3 ? 'text-orange-300' : 'text-amber-300'} mb-1`}>{escalation.reason}</p>
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                        <span>إجمالي الجزاءات السابقة: <span className="text-slate-300 font-medium">{escalation.total}</span></span>
+                        <span>أعلى خطورة: <span className="text-slate-300 font-medium">{escalation.maxSeverity}/5</span></span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, type: escalation.value, amount: '' }))}
+                      className={`flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all
+                        ${escalation.severity >= 4
+                          ? 'bg-red-900/50 border-red-500/30 text-red-300 hover:bg-red-800/60'
+                          : escalation.severity >= 3
+                          ? 'bg-orange-900/50 border-orange-500/30 text-orange-300 hover:bg-orange-800/60'
+                          : 'bg-amber-900/50 border-amber-500/30 text-amber-300 hover:bg-amber-800/60'
+                        }`}
+                    >
+                      تطبيق ←
+                    </button>
+                  </div>
                 </div>
+              )}
+
+              {/* No history notice */}
+              {form.user_id && !escalation && (
+                <div className="rounded-xl px-4 py-3 bg-emerald-950/30 border border-emerald-600/20 flex items-center gap-2 text-xs text-emerald-400">
+                  <span>✅</span>
+                  <span>لا توجد جزاءات سابقة لهذا الموظف — أول جزاء</span>
+                </div>
+              )}
+
+              <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">نوع الجزاء</label>
                   <select value={form.type} onChange={e => setForm(f => ({...f, type: e.target.value, amount: ''}))}
