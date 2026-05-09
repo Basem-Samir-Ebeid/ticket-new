@@ -33,14 +33,15 @@ export default function PenaltiesPage({ isSuperAdmin = false, isEmployee = false
 
   async function fetchPenalties() {
     setLoading(true)
-    try { setPenalties(await api.getPenalties()) } catch {}
+    try { setPenalties(await api.getPenalties()) }
+    catch (err) { setMsg('خطأ: ' + err.message) }
     setLoading(false)
   }
 
   async function fetchUsers() {
     try {
       const all = await api.getUsers()
-      setUsers(all.filter(u => u.role === 'employee'))
+      setUsers(all)
     } catch {}
   }
 
