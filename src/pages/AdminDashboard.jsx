@@ -10,6 +10,8 @@ import { playNotificationSound, showBrowserNotification } from '../lib/sound'
 import AssetsPage from './AssetsPage'
 import PenaltiesPage from './PenaltiesPage'
 import ComplaintsPage from './ComplaintsPage'
+import SLABadge from '../components/SLABadge'
+import EmployeeProfilePage from './EmployeeProfilePage'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -125,6 +127,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [bulkResetMsg, setBulkResetMsg] = useState('')
   const [bulkResetting, setBulkResetting] = useState(false)
   const [bulkResetConfirm, setBulkResetConfirm] = useState(false)
+  const [employeeProfileId, setEmployeeProfileId] = useState(null)
+  const [autoAssignRules, setAutoAssignRules] = useState([])
+  const [savingAutoAssign, setSavingAutoAssign] = useState(false)
+  const [autoAssignMsg, setAutoAssignMsg] = useState('')
+  const [autoAssignNewCategory, setAutoAssignNewCategory] = useState('')
+  const [autoAssignNewUserId, setAutoAssignNewUserId] = useState('')
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
@@ -380,6 +388,31 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       setSmtpForm({ host: data.host||'', port: data.port||587, secure: data.secure||false, user: data.user||'', password: '', from_name: data.from_name||'Finest IT', from_email: data.from_email||'', enabled: data.enabled||false })
     } catch {}
     setSmtpLoaded(true)
+  }
+
+  async function fetchAutoAssignRules() {
+    try { const d = await api.getAutoAssignRules(); setAutoAssignRules(d.rules || []) } catch {}
+  }
+
+  async function handleSaveAutoAssign() {
+    setSavingAutoAssign(true); setAutoAssignMsg('')
+    try {
+      await api.saveAutoAssignRules({ rules: autoAssignRules })
+      setAutoAssignMsg('✓ تم حفظ قواعد الإسناد التلقائي!')
+    } catch (err) { setAutoAssignMsg('Error: ' + err.message) }
+    setSavingAutoAssign(false)
+  }
+
+  function addAutoAssignRule() {
+    if (!autoAssignNewCategory.trim() || !autoAssignNewUserId) return
+    const user = users.find(u => u.id === autoAssignNewUserId)
+    setAutoAssignRules(r => [...r, { category: autoAssignNewCategory.trim(), user_id: autoAssignNewUserId, user_name: user?.full_name || user?.email || '' }])
+    setAutoAssignNewCategory('')
+    setAutoAssignNewUserId('')
+  }
+
+  function removeAutoAssignRule(idx) {
+    setAutoAssignRules(r => r.filter((_, i) => i !== idx))
   }
 
   async function handleSaveSmtp(e) {
@@ -861,9 +894,19 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   ]
   function handleAdminTabChange(t) {
     setTab(t); setSelectedTicket(null)
-    if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings(); fetchSmtpSettings() }
+    if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings(); fetchSmtpSettings(); fetchAutoAssignRules() }
     if (t === 'attendance') { fetchLiveAttendance(); fetchAttendanceCorrections() }
     if (t === 'leave') { fetchLeaveCalendar(); fetchLeaveReport() }
+  }
+
+  // ── Employee profile overlay ──
+  if (employeeProfileId) {
+    return (
+      <EmployeeProfilePage
+        userId={employeeProfileId}
+        onClose={() => setEmployeeProfileId(null)}
+      />
+    )
   }
 
   // ── Ticket detail view ──
@@ -1317,6 +1360,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <StatusBadge status={t.status} />
                         {(() => { const pb = getPriorityBadge(t.priority); return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${pb.cls}`}>{pb.label}</span> })()}
+                        <SLABadge ticket={t} />
                         <span className="text-slate-600 text-[11px]">{new Date(t.created_at).toLocaleDateString()}</span>
                         {t.rating && <span className="text-amber-400 text-[10px]">{'★'.repeat(t.rating)}{'☆'.repeat(5-t.rating)}</span>}
                       </div>
@@ -1857,6 +1901,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       )}
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
+                          <button onClick={()=>setEmployeeProfileId(u.id)} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">ملف</button>
                           <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
                           <button onClick={()=>openResetPwd(u)} disabled={resettingUserId===u.id} className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 transition-colors">{resettingUserId===u.id ? '...' : 'Reset Pwd'}</button>
                           <button onClick={()=>deleteUser(u.id)} disabled={loading} className="text-xs text-red-400/70 hover:text-red-400 disabled:opacity-50 transition-colors">Delete</button>
@@ -2428,6 +2473,74 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Auto-Assign Rules */}
+            <div className="glass-card rounded-2xl p-6 animate-fadeIn" style={{border:'1px solid rgba(16,185,129,0.15)'}}>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(16,185,129,0.15)', border:'1px solid rgba(16,185,129,0.25)'}}>
+                  <span className="text-lg">🎯</span>
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold">الإسناد التلقائي للتذاكر</h2>
+                  <p className="text-slate-500 text-xs">عند إنشاء تذكرة بفئة معينة بدون مسند — يُسند تلقائياً لعضو الفريق المحدد</p>
+                </div>
+              </div>
+
+              {/* Add rule form */}
+              <div className="flex gap-2 mb-4 flex-wrap">
+                <input
+                  type="text"
+                  value={autoAssignNewCategory}
+                  onChange={e => setAutoAssignNewCategory(e.target.value)}
+                  placeholder="الفئة (مثلاً: Hardware, Network)"
+                  className="flex-1 min-w-[180px] bg-white/5 border border-white/8 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/50 placeholder-slate-600 transition-all"
+                />
+                <select
+                  value={autoAssignNewUserId}
+                  onChange={e => setAutoAssignNewUserId(e.target.value)}
+                  className="flex-1 min-w-[160px] bg-white/5 border border-white/8 rounded-xl px-3 py-2 text-slate-300 text-sm focus:outline-none focus:border-emerald-500/50 transition-all"
+                >
+                  <option value="">— اختر العضو —</option>
+                  {users.filter(u => u.role === 'member' || u.role === 'admin').map(u => (
+                    <option key={u.id} value={u.id}>{u.full_name || u.email} ({u.role})</option>
+                  ))}
+                </select>
+                <button
+                  onClick={addAutoAssignRule}
+                  disabled={!autoAssignNewCategory.trim() || !autoAssignNewUserId}
+                  className="bg-emerald-700/60 hover:bg-emerald-600/70 disabled:opacity-40 text-emerald-300 text-sm px-4 py-2 rounded-xl border border-emerald-500/20 transition-all"
+                >
+                  + إضافة
+                </button>
+              </div>
+
+              {/* Rules list */}
+              {autoAssignRules.length === 0 ? (
+                <div className="text-center py-6 text-slate-500 text-sm">لا توجد قواعد إسناد. أضف قاعدة لتبدأ.</div>
+              ) : (
+                <div className="space-y-2 mb-4">
+                  {autoAssignRules.map((rule, idx) => (
+                    <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl" style={{background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)'}}>
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-900/30 text-emerald-400 border border-emerald-500/20">{rule.category}</span>
+                        <span className="text-slate-500 text-xs">→</span>
+                        <span className="text-slate-300 text-sm truncate">{rule.user_name || rule.user_id}</span>
+                      </div>
+                      <button onClick={() => removeAutoAssignRule(idx)} className="text-xs text-red-400/60 hover:text-red-400 transition-colors flex-shrink-0">حذف</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {autoAssignMsg && (
+                <div className={`text-sm rounded-xl px-3 py-2 mb-3 ${autoAssignMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+                  {autoAssignMsg}
+                </div>
+              )}
+              <button onClick={handleSaveAutoAssign} disabled={savingAutoAssign} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">
+                {savingAutoAssign ? 'جاري الحفظ...' : 'حفظ القواعد'}
+              </button>
             </div>
 
             {/* Ticket Templates */}

@@ -193,6 +193,13 @@ export const api = {
   createComplaint: (data) => request('POST', '/complaints', data),
   updateComplaint: (id, data) => request('PATCH', `/complaints/${id}`, data),
   deleteComplaint: (id) => request('DELETE', `/complaints/${id}`),
+
+  // Employee profile aggregation
+  getEmployeeProfile: (id) => request('GET', `/users/${id}/profile`),
+
+  // Auto-assign rules
+  getAutoAssignRules: () => request('GET', '/settings/auto-assign'),
+  saveAutoAssignRules: (data) => request('POST', '/settings/auto-assign', data),
 }
 
 // ─── CSV Export helper ───────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { requireAuth } from '../auth'
 import { getOfficeConfig, saveOfficeConfig } from '../officeConfig'
 import { getGitHubSyncConfig, saveGitHubSyncConfig } from '../githubSyncConfig'
 import { getSmtpConfig, saveSmtpConfig } from '../smtpConfig'
+import { getAutoAssignConfig, saveAutoAssignConfig } from '../autoAssignConfig'
 import { db } from '../db'
 import { settingsLog } from '../../shared/schema'
 import { desc } from 'drizzle-orm'
@@ -293,6 +294,32 @@ router.post('/github-sync/test', requireAuth as any, async (req: any, res) => {
   } catch (err: any) {
     console.error('POST /github-sync/test error:', err)
     res.status(500).json({ error: err?.message || 'Test connection failed' })
+  }
+})
+
+// ─── Auto-assign rules ────────────────────────────────────────────────────────
+
+router.get('/auto-assign', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    res.json(getAutoAssignConfig())
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to load auto-assign rules' })
+  }
+})
+
+router.post('/auto-assign', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { rules } = req.body
+    if (!Array.isArray(rules)) return res.status(400).json({ error: 'rules must be an array' })
+    const cleaned = rules
+      .filter((r: any) => r.category?.trim() && r.user_id?.trim())
+      .map((r: any) => ({ category: r.category.trim(), user_id: r.user_id.trim(), user_name: r.user_name || '' }))
+    const config = saveAutoAssignConfig({ rules: cleaned })
+    res.json(config)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to save auto-assign rules' })
   }
 })
 

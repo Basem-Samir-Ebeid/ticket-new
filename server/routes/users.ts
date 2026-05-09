@@ -1,8 +1,8 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { db } from '../db'
-import { profiles, sessionRevocations } from '../../shared/schema'
-import { eq, desc } from 'drizzle-orm'
+import { profiles, sessionRevocations, tickets, loginTimes, leaveRequests, assets, penalties } from '../../shared/schema'
+import { eq, desc, and, gte } from 'drizzle-orm'
 import { requireAuth, requireAdmin } from '../auth'
 import { broadcast } from '../ws'
 
@@ -146,6 +146,102 @@ router.post('/:id/revoke-session', requireAuth as any, requireAdmin as any, asyn
   } catch (err: any) {
     console.error('POST /users/:id/revoke-session error:', err)
     res.status(500).json({ error: err?.message || 'Failed to revoke session' })
+  }
+})
+
+// ─── Employee full profile aggregation ───────────────────────────────────────
+
+router.get('/:id/profile', requireAuth as any, requireAdmin as any, async (req: any, res) => {
+  try {
+    const userId = req.params.id
+    const [profile] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1)
+    if (!profile) return res.status(404).json({ error: 'User not found' })
+    const { password_hash, plain_password, ...safeProfile } = profile
+
+    // This month attendance
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+    const allAttendance = await db.select().from(loginTimes).where(eq(loginTimes.user_id, userId))
+    const thisMonthAttendance = allAttendance.filter(a => a.date >= monthStart)
+    const totalDaysPresent = thisMonthAttendance.length
+    const completedDays = thisMonthAttendance.filter(a => a.logout_time)
+    const avgHours = completedDays.length > 0
+      ? completedDays.reduce((sum, a) => {
+          const diff = new Date(a.logout_time!).getTime() - new Date(a.login_time).getTime()
+          return sum + diff / (1000 * 60 * 60)
+        }, 0) / completedDays.length
+      : 0
+
+    // Tickets assigned to this user
+    const userTickets = await db.select({
+      id: tickets.id, title: tickets.title, status: tickets.status,
+      priority: tickets.priority, created_at: tickets.created_at, category: tickets.category,
+    }).from(tickets).where(eq(tickets.assigned_to, userId)).orderBy(desc(tickets.created_at))
+    const ticketsCreatedBy = await db.select({
+      id: tickets.id, title: tickets.title, status: tickets.status,
+      priority: tickets.priority, created_at: tickets.created_at,
+    }).from(tickets).where(eq(tickets.created_by, userId)).orderBy(desc(tickets.created_at))
+
+    // Leaves
+    const userLeaves = await db.select().from(leaveRequests)
+      .where(eq(leaveRequests.user_id, userId))
+      .orderBy(desc(leaveRequests.created_at))
+
+    // Penalties
+    const userPenalties = await db.select().from(penalties)
+      .where(eq(penalties.user_id, userId))
+      .orderBy(desc(penalties.created_at))
+
+    // Assets
+    const userAssets = await db.select().from(assets)
+      .where(eq(assets.assigned_to, userId))
+
+    const openTickets = userTickets.filter(t => t.status === 'opened').length
+    const pendingTickets = userTickets.filter(t => t.status === 'pending').length
+    const solvedTickets = userTickets.filter(t => t.status === 'solved').length
+    const totalPenaltyAmount = userPenalties.reduce((s, p) => s + (p.amount || 0), 0)
+
+    res.json({
+      profile: safeProfile,
+      attendance: {
+        thisMonthDays: totalDaysPresent,
+        avgHoursPerDay: Math.round(avgHours * 10) / 10,
+        totalRecords: allAttendance.length,
+        recentDays: thisMonthAttendance.slice(0, 5),
+      },
+      tickets: {
+        assigned: userTickets.slice(0, 10),
+        created: ticketsCreatedBy.slice(0, 5),
+        stats: { open: openTickets, pending: pendingTickets, solved: solvedTickets, total: userTickets.length },
+      },
+      leaves: {
+        list: userLeaves.slice(0, 10),
+        stats: {
+          approved: userLeaves.filter(l => l.status === 'approved').length,
+          pending: userLeaves.filter(l => l.status === 'pending').length,
+          rejected: userLeaves.filter(l => l.status === 'rejected').length,
+          totalDays: userLeaves.filter(l => l.status === 'approved').reduce((s, l) => s + l.days_count, 0),
+        },
+        balance: {
+          annual: safeProfile.leave_balance,
+          sick: safeProfile.sick_leave_balance,
+          emergency: safeProfile.emergency_leave_balance,
+        },
+      },
+      penalties: {
+        list: userPenalties.slice(0, 10),
+        stats: {
+          total: userPenalties.length,
+          totalAmount: totalPenaltyAmount,
+          warnings: userPenalties.filter(p => p.type === 'warning').length,
+          deductions: userPenalties.filter(p => p.type === 'deduction').length,
+        },
+      },
+      assets: userAssets,
+    })
+  } catch (err: any) {
+    console.error('GET /users/:id/profile error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get profile' })
   }
 })
 

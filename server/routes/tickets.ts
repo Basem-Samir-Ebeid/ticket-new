@@ -5,6 +5,7 @@ import { eq, and, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { sendPushToAdmins } from './push'
+import { findAutoAssignUser } from '../autoAssignConfig'
 import {
   notifyAdminsNewTicket,
   notifyAssigned,
@@ -119,8 +120,16 @@ router.delete('/templates/:id', requireAuth as any, async (req: any, res) => {
 
 router.post('/', requireAuth as any, async (req: any, res) => {
   try {
-    const { title, description, affected_person, assigned_to, status, is_request, priority, category, due_date, asset_id } = req.body
+    const { title, description, affected_person, status, is_request, priority, category, due_date, asset_id } = req.body
+    let { assigned_to } = req.body
     const now = new Date()
+
+    // Auto-assign: if no assignee and category has a rule, use it
+    if (!assigned_to && category) {
+      const autoUser = findAutoAssignUser(category)
+      if (autoUser) assigned_to = autoUser
+    }
+
     const [ticket] = await db.insert(tickets).values({
       title,
       description: description || null,
