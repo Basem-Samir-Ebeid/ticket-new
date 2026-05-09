@@ -437,7 +437,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   async function handleTestSmtp() {
     setTestingSmtp(true); setSmtpTestResult(null); setSmtpMsg('')
     try {
-      const data = await api.testSmtpSettings({ test_email: '' })
+      const data = await api.testSmtpSettings({ test_email: smtpForm.from_email || smtpForm.user || '' })
       setSmtpTestResult({ ok: true, message: data.message })
     } catch (err) { setSmtpTestResult({ ok: false, message: err.message }) }
     setTestingSmtp(false)
@@ -636,6 +636,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         leave_balance: Number(userForm.leave_balance),
         sick_leave_balance: Number(userForm.sick_leave_balance),
         emergency_leave_balance: Number(userForm.emergency_leave_balance),
+        work_start_hour: Number(userForm.work_start_hour ?? 9),
         department: userForm.department,
         job_title: userForm.job_title,
         phone: userForm.phone,
@@ -694,7 +695,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       }
       await api.createUser({ ...userForm, profile_picture_url })
       setMsg('✓ User created!')
-      setUserForm({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false })
+      setUserForm({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '' })
       setProfilePicFile(null)
       setShowCreateUser(false)
       fetchUsers()
@@ -1250,7 +1251,17 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
             <div className="flex justify-between items-center mb-4 gap-2 flex-wrap">
               <h2 className="text-white font-semibold text-sm">All Tickets</h2>
               <div className="flex gap-2">
-                <button onClick={() => exportCsv('/api/export/tickets', 'tickets.csv')} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                <button onClick={() => exportCsv('tickets.csv', tickets, [
+                    { label: 'Title', value: r => r.title },
+                    { label: 'Status', value: r => r.status },
+                    { label: 'Priority', value: r => r.priority },
+                    { label: 'Category', value: r => r.category || '' },
+                    { label: 'Assigned To', value: r => r.assigned_to_profile?.full_name || r.assigned_to_profile?.email || '' },
+                    { label: 'Created By', value: r => r.created_by_profile?.full_name || r.created_by_profile?.email || '' },
+                    { label: 'Affected Person', value: r => r.affected_person || '' },
+                    { label: 'Due Date', value: r => r.due_date || '' },
+                    { label: 'Created At', value: r => r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : '' },
+                  ])} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                   Export CSV
                 </button>
@@ -1500,7 +1511,17 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <span>Approved: <span className="text-green-400 font-medium">{leaveRequests.filter(r=>r.status==='approved').length}</span></span>
                   <span>Rejected: <span className="text-red-400 font-medium">{leaveRequests.filter(r=>r.status==='rejected').length}</span></span>
                 </div>
-                <button onClick={() => exportCsv('/api/export/leaves', 'leaves.csv')} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                <button onClick={() => exportCsv('leaves.csv', leaveRequests, [
+                    { label: 'Employee', value: r => r.user?.full_name || r.user?.email || '' },
+                    { label: 'Leave Type', value: r => ({ annual: 'سنوية', sick: 'مرضية', emergency: 'طارئة', unpaid: 'بدون راتب' }[r.leave_type] || r.leave_type) },
+                    { label: 'Start Date', value: r => r.start_date },
+                    { label: 'End Date', value: r => r.end_date },
+                    { label: 'Days', value: r => r.days_count },
+                    { label: 'Status', value: r => r.status },
+                    { label: 'Reason', value: r => r.reason || '' },
+                    { label: 'Admin Note', value: r => r.admin_note || '' },
+                    { label: 'Submitted At', value: r => r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : '' },
+                  ])} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                   Export CSV
                 </button>
@@ -1697,7 +1718,26 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   placeholder="Search users..."
                   className="bg-white/5 border border-white/8 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500/50 w-52 placeholder-slate-600 transition-all"
                 />
-                <button onClick={() => exportCsv('/api/export/users', 'users.csv')} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                <button onClick={() => exportCsv('users.csv', users, [
+                    { label: 'Full Name', value: r => r.full_name || '' },
+                    { label: 'Email', value: r => r.email },
+                    { label: 'Role', value: r => r.role },
+                    { label: 'Department', value: r => r.department || '' },
+                    { label: 'Job Title', value: r => r.job_title || '' },
+                    { label: 'Employee Code', value: r => r.employee_code || '' },
+                    { label: 'Employment Type', value: r => ({ full_time: 'دوام كامل', part_time: 'دوام جزئي', contract: 'عقد مؤقت', intern: 'تدريب' }[r.employment_type] || r.employment_type || '') },
+                    { label: 'Phone', value: r => r.phone || '' },
+                    { label: 'National ID', value: r => r.national_id || '' },
+                    { label: 'Gender', value: r => r.gender === 'male' ? 'ذكر' : r.gender === 'female' ? 'أنثى' : '' },
+                    { label: 'Hire Date', value: r => r.hire_date || '' },
+                    { label: 'Birth Date', value: r => r.birth_date || '' },
+                    { label: 'Direct Manager', value: r => r.direct_manager || '' },
+                    { label: 'Address', value: r => r.address || '' },
+                    { label: 'Annual Leave Balance', value: r => r.leave_balance ?? '' },
+                    { label: 'Sick Leave Balance', value: r => r.sick_leave_balance ?? '' },
+                    { label: 'Emergency Leave Balance', value: r => r.emergency_leave_balance ?? '' },
+                    { label: 'Created At', value: r => r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : '' },
+                  ])} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                   Export CSV
                 </button>
@@ -1935,7 +1975,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 {/* ── أرصدة الإجازات ── */}
                 <div>
                   <p className="text-[10px] text-sky-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5"><span className="w-4 h-px bg-sky-500/40 inline-block"/>أرصدة الإجازات</p>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div>
                       <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">إجازة سنوية</label>
                       <input type="number" min="0" max="365" value={userForm.leave_balance} onChange={e=>setUserForm(f=>({...f,leave_balance:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-sky-500/40 transition-all" />
@@ -1947,6 +1987,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <div>
                       <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">طوارئ</label>
                       <input type="number" min="0" max="365" value={userForm.emergency_leave_balance} onChange={e=>setUserForm(f=>({...f,emergency_leave_balance:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-sky-500/40 transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">ساعة بداية العمل</label>
+                      <select value={userForm.work_start_hour ?? 9} onChange={e=>setUserForm(f=>({...f,work_start_hour:Number(e.target.value)}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-sky-500/40 transition-all">
+                        {Array.from({length:12},(_,i)=>i+6).map(h=><option key={h} value={h}>{h}:00</option>)}
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -2119,7 +2165,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button onClick={()=>setEmployeeProfileId(u.id)} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">ملف</button>
-                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7,department:u.department||'',job_title:u.job_title||'',phone:u.phone||'',national_id:u.national_id||'',hire_date:u.hire_date||'',birth_date:u.birth_date||'',gender:u.gender||'',address:u.address||'',employment_type:u.employment_type||'full_time',employee_code:u.employee_code||'',direct_manager:u.direct_manager||'',notes:u.notes||''})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
+                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7,work_start_hour:u.work_start_hour??9,department:u.department||'',job_title:u.job_title||'',phone:u.phone||'',national_id:u.national_id||'',hire_date:u.hire_date||'',birth_date:u.birth_date||'',gender:u.gender||'',address:u.address||'',employment_type:u.employment_type||'full_time',employee_code:u.employee_code||'',direct_manager:u.direct_manager||'',notes:u.notes||''})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
                           <button onClick={()=>openResetPwd(u)} disabled={resettingUserId===u.id} className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 transition-colors">{resettingUserId===u.id ? '...' : 'Reset Pwd'}</button>
                           <button onClick={()=>deleteUser(u.id)} disabled={loading} className="text-xs text-red-400/70 hover:text-red-400 disabled:opacity-50 transition-colors">Delete</button>
                         </div>
@@ -2228,7 +2274,15 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               <h2 className="text-white font-semibold text-sm">Attendance</h2>
               <div className="flex items-center gap-2 flex-wrap">
                 <input type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 transition-all" />
-                <button onClick={() => exportCsv(`/api/export/attendance?date=${selectedDate}`, `attendance_${selectedDate}.csv`)} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                <button onClick={() => exportCsv(`attendance_${selectedDate}.csv`, loginTimes, [
+                    { label: 'Name', value: r => r.full_name || '' },
+                    { label: 'Email', value: r => r.email || '' },
+                    { label: 'Role', value: r => r.role || '' },
+                    { label: 'Date', value: r => r.date },
+                    { label: 'Login Time', value: r => r.login_time ? new Date(r.login_time).toLocaleTimeString('ar-EG') : '' },
+                    { label: 'Logout Time', value: r => r.logout_time ? new Date(r.logout_time).toLocaleTimeString('ar-EG') : '' },
+                    { label: 'Worked Hours', value: r => r.login_time && r.logout_time ? ((new Date(r.logout_time) - new Date(r.login_time)) / 3600000).toFixed(2) : '' },
+                  ])} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                   Export CSV
                 </button>
@@ -2295,7 +2349,17 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     {loadingMonthlyReport ? 'Loading...' : 'Generate'}
                   </button>
                   {monthlyReport && !monthlyReport.error && (
-                    <button onClick={() => exportCsv(`/api/export/attendance?year=${monthlyReportYear}&month=${monthlyReportMonth}`, `attendance_${monthlyReportYear}_${monthlyReportMonth}.csv`)} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                    <button onClick={() => exportCsv(`attendance_${monthlyReportYear}_${monthlyReportMonth}.csv`, monthlyReport.employees || [], [
+                        { label: 'Name', value: r => r.full_name || '' },
+                        { label: 'Email', value: r => r.email || '' },
+                        { label: 'Days Present', value: r => r.days_present },
+                        { label: 'Days Absent', value: r => r.days_absent ?? '' },
+                        { label: 'Attendance Rate %', value: r => r.attendance_rate ?? '' },
+                        { label: 'Avg Hours/Day', value: r => r.avg_minutes_per_day ? (r.avg_minutes_per_day / 60).toFixed(1) : '' },
+                        { label: 'Total Hours', value: r => r.total_minutes ? (r.total_minutes / 60).toFixed(1) : '' },
+                        { label: 'Late Count', value: r => r.late_count ?? 0 },
+                        { label: 'Late Total Minutes', value: r => r.late_total_minutes ?? 0 },
+                      ])} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                       Export
                     </button>
@@ -2319,8 +2383,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                           <td className="px-4 py-2.5 text-white font-medium text-sm">{emp.full_name}</td>
                           <td className="px-4 py-2.5 text-emerald-400 font-semibold">{emp.days_present}</td>
                           <td className="px-4 py-2.5 text-red-400">{emp.days_absent ?? '—'}</td>
-                          <td className="px-4 py-2.5 text-slate-300">{emp.avg_hours_per_day ? Number(emp.avg_hours_per_day).toFixed(1)+'h' : '—'}</td>
-                          <td className="px-4 py-2.5 text-slate-300">{emp.total_hours ? Number(emp.total_hours).toFixed(1)+'h' : '—'}</td>
+                          <td className="px-4 py-2.5 text-slate-300">{emp.avg_minutes_per_day ? (emp.avg_minutes_per_day / 60).toFixed(1)+'h' : '—'}</td>
+                          <td className="px-4 py-2.5 text-slate-300">{emp.total_minutes ? (emp.total_minutes / 60).toFixed(1)+'h' : '—'}</td>
                         </tr>
                       ))}
                       {(monthlyReport.employees||[]).length === 0 && (
