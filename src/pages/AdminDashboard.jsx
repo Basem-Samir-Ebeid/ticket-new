@@ -33,7 +33,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [showCreateUser, setShowCreateUser] = useState(false)
   const [showCreateTicket, setShowCreateTicket] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
-  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '' })
+  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7 })
   const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
   const [ticketAssets, setTicketAssets] = useState([])
   const [msg, setMsg] = useState('')
@@ -167,17 +167,27 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       fetchTickets(); fetchRequests(); fetchLeaveRequests()
       if (isSuperAdmin) fetchGithubSyncStatus()
     }
+    const onPenaltyUpdate = () => {
+      setPenaltiesRefreshKey(k => k + 1)
+    }
+    const onComplaintUpdate = () => {
+      setComplaintsRefreshKey(k => k + 1)
+    }
     window.addEventListener('ws:ticket_update', onTicketUpdate)
     window.addEventListener('ws:ticket_reply', onTicketReply)
     window.addEventListener('ws:leave_update', onLeaveUpdate)
     window.addEventListener('ws:attendance_update', onAttendanceUpdate)
     window.addEventListener('ws:notification', onNotification)
+    window.addEventListener('ws:penalty_update', onPenaltyUpdate)
+    window.addEventListener('ws:complaint_update', onComplaintUpdate)
     return () => {
       window.removeEventListener('ws:ticket_update', onTicketUpdate)
       window.removeEventListener('ws:ticket_reply', onTicketReply)
       window.removeEventListener('ws:leave_update', onLeaveUpdate)
       window.removeEventListener('ws:attendance_update', onAttendanceUpdate)
       window.removeEventListener('ws:notification', onNotification)
+      window.removeEventListener('ws:penalty_update', onPenaltyUpdate)
+      window.removeEventListener('ws:complaint_update', onComplaintUpdate)
     }
   }, [])
 
@@ -570,6 +580,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         role: userForm.role,
         can_view_attendance: userForm.can_view_attendance,
         profile_picture_url,
+        leave_balance: Number(userForm.leave_balance),
+        sick_leave_balance: Number(userForm.sick_leave_balance),
+        emergency_leave_balance: Number(userForm.emergency_leave_balance),
       })
       setMsg('✓ User updated!'); setEditingUser(null); setProfilePicFile(null); fetchUsers()
     } catch (e) { setMsg('Error: ' + e.message) }
@@ -824,9 +837,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   ]
   function handleAdminTabChange(t) {
     setTab(t); setSelectedTicket(null)
-    if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings() }
+    if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings(); fetchSmtpSettings() }
     if (t === 'attendance') { fetchLiveAttendance(); fetchAttendanceCorrections() }
-    if (t === 'leave') { fetchLeaveCalendar() }
+    if (t === 'leave') { fetchLeaveCalendar(); fetchLeaveReport() }
   }
 
   // ── Ticket detail view ──
@@ -1663,6 +1676,20 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <input type="checkbox" checked={userForm.can_view_attendance} onChange={e=>setUserForm(f=>({...f,can_view_attendance:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
                   <span className="text-slate-400 text-sm">Can view attendance</span>
                 </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Annual Leave Days</label>
+                    <input type="number" min="0" max="365" value={userForm.leave_balance} onChange={e=>setUserForm(f=>({...f,leave_balance:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Sick Leave Days</label>
+                    <input type="number" min="0" max="365" value={userForm.sick_leave_balance} onChange={e=>setUserForm(f=>({...f,sick_leave_balance:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Emergency Days</label>
+                    <input type="number" min="0" max="365" value={userForm.emergency_leave_balance} onChange={e=>setUserForm(f=>({...f,emergency_leave_balance:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
+                  </div>
+                </div>
                 <div>
                   <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Profile Picture</label>
                   <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 hover:bg-white/8 transition-all">
@@ -1733,7 +1760,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       )}
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
-                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:''})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
+                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
                           <button onClick={()=>openResetPwd(u)} disabled={resettingUserId===u.id} className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 transition-colors">{resettingUserId===u.id ? '...' : 'Reset Pwd'}</button>
                           <button onClick={()=>deleteUser(u.id)} disabled={loading} className="text-xs text-red-400/70 hover:text-red-400 disabled:opacity-50 transition-colors">Delete</button>
                         </div>

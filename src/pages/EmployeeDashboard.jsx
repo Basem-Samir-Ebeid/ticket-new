@@ -68,6 +68,9 @@ export default function EmployeeDashboard() {
   const [correctionMsg, setCorrectionMsg] = useState('')
   const [myCorrections, setMyCorrections] = useState([])
 
+  const [penaltiesRefreshKey, setPenaltiesRefreshKey] = useState(0)
+  const [complaintsRefreshKey, setComplaintsRefreshKey] = useState(0)
+
   const selectedTicketRef = useRef(null)
   useEffect(() => { selectedTicketRef.current = selectedTicket }, [selectedTicket])
 
@@ -132,15 +135,21 @@ export default function EmployeeDashboard() {
       showBrowserNotification('Finest — إجازة', 'تم تحديث طلب الإجازة')
       fetchLeaveRequests()
     }
+    const onPenaltyUpdate = () => setPenaltiesRefreshKey(k => k + 1)
+    const onComplaintUpdate = () => setComplaintsRefreshKey(k => k + 1)
     window.addEventListener('ws:ticket_update', onTicketUpdate)
     window.addEventListener('ws:ticket_reply', onTicketReply)
     window.addEventListener('ws:attendance_update', onAttendanceUpdate)
     window.addEventListener('ws:leave_update', onLeaveUpdate)
+    window.addEventListener('ws:penalty_update', onPenaltyUpdate)
+    window.addEventListener('ws:complaint_update', onComplaintUpdate)
     return () => {
       window.removeEventListener('ws:ticket_update', onTicketUpdate)
       window.removeEventListener('ws:ticket_reply', onTicketReply)
       window.removeEventListener('ws:attendance_update', onAttendanceUpdate)
       window.removeEventListener('ws:leave_update', onLeaveUpdate)
+      window.removeEventListener('ws:penalty_update', onPenaltyUpdate)
+      window.removeEventListener('ws:complaint_update', onComplaintUpdate)
     }
   }, [])
 
@@ -936,11 +945,11 @@ export default function EmployeeDashboard() {
         )}
 
         {activeTab === 'penalties' && (
-          <PenaltiesPage isEmployee />
+          <PenaltiesPage isEmployee refreshKey={penaltiesRefreshKey} />
         )}
 
         {activeTab === 'complaints' && (
-          <ComplaintsPage isEmployee />
+          <ComplaintsPage isEmployee refreshKey={complaintsRefreshKey} />
         )}
 
         {activeTab === 'leave' && (

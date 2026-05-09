@@ -81,8 +81,8 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
 
     const { type, reason, amount, notes } = req.body
     const [updated] = await db.update(penalties).set({
-      type: type || undefined,
-      reason: reason || undefined,
+      type: type !== undefined && type !== '' ? type : undefined,
+      reason: reason !== undefined && reason !== '' ? reason : undefined,
       amount: amount !== undefined ? Number(amount) : undefined,
       notes: notes !== undefined ? notes : undefined,
     }).where(eq(penalties.id, req.params.id)).returning()

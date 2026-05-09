@@ -49,7 +49,7 @@ export default function MemberDashboard() {
   const [attendanceDate, setAttendanceDate] = useState(getLocalDateString())
   const [leaveRequests, setLeaveRequests] = useState([])
   const [showLeaveForm, setShowLeaveForm] = useState(false)
-  const [leaveForm, setLeaveForm] = useState({ start_date: '', end_date: '', reason: '' })
+  const [leaveForm, setLeaveForm] = useState({ start_date: '', end_date: '', reason: '', leave_type: 'annual' })
   const [leaveMsg, setLeaveMsg] = useState('')
   const [submittingLeave, setSubmittingLeave] = useState(false)
 
@@ -256,7 +256,7 @@ export default function MemberDashboard() {
     try {
       await api.createLeave(leaveForm)
       setLeaveMsg('✓ Leave request submitted!')
-      setLeaveForm({ start_date: '', end_date: '', reason: '' })
+      setLeaveForm({ start_date: '', end_date: '', reason: '', leave_type: 'annual' })
       setShowLeaveForm(false)
       fetchLeaveRequests()
     } catch (e) { setLeaveMsg('Error: ' + e.message) }
@@ -884,6 +884,15 @@ export default function MemberDashboard() {
             {showLeaveForm && (
               <form onSubmit={submitLeaveRequest} className="rounded-2xl p-5 mb-4 space-y-3" style={{background:'rgba(99,102,241,0.05)', border:'1px solid rgba(99,102,241,0.2)'}}>
                 {leaveMsg && <div className={`text-sm rounded-xl p-3 ${leaveMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{leaveMsg}</div>}
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Leave Type</label>
+                  <select value={leaveForm.leave_type} onChange={e=>setLeaveForm(f=>({...f,leave_type:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+                    <option value="annual">Annual Leave</option>
+                    <option value="sick">Sick Leave</option>
+                    <option value="emergency">Emergency Leave</option>
+                    <option value="unpaid">Unpaid Leave</option>
+                  </select>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Start Date</label>

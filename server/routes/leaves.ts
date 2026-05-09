@@ -273,6 +273,9 @@ router.patch('/:id/reject', requireAuth as any, async (req: any, res) => {
     if (req.profile.role !== 'admin' && req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Admin only' })
     const { note } = req.body
 
+    const [existing] = await db.select().from(leaveRequests).where(eq(leaveRequests.id, req.params.id))
+    if (!existing) return res.status(404).json({ error: 'Leave request not found' })
+
     const [leave] = await db.update(leaveRequests).set({
       status: 'rejected',
       admin_note: note || null,
@@ -281,6 +284,22 @@ router.patch('/:id/reject', requireAuth as any, async (req: any, res) => {
     }).where(eq(leaveRequests.id, req.params.id)).returning()
 
     if (leave) {
+      // If the leave was previously approved, restore the balance
+      if (existing.status === 'approved') {
+        const days = leave.days_count || 1
+        const ltype = leave.leave_type || 'annual'
+        if (ltype === 'annual') {
+          const [prof] = await db.select({ lb: profiles.leave_balance }).from(profiles).where(eq(profiles.id, leave.user_id))
+          await db.update(profiles).set({ leave_balance: (prof?.lb || 0) + days }).where(eq(profiles.id, leave.user_id))
+        } else if (ltype === 'sick') {
+          const [prof] = await db.select({ lb: profiles.sick_leave_balance }).from(profiles).where(eq(profiles.id, leave.user_id))
+          await db.update(profiles).set({ sick_leave_balance: (prof?.lb || 0) + days }).where(eq(profiles.id, leave.user_id))
+        } else if (ltype === 'emergency') {
+          const [prof] = await db.select({ lb: profiles.emergency_leave_balance }).from(profiles).where(eq(profiles.id, leave.user_id))
+          await db.update(profiles).set({ emergency_leave_balance: (prof?.lb || 0) + days }).where(eq(profiles.id, leave.user_id))
+        }
+      }
+
       const [notif] = await db.insert(notifications).values({
         user_id: leave.user_id,
         message: `❌ تم رفض طلب إجازتك (${leave.start_date} → ${leave.end_date})${note ? ' — ' + note : ''}`,

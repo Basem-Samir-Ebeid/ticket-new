@@ -57,9 +57,15 @@ router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) 
 
 router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, res) => {
   try {
-    const { full_name, role, can_view_attendance, profile_picture_url } = req.body
+    const { full_name, role, can_view_attendance, profile_picture_url, leave_balance, sick_leave_balance, emergency_leave_balance, work_start_hour } = req.body
+    const updateData: Record<string, any> = { full_name, role, can_view_attendance, profile_picture_url }
+    if (leave_balance !== undefined) updateData.leave_balance = Number(leave_balance)
+    if (sick_leave_balance !== undefined) updateData.sick_leave_balance = Number(sick_leave_balance)
+    if (emergency_leave_balance !== undefined) updateData.emergency_leave_balance = Number(emergency_leave_balance)
+    if (work_start_hour !== undefined) updateData.work_start_hour = Number(work_start_hour)
+
     const [user] = await db.update(profiles)
-      .set({ full_name, role, can_view_attendance, profile_picture_url })
+      .set(updateData)
       .where(eq(profiles.id, req.params.id))
       .returning()
 
