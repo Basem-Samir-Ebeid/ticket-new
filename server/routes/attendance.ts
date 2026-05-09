@@ -349,6 +349,91 @@ router.get('/monthly-report', requireAuth as any, async (req: any, res) => {
   }
 })
 
+router.get('/late-overtime-detail', requireAuth as any, async (req: any, res) => {
+  try {
+    const allowed = req.profile.role === 'admin' || req.profile.role === 'super_admin'
+    if (!allowed) return res.status(403).json({ error: 'Admin only' })
+
+    const cairoNow = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+    const [cairoYear, cairoMonth] = cairoNow.split('-').map(Number)
+    const year  = parseInt(req.query.year  as string) || cairoYear
+    const month = parseInt(req.query.month as string) || cairoMonth
+    const userId = req.query.user_id as string | undefined
+
+    const firstDay = `${year}-${String(month).padStart(2, '0')}-01`
+    const lastDayDate = new Date(year, month, 0)
+    const lastDay  = `${year}-${String(month).padStart(2, '0')}-${String(lastDayDate.getDate()).padStart(2, '0')}`
+
+    const conds: any[] = [gte(loginTimes.date, firstDay), lte(loginTimes.date, lastDay)]
+    if (userId) conds.push(eq(loginTimes.user_id, userId))
+    const rows = await db.select().from(loginTimes).where(and(...conds))
+
+    const allProfiles = await db.select({
+      id: profiles.id, full_name: profiles.full_name, email: profiles.email,
+      role: profiles.role, work_start_hour: profiles.work_start_hour,
+    }).from(profiles)
+    const profileMap = new Map(allProfiles.map(p => [p.id, p]))
+
+    const empMap = new Map<string, { profile: any; days: any[] }>()
+
+    for (const r of rows) {
+      const prof = profileMap.get(r.user_id)
+      if (!prof) continue
+      if (!userId && (prof.role === 'admin' || prof.role === 'super_admin')) continue
+
+      if (!empMap.has(r.user_id)) empMap.set(r.user_id, { profile: prof, days: [] })
+      const entry = empMap.get(r.user_id)!
+      const workStart = prof.work_start_hour || 9
+
+      let lateMinutes = 0
+      if (r.login_time) {
+        const loginHour = getLocalHour(new Date(r.login_time))
+        const loginMin  = new Date(r.login_time).getMinutes()
+        lateMinutes = Math.max(0, (loginHour - workStart) * 60 + loginMin)
+      }
+
+      let workedMinutes = 0
+      let overtimeMinutes = 0
+      if (r.login_time && r.logout_time) {
+        workedMinutes   = Math.round((new Date(r.logout_time).getTime() - new Date(r.login_time).getTime()) / 60000)
+        overtimeMinutes = Math.max(0, workedMinutes - 8 * 60)
+      }
+
+      entry.days.push({
+        date: r.date,
+        login_time:       r.login_time,
+        logout_time:      r.logout_time,
+        late_minutes:     lateMinutes,
+        worked_minutes:   workedMinutes,
+        overtime_minutes: overtimeMinutes,
+      })
+    }
+
+    const result = Array.from(empMap.values()).map(({ profile, days }) => {
+      const lateDays = days.filter(d => d.late_minutes > 5)
+      const otDays   = days.filter(d => d.overtime_minutes > 0)
+      return {
+        id:                    profile.id,
+        full_name:             profile.full_name,
+        email:                 profile.email,
+        work_start_hour:       profile.work_start_hour || 9,
+        days_present:          days.length,
+        late_days:             lateDays.length,
+        late_total_minutes:    lateDays.reduce((s: number, d: any) => s + d.late_minutes, 0),
+        overtime_days:         otDays.length,
+        overtime_total_minutes:otDays.reduce((s: number, d: any) => s + d.overtime_minutes, 0),
+        day_records:           days.sort((a: any, b: any) => a.date.localeCompare(b.date)),
+      }
+    })
+
+    result.sort((a, b) => b.late_total_minutes - a.late_total_minutes)
+    res.json({ year, month, employees: result })
+  } catch (err: any) {
+    console.error('GET /attendance/late-overtime-detail error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to generate report' })
+  }
+})
+
 router.get('/corrections', requireAuth as any, async (req: any, res) => {
   try {
     const isAdmin = req.profile.role === 'admin' || req.profile.role === 'super_admin'

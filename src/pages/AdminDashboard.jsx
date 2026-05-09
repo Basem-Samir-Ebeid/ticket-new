@@ -104,6 +104,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [monthlyReportYear, setMonthlyReportYear] = useState(new Date().getFullYear())
   const [monthlyReportMonth, setMonthlyReportMonth] = useState(new Date().getMonth() + 1)
   const [loadingMonthlyReport, setLoadingMonthlyReport] = useState(false)
+  const [lateOTReport, setLateOTReport] = useState(null)
+  const [lateOTYear, setLateOTYear] = useState(new Date().getFullYear())
+  const [lateOTMonth, setLateOTMonth] = useState(new Date().getMonth() + 1)
+  const [loadingLateOT, setLoadingLateOT] = useState(false)
+  const [lateOTExpanded, setLateOTExpanded] = useState(null)
+  const [lateOTSort, setLateOTSort] = useState('late_total')
   const TICKETS_PER_PAGE = 20
   const USERS_PER_PAGE = 20
   const [ticketPage, setTicketPage] = useState(1)
@@ -444,6 +450,15 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       setMonthlyReport(data)
     } catch (err) { setMonthlyReport({ error: err.message }) }
     setLoadingMonthlyReport(false)
+  }
+
+  async function fetchLateOTReport() {
+    setLoadingLateOT(true); setLateOTReport(null); setLateOTExpanded(null)
+    try {
+      const data = await api.getLateOvertimeDetail(lateOTYear, lateOTMonth)
+      setLateOTReport(data)
+    } catch (err) { setLateOTReport({ error: err.message }) }
+    setLoadingLateOT(false)
   }
 
   async function handleSaveGithubSync(e) {
@@ -2117,6 +2132,181 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 <p className="text-slate-500 text-sm text-center py-4">Select a month and click Generate to view the report</p>
               )}
             </div>
+
+            {/* ── Late Arrivals & Overtime Report ── */}
+            {(() => {
+              const fmtMin = (m) => {
+                if (!m || m <= 0) return '—'
+                const h = Math.floor(m / 60), r = m % 60
+                return h > 0 ? `${h}س ${r}د` : `${r}د`
+              }
+              const lateColor = (min) =>
+                min <= 0 ? 'text-slate-500' : min <= 15 ? 'text-yellow-400' : min <= 45 ? 'text-orange-400' : 'text-red-400'
+              const otColor = (min) =>
+                min <= 0 ? 'text-slate-500' : min <= 60 ? 'text-sky-400' : min <= 120 ? 'text-blue-400' : 'text-purple-400'
+
+              const sorted = lateOTReport?.employees ? [...lateOTReport.employees].sort((a, b) => {
+                if (lateOTSort === 'late_total') return b.late_total_minutes - a.late_total_minutes
+                if (lateOTSort === 'late_days')  return b.late_days - a.late_days
+                if (lateOTSort === 'ot_total')   return b.overtime_total_minutes - a.overtime_total_minutes
+                if (lateOTSort === 'ot_days')    return b.overtime_days - a.overtime_days
+                return 0
+              }) : []
+
+              const totalLateMin  = sorted.reduce((s, e) => s + e.late_total_minutes, 0)
+              const totalOTMin    = sorted.reduce((s, e) => s + e.overtime_total_minutes, 0)
+              const latePeople    = sorted.filter(e => e.late_days > 0).length
+              const otPeople      = sorted.filter(e => e.overtime_days > 0).length
+
+              return (
+                <div className="glass-card rounded-2xl p-5 mt-6" style={{border:'1px solid rgba(251,191,36,0.18)'}}>
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                    <h3 className="text-white font-semibold text-sm flex items-center gap-2">⏱️ تقرير التأخيرات والأوفر تايم</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <select value={lateOTYear} onChange={e => setLateOTYear(Number(e.target.value))}
+                        className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-1.5 focus:outline-none">
+                        {Array.from({length:5},(_,i)=>new Date().getFullYear()-i).map(y=><option key={y} value={y}>{y}</option>)}
+                      </select>
+                      <select value={lateOTMonth} onChange={e => setLateOTMonth(Number(e.target.value))}
+                        className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-1.5 focus:outline-none">
+                        {['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'].map((m,i)=>
+                          <option key={i+1} value={i+1}>{m}</option>)}
+                      </select>
+                      <button onClick={fetchLateOTReport} disabled={loadingLateOT}
+                        className="bg-amber-700/50 hover:bg-amber-600/60 disabled:opacity-50 text-amber-300 text-xs font-semibold px-4 py-1.5 rounded-xl border border-amber-500/25 transition-all">
+                        {loadingLateOT ? 'جاري التحميل...' : 'عرض التقرير'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {lateOTReport?.error && (
+                    <p className="text-red-400 text-sm text-center py-4">{lateOTReport.error}</p>
+                  )}
+
+                  {!lateOTReport && !loadingLateOT && (
+                    <p className="text-slate-500 text-sm text-center py-6">اختر الشهر واضغط "عرض التقرير" لعرض تفاصيل التأخيرات والأوفر تايم</p>
+                  )}
+
+                  {lateOTReport && !lateOTReport.error && (
+                    <>
+                      {/* Summary Cards */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                        {[
+                          { label: 'موظفين متأخرين', val: latePeople, icon: '⏰', color: 'text-yellow-400', bg: 'bg-yellow-900/20', border: 'border-yellow-500/20' },
+                          { label: 'إجمالي دقائق التأخير', val: fmtMin(totalLateMin), icon: '🕐', color: 'text-orange-400', bg: 'bg-orange-900/20', border: 'border-orange-500/20' },
+                          { label: 'موظفين أوفر تايم', val: otPeople, icon: '💪', color: 'text-sky-400', bg: 'bg-sky-900/20', border: 'border-sky-500/20' },
+                          { label: 'إجمالي ساعات الأوفر', val: fmtMin(totalOTMin), icon: '⚡', color: 'text-purple-400', bg: 'bg-purple-900/20', border: 'border-purple-500/20' },
+                        ].map(s => (
+                          <div key={s.label} className={`rounded-2xl p-3 text-center ${s.bg} border ${s.border}`}>
+                            <p className="text-xl mb-0.5">{s.icon}</p>
+                            <p className={`text-lg font-black ${s.color}`}>{s.val}</p>
+                            <p className="text-slate-500 text-[10px] mt-0.5 leading-tight">{s.label}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Sort Controls */}
+                      <div className="flex items-center gap-2 mb-3 flex-wrap">
+                        <span className="text-slate-500 text-xs">ترتيب حسب:</span>
+                        {[
+                          {v:'late_total', l:'أعلى تأخير'},
+                          {v:'late_days',  l:'أكثر أيام تأخر'},
+                          {v:'ot_total',   l:'أعلى أوفر تايم'},
+                          {v:'ot_days',    l:'أكثر أيام أوفر'},
+                        ].map(opt => (
+                          <button key={opt.v} onClick={() => setLateOTSort(opt.v)}
+                            className={`text-xs px-3 py-1 rounded-lg border transition-all ${lateOTSort === opt.v ? 'bg-amber-700/50 border-amber-500/30 text-amber-300' : 'bg-white/4 border-white/8 text-slate-400 hover:text-white'}`}>
+                            {opt.l}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Employee Rows */}
+                      {sorted.length === 0 ? (
+                        <div className="text-center py-8 text-slate-500 text-sm">لا توجد بيانات حضور لهذا الشهر</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {sorted.map(emp => {
+                            const isExpanded = lateOTExpanded === emp.id
+                            const lateAvg = emp.late_days > 0 ? Math.round(emp.late_total_minutes / emp.late_days) : 0
+                            const otAvg   = emp.overtime_days > 0 ? Math.round(emp.overtime_total_minutes / emp.overtime_days) : 0
+                            return (
+                              <div key={emp.id} className="rounded-2xl overflow-hidden" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
+                                {/* Row Header */}
+                                <button
+                                  onClick={() => setLateOTExpanded(isExpanded ? null : emp.id)}
+                                  className="w-full flex items-center gap-3 p-3 text-right hover:bg-white/3 transition-colors"
+                                >
+                                  <div className="w-8 h-8 rounded-xl bg-indigo-900/40 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-indigo-300 text-xs font-bold">{(emp.full_name||emp.email||'?')[0]}</span>
+                                  </div>
+                                  <div className="flex-1 min-w-0 text-right">
+                                    <p className="text-white text-sm font-medium truncate">{emp.full_name || emp.email}</p>
+                                    <p className="text-slate-500 text-[11px]">وقت البداية: {emp.work_start_hour}:00 | حضر {emp.days_present} يوم</p>
+                                  </div>
+                                  {/* Late Summary */}
+                                  <div className="flex items-center gap-4 flex-shrink-0">
+                                    <div className="text-center min-w-[70px]">
+                                      <p className={`text-sm font-bold ${lateColor(emp.late_total_minutes)}`}>{fmtMin(emp.late_total_minutes)}</p>
+                                      <p className="text-slate-600 text-[10px]">⏰ {emp.late_days} يوم تأخر</p>
+                                    </div>
+                                    <div className="text-center min-w-[70px]">
+                                      <p className={`text-sm font-bold ${otColor(emp.overtime_total_minutes)}`}>{fmtMin(emp.overtime_total_minutes)}</p>
+                                      <p className="text-slate-600 text-[10px]">⚡ {emp.overtime_days} يوم أوفر</p>
+                                    </div>
+                                    <svg className={`w-4 h-4 text-slate-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                                  </div>
+                                </button>
+
+                                {/* Expanded Per-Day Detail */}
+                                {isExpanded && (
+                                  <div className="border-t border-white/6 px-3 pb-3">
+                                    {/* Avg stats */}
+                                    <div className="flex gap-4 py-2.5 border-b border-white/5 mb-2">
+                                      <span className="text-slate-500 text-xs">متوسط التأخير/يوم: <span className={`font-semibold ${lateColor(lateAvg)}`}>{fmtMin(lateAvg)}</span></span>
+                                      <span className="text-slate-500 text-xs">متوسط الأوفر/يوم: <span className={`font-semibold ${otColor(otAvg)}`}>{fmtMin(otAvg)}</span></span>
+                                    </div>
+                                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                                      {emp.day_records.map(day => (
+                                        <div key={day.date} className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-white/3 transition-colors">
+                                          <span className="text-slate-400 text-xs w-24 flex-shrink-0">{new Date(day.date + 'T12:00:00').toLocaleDateString('ar-EG', {weekday:'short', day:'numeric', month:'short'})}</span>
+                                          <span className="text-slate-300 text-xs w-14 flex-shrink-0">{day.login_time ? new Date(day.login_time).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : '—'}</span>
+                                          <span className="text-slate-500 text-xs">←</span>
+                                          <span className="text-slate-300 text-xs w-14 flex-shrink-0">{day.logout_time ? new Date(day.logout_time).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : 'لم يغادر'}</span>
+                                          <div className="flex items-center gap-2 flex-1 justify-end">
+                                            {day.late_minutes > 5 ? (
+                                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${day.late_minutes > 45 ? 'bg-red-900/30 text-red-400 border border-red-500/20' : day.late_minutes > 15 ? 'bg-orange-900/30 text-orange-400 border border-orange-500/20' : 'bg-yellow-900/30 text-yellow-400 border border-yellow-500/20'}`}>
+                                                ⏰ تأخر {fmtMin(day.late_minutes)}
+                                              </span>
+                                            ) : (
+                                              <span className="text-[11px] text-emerald-400/70 px-2 py-0.5 rounded-full bg-emerald-900/10 border border-emerald-500/15">✓ بالوقت</span>
+                                            )}
+                                            {day.overtime_minutes > 0 && (
+                                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${day.overtime_minutes > 120 ? 'bg-purple-900/30 text-purple-400 border border-purple-500/20' : 'bg-sky-900/30 text-sky-400 border border-sky-500/20'}`}>
+                                                ⚡ أوفر {fmtMin(day.overtime_minutes)}
+                                              </span>
+                                            )}
+                                            {day.worked_minutes > 0 && (
+                                              <span className="text-[11px] text-slate-500 px-1">({fmtMin(day.worked_minutes)})</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )
+            })()}
+
           </div>
         )}
 

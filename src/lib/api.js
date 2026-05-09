@@ -114,6 +114,7 @@ export const api = {
   registerLogout: (latitude, longitude) => request('POST', '/attendance/logout', { latitude, longitude }),
   deleteAttendance: (id) => request('DELETE', `/attendance/${id}`),
   getMonthlyAttendanceReport: (year, month) => request('GET', `/attendance/monthly-report?year=${year}&month=${month}`),
+  getLateOvertimeDetail: (year, month, user_id) => request('GET', `/attendance/late-overtime-detail?year=${year}&month=${month}${user_id ? `&user_id=${user_id}` : ''}`),
   getLiveAttendance: () => request('GET', '/attendance/live'),
   getAttendanceCorrections: () => request('GET', '/attendance/corrections'),
   createAttendanceCorrection: (data) => request('POST', '/attendance/corrections', data),
