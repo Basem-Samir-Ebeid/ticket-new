@@ -78,6 +78,35 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
   }
 })
 
+router.post('/bulk-reset-leave', requireAuth as any, requireAdmin as any, async (req: any, res) => {
+  try {
+    const { leave_balance, sick_leave_balance, emergency_leave_balance, roles } = req.body
+    if (leave_balance === undefined && sick_leave_balance === undefined && emergency_leave_balance === undefined) {
+      return res.status(400).json({ error: 'At least one balance field is required' })
+    }
+    const updateData: Record<string, any> = {}
+    if (leave_balance !== undefined) updateData.leave_balance = Number(leave_balance)
+    if (sick_leave_balance !== undefined) updateData.sick_leave_balance = Number(sick_leave_balance)
+    if (emergency_leave_balance !== undefined) updateData.emergency_leave_balance = Number(emergency_leave_balance)
+
+    let allUsers = await db.select().from(profiles)
+    if (roles && Array.isArray(roles) && roles.length > 0) {
+      allUsers = allUsers.filter(u => roles.includes(u.role))
+    }
+
+    let updated = 0
+    for (const u of allUsers) {
+      await db.update(profiles).set(updateData).where(eq(profiles.id, u.id))
+      updated++
+    }
+
+    res.json({ success: true, updated })
+  } catch (err: any) {
+    console.error('POST /users/bulk-reset-leave error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to bulk reset leave balances' })
+  }
+})
+
 router.post('/:id/reset-password', requireAuth as any, requireAdmin as any, async (req: any, res) => {
   try {
     const { newPassword } = req.body

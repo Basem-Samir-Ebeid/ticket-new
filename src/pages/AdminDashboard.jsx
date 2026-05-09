@@ -120,6 +120,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [loadingLeaveReport, setLoadingLeaveReport] = useState(false)
   const [penaltiesRefreshKey, setPenaltiesRefreshKey] = useState(0)
   const [complaintsRefreshKey, setComplaintsRefreshKey] = useState(0)
+  const [showBulkReset, setShowBulkReset] = useState(false)
+  const [bulkResetForm, setBulkResetForm] = useState({ leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, roles: [] })
+  const [bulkResetMsg, setBulkResetMsg] = useState('')
+  const [bulkResetting, setBulkResetting] = useState(false)
+  const [bulkResetConfirm, setBulkResetConfirm] = useState(false)
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
@@ -597,6 +602,25 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       setMsg('✓ User deleted!'); fetchUsers()
     } catch (e) { setMsg('Error: ' + e.message) }
     setLoading(false)
+  }
+
+  async function handleBulkResetLeave(e) {
+    e.preventDefault()
+    if (!bulkResetConfirm) { setBulkResetMsg('⚠ يرجى تأكيد العملية أولاً'); return }
+    setBulkResetting(true); setBulkResetMsg('')
+    try {
+      const payload = {
+        leave_balance: Number(bulkResetForm.leave_balance),
+        sick_leave_balance: Number(bulkResetForm.sick_leave_balance),
+        emergency_leave_balance: Number(bulkResetForm.emergency_leave_balance),
+      }
+      if (bulkResetForm.roles.length > 0) payload.roles = bulkResetForm.roles
+      const result = await api.bulkResetLeave(payload)
+      setBulkResetMsg(`✓ تم تحديث أرصدة ${result.updated} موظف بنجاح`)
+      setBulkResetConfirm(false)
+      fetchUsers()
+    } catch (err) { setBulkResetMsg('خطأ: ' + err.message) }
+    setBulkResetting(false)
   }
 
   async function createUser(e) {
@@ -1594,7 +1618,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
             <div className="flex flex-wrap gap-3 justify-between items-center mb-4">
               <h2 className="text-white font-semibold text-sm">Users <span className="text-slate-500 font-normal">({users.length})</span></h2>
-              <div className="flex gap-2 flex-1 justify-end">
+              <div className="flex gap-2 flex-1 justify-end flex-wrap">
                 <input
                   type="text"
                   value={userSearch}
@@ -1606,9 +1630,82 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                   Export CSV
                 </button>
+                <button onClick={()=>{setShowBulkReset(v=>!v); setBulkResetMsg(''); setBulkResetConfirm(false)}} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5 text-amber-400 border border-amber-500/30 hover:bg-amber-500/10">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+                  إعادة تعيين الأرصدة
+                </button>
                 <button onClick={()=>setShowCreateUser(v=>!v)} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">+ New User</button>
               </div>
             </div>
+
+            {showBulkReset && (
+              <form onSubmit={handleBulkResetLeave} className="glass-card rounded-2xl p-5 mb-4 space-y-4 animate-scaleIn" style={{border:'1px solid rgba(245,158,11,0.25)'}}>
+                <div className="flex items-center gap-2 mb-1">
+                  <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+                  <h3 className="text-amber-300 font-semibold text-sm">إعادة تعيين أرصدة الإجازات — بداية سنة جديدة</h3>
+                </div>
+                <p className="text-slate-500 text-xs">سيتم تحديث أرصدة الإجازات لجميع الموظفين المحددين دفعةً واحدة. العملية لا يمكن التراجع عنها.</p>
+
+                <div className="grid sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">إجازة سنوية (أيام)</label>
+                    <input type="number" min="0" max="365" value={bulkResetForm.leave_balance}
+                      onChange={e=>setBulkResetForm(f=>({...f,leave_balance:e.target.value}))}
+                      className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">إجازة مرضية (أيام)</label>
+                    <input type="number" min="0" max="365" value={bulkResetForm.sick_leave_balance}
+                      onChange={e=>setBulkResetForm(f=>({...f,sick_leave_balance:e.target.value}))}
+                      className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">إجازة طارئة (أيام)</label>
+                    <input type="number" min="0" max="365" value={bulkResetForm.emergency_leave_balance}
+                      onChange={e=>setBulkResetForm(f=>({...f,emergency_leave_balance:e.target.value}))}
+                      className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 transition-all" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-2 uppercase tracking-widest font-semibold">تطبيق على (اتركه فارغاً للكل)</label>
+                  <div className="flex flex-wrap gap-3">
+                    {['employee','member','admin'].map(r => (
+                      <label key={r} className="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox"
+                          checked={bulkResetForm.roles.includes(r)}
+                          onChange={e => setBulkResetForm(f => ({
+                            ...f,
+                            roles: e.target.checked ? [...f.roles, r] : f.roles.filter(x => x !== r)
+                          }))}
+                          className="w-4 h-4 rounded accent-amber-500" />
+                        <span className="text-slate-300 text-sm capitalize">{r}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {bulkResetForm.roles.length === 0 && (
+                    <p className="text-amber-500/70 text-xs mt-1.5">سيشمل التحديث جميع المستخدمين بدون استثناء</p>
+                  )}
+                </div>
+
+                <label className="flex items-center gap-2 cursor-pointer select-none p-3 rounded-xl bg-amber-500/8 border border-amber-500/20">
+                  <input type="checkbox" checked={bulkResetConfirm} onChange={e=>setBulkResetConfirm(e.target.checked)} className="w-4 h-4 rounded accent-amber-500" />
+                  <span className="text-amber-300 text-sm">أؤكد أنني أريد إعادة تعيين أرصدة الإجازات لجميع الموظفين المحددين</span>
+                </label>
+
+                {bulkResetMsg && (
+                  <p className={`text-sm ${bulkResetMsg.startsWith('✓') ? 'text-emerald-400' : 'text-red-400'}`}>{bulkResetMsg}</p>
+                )}
+
+                <div className="flex gap-2">
+                  <button type="submit" disabled={bulkResetting || !bulkResetConfirm}
+                    className="text-sm px-5 py-2 rounded-xl font-medium bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-40 transition-colors">
+                    {bulkResetting ? 'جارٍ التحديث...' : 'تطبيق إعادة التعيين'}
+                  </button>
+                  <button type="button" onClick={()=>{setShowBulkReset(false); setBulkResetMsg(''); setBulkResetConfirm(false)}} className="btn-ghost text-sm px-4 py-2">إلغاء</button>
+                </div>
+              </form>
+            )}
 
             {showCreateUser && (
               <form onSubmit={createUser} className="glass-card rounded-2xl p-5 mb-4 space-y-4 animate-scaleIn" style={{border:'1px solid rgba(99,102,241,0.2)'}}>

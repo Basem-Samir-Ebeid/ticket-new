@@ -87,6 +87,7 @@ export const api = {
   deleteUser: (id) => request('DELETE', `/users/${id}`),
   resetPassword: (id, newPassword) => request('POST', `/users/${id}/reset-password`, { newPassword }),
   revokeSession: (id, reason) => request('POST', `/users/${id}/revoke-session`, { reason }),
+  bulkResetLeave: (data) => request('POST', '/users/bulk-reset-leave', data),
 
   // Tickets
   getTickets: () => request('GET', '/tickets'),
