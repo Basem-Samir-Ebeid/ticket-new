@@ -29,7 +29,11 @@ router.get('/', requireAuth as any, requireAdmin as any, async (req: any, res) =
 
 router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) => {
   try {
-    const { email, password, full_name, role, can_view_attendance } = req.body
+    const {
+      email, password, full_name, role, can_view_attendance,
+      department, job_title, phone, national_id, hire_date, birth_date,
+      gender, address, employment_type, employee_code, direct_manager, notes,
+    } = req.body
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
 
@@ -45,6 +49,18 @@ router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) 
       role: role || 'employee',
       can_view_attendance: can_view_attendance || false,
       must_change_password: true,
+      department: department || null,
+      job_title: job_title || null,
+      phone: phone || null,
+      national_id: national_id || null,
+      hire_date: hire_date || null,
+      birth_date: birth_date || null,
+      gender: gender || null,
+      address: address || null,
+      employment_type: employment_type || 'full_time',
+      employee_code: employee_code || null,
+      direct_manager: direct_manager || null,
+      notes: notes || null,
     }).returning()
 
     const { password_hash: _, ...safeUser } = user
@@ -57,12 +73,24 @@ router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) 
 
 router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, res) => {
   try {
-    const { full_name, role, can_view_attendance, profile_picture_url, leave_balance, sick_leave_balance, emergency_leave_balance, work_start_hour } = req.body
+    const {
+      full_name, role, can_view_attendance, profile_picture_url,
+      leave_balance, sick_leave_balance, emergency_leave_balance, work_start_hour,
+      department, job_title, phone, national_id, hire_date, birth_date,
+      gender, address, employment_type, employee_code, direct_manager, notes,
+    } = req.body
+
     const updateData: Record<string, any> = { full_name, role, can_view_attendance, profile_picture_url }
     if (leave_balance !== undefined) updateData.leave_balance = Number(leave_balance)
     if (sick_leave_balance !== undefined) updateData.sick_leave_balance = Number(sick_leave_balance)
     if (emergency_leave_balance !== undefined) updateData.emergency_leave_balance = Number(emergency_leave_balance)
     if (work_start_hour !== undefined) updateData.work_start_hour = Number(work_start_hour)
+
+    // HR fields — allow explicit null/empty to clear them
+    const hrFields = { department, job_title, phone, national_id, hire_date, birth_date, gender, address, employment_type, employee_code, direct_manager, notes }
+    for (const [k, v] of Object.entries(hrFields)) {
+      if (v !== undefined) updateData[k] = v || null
+    }
 
     const [user] = await db.update(profiles)
       .set(updateData)

@@ -35,7 +35,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [showCreateUser, setShowCreateUser] = useState(false)
   const [showCreateTicket, setShowCreateTicket] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
-  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7 })
+  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '' })
   const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
   const [ticketAssets, setTicketAssets] = useState([])
   const [msg, setMsg] = useState('')
@@ -636,6 +636,18 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         leave_balance: Number(userForm.leave_balance),
         sick_leave_balance: Number(userForm.sick_leave_balance),
         emergency_leave_balance: Number(userForm.emergency_leave_balance),
+        department: userForm.department,
+        job_title: userForm.job_title,
+        phone: userForm.phone,
+        national_id: userForm.national_id,
+        hire_date: userForm.hire_date || null,
+        birth_date: userForm.birth_date || null,
+        gender: userForm.gender,
+        address: userForm.address,
+        employment_type: userForm.employment_type,
+        employee_code: userForm.employee_code,
+        direct_manager: userForm.direct_manager,
+        notes: userForm.notes,
       })
       setMsg('✓ User updated!'); setEditingUser(null); setProfilePicFile(null); fetchUsers()
     } catch (e) { setMsg('Error: ' + e.message) }
@@ -1767,96 +1779,264 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
             )}
 
             {showCreateUser && (
-              <form onSubmit={createUser} className="glass-card rounded-2xl p-5 mb-4 space-y-4 animate-scaleIn" style={{border:'1px solid rgba(99,102,241,0.2)'}}>
+              <form onSubmit={createUser} className="glass-card rounded-2xl p-5 mb-4 space-y-5 animate-scaleIn" style={{border:'1px solid rgba(99,102,241,0.2)'}}>
+                <h3 className="text-white font-semibold text-sm flex items-center gap-2">➕ إنشاء موظف جديد</h3>
+
+                {/* ── بيانات الحساب ── */}
+                <div>
+                  <p className="text-[10px] text-indigo-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5"><span className="w-4 h-px bg-indigo-500/40 inline-block"/>بيانات الحساب</p>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">البريد الإلكتروني</label>
+                      <input required type="email" value={userForm.email} onChange={e=>setUserForm(f=>({...f,email:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="user@company.com" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">كلمة المرور</label>
+                      <input required type="password" value={userForm.password} onChange={e=>setUserForm(f=>({...f,password:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="••••••••" autoComplete="new-password" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الاسم الكامل</label>
+                      <input value={userForm.full_name} onChange={e=>setUserForm(f=>({...f,full_name:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="الاسم الرباعي" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الصلاحية</label>
+                      <select value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+                        <option value="member">Member</option>
+                        <option value="employee">Employee</option>
+                        <option value="admin">Admin</option>
+                        <option value="super_admin">👑 Super Admin</option>
+                      </select>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer mt-3">
+                    <input type="checkbox" checked={userForm.can_view_attendance} onChange={e=>setUserForm(f=>({...f,can_view_attendance:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
+                    <span className="text-slate-400 text-sm">يمكنه عرض سجلات الحضور</span>
+                  </label>
+                </div>
+
+                {/* ── البيانات الوظيفية ── */}
+                <div>
+                  <p className="text-[10px] text-amber-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5"><span className="w-4 h-px bg-amber-500/40 inline-block"/>البيانات الوظيفية</p>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">القسم / الإدارة</label>
+                      <input value={userForm.department} onChange={e=>setUserForm(f=>({...f,department:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/40 placeholder-slate-600 transition-all" placeholder="تقنية المعلومات" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">المسمى الوظيفي</label>
+                      <input value={userForm.job_title} onChange={e=>setUserForm(f=>({...f,job_title:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/40 placeholder-slate-600 transition-all" placeholder="مهندس برمجيات" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الكود الوظيفي</label>
+                      <input value={userForm.employee_code} onChange={e=>setUserForm(f=>({...f,employee_code:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/40 placeholder-slate-600 transition-all" placeholder="EMP-001" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">نوع التعاقد</label>
+                      <select value={userForm.employment_type} onChange={e=>setUserForm(f=>({...f,employment_type:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-amber-500/40 transition-all">
+                        <option value="full_time">دوام كامل</option>
+                        <option value="part_time">دوام جزئي</option>
+                        <option value="contract">عقد مؤقت</option>
+                        <option value="intern">تدريب</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">تاريخ التعيين</label>
+                      <input type="date" value={userForm.hire_date} onChange={e=>setUserForm(f=>({...f,hire_date:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/40 transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">المدير المباشر</label>
+                      <input value={userForm.direct_manager} onChange={e=>setUserForm(f=>({...f,direct_manager:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/40 placeholder-slate-600 transition-all" placeholder="اسم المدير" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── البيانات الشخصية ── */}
+                <div>
+                  <p className="text-[10px] text-emerald-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5"><span className="w-4 h-px bg-emerald-500/40 inline-block"/>البيانات الشخصية</p>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">رقم الهاتف</label>
+                      <input value={userForm.phone} onChange={e=>setUserForm(f=>({...f,phone:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="01xxxxxxxxx" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الرقم القومي</label>
+                      <input value={userForm.national_id} onChange={e=>setUserForm(f=>({...f,national_id:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="29xxxxxxxxxxxxxxx" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الجنس</label>
+                      <select value={userForm.gender} onChange={e=>setUserForm(f=>({...f,gender:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-emerald-500/40 transition-all">
+                        <option value="">— اختر —</option>
+                        <option value="male">ذكر</option>
+                        <option value="female">أنثى</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">تاريخ الميلاد</label>
+                      <input type="date" value={userForm.birth_date} onChange={e=>setUserForm(f=>({...f,birth_date:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 transition-all" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">العنوان</label>
+                      <input value={userForm.address} onChange={e=>setUserForm(f=>({...f,address:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="المدينة، الحي، الشارع" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── الصورة والملاحظات ── */}
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Email</label>
-                    <input required type="email" value={userForm.email} onChange={e=>setUserForm(f=>({...f,email:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="user@company.com" />
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الصورة الشخصية</label>
+                    <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 hover:bg-white/8 transition-all">
+                      <span className="text-slate-500 text-sm">📷 {profilePicFile ? profilePicFile.name : 'اختر من الجهاز...'}</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={e=>setProfilePicFile(e.target.files[0])} />
+                    </label>
+                    {profilePicFile && <p className="text-xs text-emerald-400 mt-1">✓ {profilePicFile.name}</p>}
                   </div>
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Password</label>
-                    <input required type="password" value={userForm.password} onChange={e=>setUserForm(f=>({...f,password:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="••••••••" autoComplete="new-password" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Full Name</label>
-                    <input value={userForm.full_name} onChange={e=>setUserForm(f=>({...f,full_name:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="John Doe" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Role</label>
-                    <select value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
-                      <option value="member">Member</option>
-                      <option value="employee">Employee</option>
-                      <option value="admin">Admin</option>
-                      <option value="super_admin">👑 Super Admin</option>
-                    </select>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">ملاحظات</label>
+                    <textarea value={userForm.notes} onChange={e=>setUserForm(f=>({...f,notes:e.target.value}))} rows={2} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/40 placeholder-slate-600 transition-all resize-none" placeholder="أي ملاحظات إضافية..." />
                   </div>
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={userForm.can_view_attendance} onChange={e=>setUserForm(f=>({...f,can_view_attendance:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
-                  <span className="text-slate-400 text-sm">Can view attendance</span>
-                </label>
-                <div>
-                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Profile Picture</label>
-                  <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 hover:bg-white/8 transition-all">
-                    <span className="text-slate-500 text-sm">📷 {profilePicFile ? profilePicFile.name : 'Choose from device...'}</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={e=>setProfilePicFile(e.target.files[0])} />
-                  </label>
-                  {profilePicFile && <p className="text-xs text-emerald-400 mt-1">✓ {profilePicFile.name} selected</p>}
-                </div>
-                <div className="flex gap-2">
-                  <button type="submit" disabled={loading || uploadingPic} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{uploadingPic ? 'Uploading...' : loading ? 'Creating...' : 'Create User'}</button>
-                  <button type="button" onClick={()=>{setShowCreateUser(false);setProfilePicFile(null)}} className="btn-ghost text-sm px-4 py-2">Cancel</button>
+
+                <div className="flex gap-2 pt-1">
+                  <button type="submit" disabled={loading || uploadingPic} className="btn-primary disabled:opacity-50 text-sm px-5 py-2">{uploadingPic ? 'جاري الرفع...' : loading ? 'جاري الإنشاء...' : 'إنشاء الموظف'}</button>
+                  <button type="button" onClick={()=>{setShowCreateUser(false);setProfilePicFile(null)}} className="btn-ghost text-sm px-4 py-2">إلغاء</button>
                 </div>
               </form>
             )}
 
             {editingUser && (
-              <form onSubmit={updateUser} className="glass-card rounded-2xl p-5 mb-4 space-y-4 animate-scaleIn" style={{border:'1px solid rgba(99,102,241,0.25)'}}>
-                <h3 className="text-white font-semibold text-sm">Edit: <span className="text-slate-400 font-normal">{editingUser.email}</span></h3>
+              <form onSubmit={updateUser} className="glass-card rounded-2xl p-5 mb-4 space-y-5 animate-scaleIn" style={{border:'1px solid rgba(99,102,241,0.25)'}}>
+                <h3 className="text-white font-semibold text-sm flex items-center gap-2">✏️ تعديل بيانات: <span className="text-indigo-400 font-normal">{editingUser.full_name || editingUser.email}</span></h3>
+
+                {/* ── بيانات الحساب ── */}
+                <div>
+                  <p className="text-[10px] text-indigo-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5"><span className="w-4 h-px bg-indigo-500/40 inline-block"/>بيانات الحساب</p>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الاسم الكامل</label>
+                      <input value={userForm.full_name} onChange={e=>setUserForm(f=>({...f,full_name:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الصلاحية</label>
+                      <select value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+                        <option value="member">Member</option>
+                        <option value="employee">Employee</option>
+                        <option value="admin">Admin</option>
+                        <option value="super_admin">👑 Super Admin</option>
+                      </select>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer mt-3">
+                    <input type="checkbox" checked={userForm.can_view_attendance} onChange={e=>setUserForm(f=>({...f,can_view_attendance:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
+                    <span className="text-slate-400 text-sm">يمكنه عرض سجلات الحضور</span>
+                  </label>
+                </div>
+
+                {/* ── أرصدة الإجازات ── */}
+                <div>
+                  <p className="text-[10px] text-sky-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5"><span className="w-4 h-px bg-sky-500/40 inline-block"/>أرصدة الإجازات</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">إجازة سنوية</label>
+                      <input type="number" min="0" max="365" value={userForm.leave_balance} onChange={e=>setUserForm(f=>({...f,leave_balance:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-sky-500/40 transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">إجازة مرضية</label>
+                      <input type="number" min="0" max="365" value={userForm.sick_leave_balance} onChange={e=>setUserForm(f=>({...f,sick_leave_balance:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-sky-500/40 transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">طوارئ</label>
+                      <input type="number" min="0" max="365" value={userForm.emergency_leave_balance} onChange={e=>setUserForm(f=>({...f,emergency_leave_balance:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-sky-500/40 transition-all" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── البيانات الوظيفية ── */}
+                <div>
+                  <p className="text-[10px] text-amber-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5"><span className="w-4 h-px bg-amber-500/40 inline-block"/>البيانات الوظيفية</p>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">القسم / الإدارة</label>
+                      <input value={userForm.department} onChange={e=>setUserForm(f=>({...f,department:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/40 placeholder-slate-600 transition-all" placeholder="تقنية المعلومات" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">المسمى الوظيفي</label>
+                      <input value={userForm.job_title} onChange={e=>setUserForm(f=>({...f,job_title:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/40 placeholder-slate-600 transition-all" placeholder="مهندس برمجيات" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الكود الوظيفي</label>
+                      <input value={userForm.employee_code} onChange={e=>setUserForm(f=>({...f,employee_code:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/40 placeholder-slate-600 transition-all" placeholder="EMP-001" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">نوع التعاقد</label>
+                      <select value={userForm.employment_type} onChange={e=>setUserForm(f=>({...f,employment_type:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-amber-500/40 transition-all">
+                        <option value="full_time">دوام كامل</option>
+                        <option value="part_time">دوام جزئي</option>
+                        <option value="contract">عقد مؤقت</option>
+                        <option value="intern">تدريب</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">تاريخ التعيين</label>
+                      <input type="date" value={userForm.hire_date} onChange={e=>setUserForm(f=>({...f,hire_date:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/40 transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">المدير المباشر</label>
+                      <input value={userForm.direct_manager} onChange={e=>setUserForm(f=>({...f,direct_manager:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/40 placeholder-slate-600 transition-all" placeholder="اسم المدير" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── البيانات الشخصية ── */}
+                <div>
+                  <p className="text-[10px] text-emerald-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5"><span className="w-4 h-px bg-emerald-500/40 inline-block"/>البيانات الشخصية</p>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">رقم الهاتف</label>
+                      <input value={userForm.phone} onChange={e=>setUserForm(f=>({...f,phone:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="01xxxxxxxxx" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الرقم القومي</label>
+                      <input value={userForm.national_id} onChange={e=>setUserForm(f=>({...f,national_id:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="29xxxxxxxxxxxxxxx" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الجنس</label>
+                      <select value={userForm.gender} onChange={e=>setUserForm(f=>({...f,gender:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-emerald-500/40 transition-all">
+                        <option value="">— اختر —</option>
+                        <option value="male">ذكر</option>
+                        <option value="female">أنثى</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">تاريخ الميلاد</label>
+                      <input type="date" value={userForm.birth_date} onChange={e=>setUserForm(f=>({...f,birth_date:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 transition-all" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">العنوان</label>
+                      <input value={userForm.address} onChange={e=>setUserForm(f=>({...f,address:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="المدينة، الحي، الشارع" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── الصورة والملاحظات ── */}
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Full Name</label>
-                    <input value={userForm.full_name} onChange={e=>setUserForm(f=>({...f,full_name:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">الصورة الشخصية</label>
+                    <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 hover:bg-white/8 transition-all">
+                      <span className="text-slate-500 text-sm">📷 {profilePicFile ? profilePicFile.name : 'اختر من الجهاز...'}</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={e=>setProfilePicFile(e.target.files[0])} />
+                    </label>
+                    {profilePicFile && <p className="text-xs text-emerald-400 mt-1">✓ {profilePicFile.name}</p>}
                   </div>
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Role</label>
-                    <select value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
-                      <option value="member">Member</option>
-                      <option value="employee">Employee</option>
-                      <option value="admin">Admin</option>
-                      <option value="super_admin">👑 Super Admin</option>
-                    </select>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">ملاحظات</label>
+                    <textarea value={userForm.notes} onChange={e=>setUserForm(f=>({...f,notes:e.target.value}))} rows={2} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/40 placeholder-slate-600 transition-all resize-none" placeholder="أي ملاحظات إضافية..." />
                   </div>
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={userForm.can_view_attendance} onChange={e=>setUserForm(f=>({...f,can_view_attendance:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
-                  <span className="text-slate-400 text-sm">Can view attendance</span>
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Annual Leave Days</label>
-                    <input type="number" min="0" max="365" value={userForm.leave_balance} onChange={e=>setUserForm(f=>({...f,leave_balance:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Sick Leave Days</label>
-                    <input type="number" min="0" max="365" value={userForm.sick_leave_balance} onChange={e=>setUserForm(f=>({...f,sick_leave_balance:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Emergency Days</label>
-                    <input type="number" min="0" max="365" value={userForm.emergency_leave_balance} onChange={e=>setUserForm(f=>({...f,emergency_leave_balance:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Profile Picture</label>
-                  <label className="flex items-center gap-3 cursor-pointer bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 hover:bg-white/8 transition-all">
-                    <span className="text-slate-500 text-sm">📷 {profilePicFile ? profilePicFile.name : 'Choose from device...'}</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={e=>setProfilePicFile(e.target.files[0])} />
-                  </label>
-                  {profilePicFile && <p className="text-xs text-green-400 mt-1">✓ {profilePicFile.name} selected</p>}
-                </div>
-                <div className="flex gap-2">
-                  <button type="submit" disabled={loading || uploadingPic} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{uploadingPic ? 'Uploading...' : loading ? 'Saving...' : 'Save Changes'}</button>
-                  <button type="button" onClick={()=>{setEditingUser(null);setProfilePicFile(null)}} className="btn-ghost text-sm px-4 py-2">Cancel</button>
+
+                <div className="flex gap-2 pt-1">
+                  <button type="submit" disabled={loading || uploadingPic} className="btn-primary disabled:opacity-50 text-sm px-5 py-2">{uploadingPic ? 'جاري الرفع...' : loading ? 'جاري الحفظ...' : 'حفظ التغييرات'}</button>
+                  <button type="button" onClick={()=>{setEditingUser(null);setProfilePicFile(null)}} className="btn-ghost text-sm px-4 py-2">إلغاء</button>
                 </div>
               </form>
             )}
@@ -1866,20 +2046,42 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/8">
-                    {['Name', 'Email', 'Role', ...(isSuperAdmin ? ['Password', 'Status'] : ['Attendance']), 'Actions'].map(h => (
-                      <th key={h} className="text-left text-[11px] text-slate-500 uppercase tracking-widest px-4 py-3 font-semibold whitespace-nowrap">{h}</th>
+                    {['الاسم', 'البريد', 'القسم', 'المسمى الوظيفي', 'الدور', ...(isSuperAdmin ? ['الباسورد', 'الحالة'] : ['الحضور']), 'الإجراءات'].map(h => (
+                      <th key={h} className="text-right text-[11px] text-slate-500 uppercase tracking-widest px-4 py-3 font-semibold whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {users.length === 0 && <tr><td colSpan={isSuperAdmin ? 6 : 5} className="text-center text-slate-500 py-8">No users yet</td></tr>}
+                  {users.length === 0 && <tr><td colSpan={isSuperAdmin ? 8 : 7} className="text-center text-slate-500 py-8">لا يوجد موظفون بعد</td></tr>}
                   {users.filter(u => {
                     const q = userSearch.toLowerCase()
                     return !q || (u.full_name||'').toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q)
                   }).slice((userPage-1)*USERS_PER_PAGE, userPage*USERS_PER_PAGE).map((u) => (
                     <tr key={u.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
-                      <td className="px-4 py-3 text-white font-semibold whitespace-nowrap text-sm">{u.full_name || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {u.profile_picture_url ? (
+                            <img src={u.profile_picture_url} className="w-7 h-7 rounded-full object-cover flex-shrink-0 ring-1 ring-white/10" />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-indigo-900/50 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                              <span className="text-indigo-300 text-[11px] font-bold">{(u.full_name||u.email||'?')[0].toUpperCase()}</span>
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-white font-semibold text-sm leading-tight">{u.full_name || '—'}</p>
+                            {u.employee_code && <p className="text-slate-600 text-[10px]">{u.employee_code}</p>}
+                          </div>
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">{u.email}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {u.department ? (
+                          <span className="text-xs text-amber-300 bg-amber-900/20 border border-amber-500/20 px-2 py-0.5 rounded-lg">{u.department}</span>
+                        ) : <span className="text-slate-600 text-xs">—</span>}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="text-slate-300 text-xs">{u.job_title || <span className="text-slate-600">—</span>}</span>
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize ${u.role==='super_admin' ? 'bg-amber-900/30 text-amber-400' : u.role==='admin' ? 'bg-purple-900/30 text-purple-400' : u.role==='employee' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-800/60 text-slate-400'}`}>{u.role==='super_admin' ? '👑 Super Admin' : u.role}</span>
                       </td>
@@ -1917,7 +2119,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button onClick={()=>setEmployeeProfileId(u.id)} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">ملف</button>
-                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
+                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7,department:u.department||'',job_title:u.job_title||'',phone:u.phone||'',national_id:u.national_id||'',hire_date:u.hire_date||'',birth_date:u.birth_date||'',gender:u.gender||'',address:u.address||'',employment_type:u.employment_type||'full_time',employee_code:u.employee_code||'',direct_manager:u.direct_manager||'',notes:u.notes||''})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
                           <button onClick={()=>openResetPwd(u)} disabled={resettingUserId===u.id} className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 transition-colors">{resettingUserId===u.id ? '...' : 'Reset Pwd'}</button>
                           <button onClick={()=>deleteUser(u.id)} disabled={loading} className="text-xs text-red-400/70 hover:text-red-400 disabled:opacity-50 transition-colors">Delete</button>
                         </div>

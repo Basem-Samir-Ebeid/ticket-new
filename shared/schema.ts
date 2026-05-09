@@ -15,6 +15,19 @@ export const profiles = pgTable('profiles', {
   sick_leave_balance: integer('sick_leave_balance').notNull().default(7),
   emergency_leave_balance: integer('emergency_leave_balance').notNull().default(3),
   work_start_hour: integer('work_start_hour').notNull().default(9),
+  // HR profile fields
+  department: text('department'),
+  job_title: text('job_title'),
+  phone: text('phone'),
+  national_id: text('national_id'),
+  hire_date: date('hire_date'),
+  birth_date: date('birth_date'),
+  gender: text('gender'),
+  address: text('address'),
+  employment_type: text('employment_type').default('full_time'),
+  employee_code: text('employee_code'),
+  direct_manager: text('direct_manager'),
+  notes: text('notes'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
