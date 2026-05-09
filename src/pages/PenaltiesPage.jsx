@@ -2,12 +2,27 @@ import { useState, useEffect } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 
-const TYPE_LABELS = {
-  warning: { label: 'إنذار', color: 'text-yellow-400', bg: 'bg-yellow-900/30', border: 'border-yellow-500/25', icon: '⚠️' },
-  deduction: { label: 'خصم راتب', color: 'text-red-400', bg: 'bg-red-900/30', border: 'border-red-500/25', icon: '💰' },
-  reprimand: { label: 'لفت نظر', color: 'text-orange-400', bg: 'bg-orange-900/30', border: 'border-orange-500/25', icon: '📋' },
-  suspension: { label: 'إيقاف', color: 'text-red-500', bg: 'bg-red-950/40', border: 'border-red-600/30', icon: '🚫' },
-}
+const PENALTY_TYPES = [
+  { value: 'verbal_warning',    label: 'تنبيه شفهي',         icon: '💬', color: 'text-sky-400',     bg: 'bg-sky-900/30',    border: 'border-sky-500/25',    severity: 1, hasAmount: false },
+  { value: 'reprimand',         label: 'لفت نظر',             icon: '📋', color: 'text-orange-400',  bg: 'bg-orange-900/30', border: 'border-orange-500/25', severity: 1, hasAmount: false },
+  { value: 'warning',           label: 'إنذار',               icon: '⚠️', color: 'text-yellow-400',  bg: 'bg-yellow-900/30', border: 'border-yellow-500/25', severity: 2, hasAmount: false },
+  { value: 'final_warning',     label: 'إنذار نهائي',         icon: '🔔', color: 'text-amber-400',   bg: 'bg-amber-900/30',  border: 'border-amber-500/25',  severity: 2, hasAmount: false },
+  { value: 'late_penalty',      label: 'جزاء تأخر',           icon: '⏰', color: 'text-purple-400',  bg: 'bg-purple-900/30', border: 'border-purple-500/25', severity: 2, hasAmount: true  },
+  { value: 'absence_deduction', label: 'خصم غياب',            icon: '📅', color: 'text-violet-400',  bg: 'bg-violet-900/30', border: 'border-violet-500/25', severity: 2, hasAmount: true  },
+  { value: 'deduction',         label: 'خصم راتب',            icon: '💰', color: 'text-red-400',     bg: 'bg-red-900/30',    border: 'border-red-500/25',    severity: 3, hasAmount: true  },
+  { value: 'bonus_forfeiture',  label: 'حرمان من مكافأة',     icon: '🎁', color: 'text-rose-400',    bg: 'bg-rose-900/30',   border: 'border-rose-500/25',   severity: 3, hasAmount: true  },
+  { value: 'task_failure',      label: 'إخلال بالمهام',       icon: '📌', color: 'text-fuchsia-400', bg: 'bg-fuchsia-900/30',border: 'border-fuchsia-500/25',severity: 3, hasAmount: false },
+  { value: 'suspension',        label: 'إيقاف عن العمل',      icon: '🚫', color: 'text-red-500',     bg: 'bg-red-950/40',    border: 'border-red-600/30',    severity: 4, hasAmount: false },
+  { value: 'demotion',          label: 'تخفيض درجة وظيفية',  icon: '📉', color: 'text-red-600',     bg: 'bg-red-950/50',    border: 'border-red-700/30',    severity: 4, hasAmount: false },
+  { value: 'termination',       label: 'إنهاء خدمة',          icon: '❌', color: 'text-red-700',     bg: 'bg-red-950/60',    border: 'border-red-800/30',    severity: 5, hasAmount: false },
+  { value: 'other',             label: 'أخرى',                icon: '📌', color: 'text-slate-400',   bg: 'bg-slate-800/40',  border: 'border-slate-500/25',  severity: 1, hasAmount: false },
+]
+
+const TYPE_LABELS = Object.fromEntries(
+  PENALTY_TYPES.map(t => [t.value, { label: t.label, color: t.color, bg: t.bg, border: t.border, icon: t.icon }])
+)
+
+const AMOUNT_TYPES = new Set(PENALTY_TYPES.filter(t => t.hasAmount).map(t => t.value))
 
 function EmployeeSummary({ penalties, users, onFilterEmployee }) {
   const [sortBy, setSortBy] = useState('total')
@@ -15,20 +30,14 @@ function EmployeeSummary({ penalties, users, onFilterEmployee }) {
   const summaryMap = {}
   for (const p of penalties) {
     if (!summaryMap[p.user_id]) {
-      summaryMap[p.user_id] = {
-        user: p.user,
-        total: 0,
-        warning: 0,
-        reprimand: 0,
-        deduction: 0,
-        suspension: 0,
-        totalAmount: 0,
-      }
+      summaryMap[p.user_id] = { user: p.user, total: 0, byType: {}, totalAmount: 0, maxSeverity: 0 }
     }
     const s = summaryMap[p.user_id]
     s.total++
-    s[p.type] = (s[p.type] || 0) + 1
-    if (p.type === 'deduction' && p.amount) s.totalAmount += p.amount
+    s.byType[p.type] = (s.byType[p.type] || 0) + 1
+    if (AMOUNT_TYPES.has(p.type) && p.amount) s.totalAmount += p.amount
+    const pt = PENALTY_TYPES.find(t => t.value === p.type)
+    if (pt && pt.severity > s.maxSeverity) s.maxSeverity = pt.severity
   }
 
   const rows = Object.entries(summaryMap).map(([uid, s]) => ({ uid, ...s }))
@@ -36,13 +45,15 @@ function EmployeeSummary({ penalties, users, onFilterEmployee }) {
   const sorted = [...rows].sort((a, b) => {
     if (sortBy === 'total') return b.total - a.total
     if (sortBy === 'amount') return b.totalAmount - a.totalAmount
-    if (sortBy === 'suspension') return b.suspension - a.suspension
+    if (sortBy === 'severity') return b.maxSeverity - a.maxSeverity
     return b.total - a.total
   })
 
   const riskLevel = (row) => {
-    if (row.suspension > 0) return { label: 'عالي', color: 'text-red-400', dot: 'bg-red-400' }
-    if (row.deduction > 0 || row.total >= 3) return { label: 'متوسط', color: 'text-orange-400', dot: 'bg-orange-400' }
+    if (row.maxSeverity >= 5) return { label: 'إنهاء خدمة', color: 'text-red-700', dot: 'bg-red-700' }
+    if (row.maxSeverity >= 4) return { label: 'عالي جداً', color: 'text-red-500', dot: 'bg-red-500' }
+    if (row.maxSeverity >= 3) return { label: 'عالي', color: 'text-red-400', dot: 'bg-red-400' }
+    if (row.maxSeverity >= 2 || row.total >= 3) return { label: 'متوسط', color: 'text-orange-400', dot: 'bg-orange-400' }
     if (row.total > 0) return { label: 'منخفض', color: 'text-yellow-400', dot: 'bg-yellow-400' }
     return { label: 'لا يوجد', color: 'text-slate-500', dot: 'bg-slate-600' }
   }
@@ -65,8 +76,8 @@ function EmployeeSummary({ penalties, users, onFilterEmployee }) {
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
             className="bg-white/5 border border-white/8 rounded-xl px-3 py-1.5 text-slate-300 text-xs focus:outline-none">
             <option value="total">إجمالي الجزاءات</option>
-            <option value="amount">أعلى خصم</option>
-            <option value="suspension">إيقاف</option>
+            <option value="amount">أعلى خصم مالي</option>
+            <option value="severity">أعلى خطورة</option>
           </select>
         </div>
       </div>
@@ -75,6 +86,13 @@ function EmployeeSummary({ penalties, users, onFilterEmployee }) {
         {sorted.map((row, i) => {
           const risk = riskLevel(row)
           const name = row.user?.full_name || row.user?.email || 'موظف محذوف'
+          const topTypes = Object.entries(row.byType)
+            .sort((a, b) => {
+              const sa = PENALTY_TYPES.find(t => t.value === a[0])?.severity || 0
+              const sb = PENALTY_TYPES.find(t => t.value === b[0])?.severity || 0
+              return sb - sa
+            })
+            .slice(0, 4)
           return (
             <div key={row.uid}
               className="glass-card rounded-2xl p-4 border border-white/7 hover:border-indigo-500/20 transition-all cursor-pointer group"
@@ -85,7 +103,6 @@ function EmployeeSummary({ penalties, users, onFilterEmployee }) {
                 <div className="w-8 h-8 rounded-xl bg-indigo-900/40 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
                   <span className="text-indigo-300 text-xs font-bold">{i + 1}</span>
                 </div>
-
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-white text-sm font-medium truncate">{name}</span>
@@ -95,26 +112,18 @@ function EmployeeSummary({ penalties, users, onFilterEmployee }) {
                     </span>
                     <span className="text-indigo-400 text-[10px] group-hover:text-indigo-300 transition-colors mr-auto flex-shrink-0">عرض التفاصيل ←</span>
                   </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {row.warning > 0 && (
-                      <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-yellow-900/30 text-yellow-400 border border-yellow-500/20">
-                        ⚠️ {row.warning} إنذار
-                      </span>
-                    )}
-                    {row.reprimand > 0 && (
-                      <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-orange-900/30 text-orange-400 border border-orange-500/20">
-                        📋 {row.reprimand} لفت نظر
-                      </span>
-                    )}
-                    {row.deduction > 0 && (
-                      <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-red-900/30 text-red-400 border border-red-500/20">
-                        💰 {row.deduction} خصم {row.totalAmount > 0 ? `(${row.totalAmount.toFixed(0)} ج.م)` : ''}
-                      </span>
-                    )}
-                    {row.suspension > 0 && (
-                      <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-red-950/40 text-red-500 border border-red-600/20">
-                        🚫 {row.suspension} إيقاف
+                  <div className="flex flex-wrap gap-1.5">
+                    {topTypes.map(([type, count]) => {
+                      const pt = TYPE_LABELS[type] || TYPE_LABELS.other || { label: type, color: 'text-slate-400', bg: 'bg-slate-800/40', border: 'border-slate-500/25', icon: '📌' }
+                      return (
+                        <span key={type} className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full ${pt.bg} ${pt.color} border ${pt.border}`}>
+                          {pt.icon} {count} {pt.label}
+                        </span>
+                      )
+                    })}
+                    {row.totalAmount > 0 && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-900/30 text-red-400 border border-red-500/20">
+                        💸 {row.totalAmount.toFixed(0)} ج.م
                       </span>
                     )}
                     <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-slate-400 border border-white/8 mr-auto">
@@ -208,13 +217,13 @@ export default function PenaltiesPage({ isSuperAdmin = false, isEmployee = false
     return matchType && matchUser && matchSearch
   })
 
+  const totalAmount = penalties.filter(p => AMOUNT_TYPES.has(p.type) && p.amount).reduce((s, p) => s + (p.amount || 0), 0)
+  const typeCounts = {}
+  for (const p of penalties) typeCounts[p.type] = (typeCounts[p.type] || 0) + 1
+  const topTypes = PENALTY_TYPES.filter(t => typeCounts[t.value]).sort((a, b) => (typeCounts[b.value] || 0) - (typeCounts[a.value] || 0)).slice(0, 4)
   const stats = {
     total: penalties.length,
-    warnings: penalties.filter(p => p.type === 'warning').length,
-    deductions: penalties.filter(p => p.type === 'deduction').length,
-    reprimands: penalties.filter(p => p.type === 'reprimand').length,
-    suspensions: penalties.filter(p => p.type === 'suspension').length,
-    totalAmount: penalties.filter(p => p.type === 'deduction' && p.amount).reduce((s, p) => s + (p.amount || 0), 0),
+    totalAmount,
   }
 
   return (
@@ -227,19 +236,20 @@ export default function PenaltiesPage({ isSuperAdmin = false, isEmployee = false
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
-        {[
-          { label: 'الإجمالي', value: stats.total, color: 'text-slate-300' },
-          { label: 'إنذارات', value: stats.warnings, color: 'text-yellow-400' },
-          { label: 'لفت نظر', value: stats.reprimands, color: 'text-orange-400' },
-          { label: 'خصم راتب', value: stats.deductions, color: 'text-red-400' },
-          { label: 'إيقاف', value: stats.suspensions, color: 'text-red-500' },
-          { label: 'إجمالي الخصم', value: stats.totalAmount > 0 ? `${stats.totalAmount.toFixed(0)} ج` : '—', color: 'text-red-400' },
-        ].map(s => (
-          <div key={s.label} className="glass-card rounded-2xl p-3 text-center" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
-            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-slate-500 text-[11px] mt-0.5">{s.label}</p>
+        <div className="glass-card rounded-2xl p-3 text-center" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
+          <p className="text-xl font-bold text-slate-300">{stats.total}</p>
+          <p className="text-slate-500 text-[11px] mt-0.5">الإجمالي</p>
+        </div>
+        {topTypes.map(t => (
+          <div key={t.value} className={`glass-card rounded-2xl p-3 text-center ${t.bg} border ${t.border}`}>
+            <p className={`text-xl font-bold ${t.color}`}>{typeCounts[t.value]}</p>
+            <p className="text-slate-400 text-[11px] mt-0.5">{t.icon} {t.label}</p>
           </div>
         ))}
+        <div className="glass-card rounded-2xl p-3 text-center" style={{border:'1px solid rgba(239,68,68,0.15)'}}>
+          <p className="text-xl font-bold text-red-400">{stats.totalAmount > 0 ? `${stats.totalAmount.toFixed(0)}` : '—'}</p>
+          <p className="text-slate-500 text-[11px] mt-0.5">💸 إجمالي الخصم (ج)</p>
+        </div>
       </div>
 
       {/* View Toggle (admin only) */}
@@ -284,10 +294,9 @@ export default function PenaltiesPage({ isSuperAdmin = false, isEmployee = false
               <select value={filterType} onChange={e => setFilterType(e.target.value)}
                 className="bg-white/5 border border-white/8 rounded-xl px-3 py-2 text-slate-300 text-sm focus:outline-none">
                 <option value="all">كل الأنواع</option>
-                <option value="warning">إنذار</option>
-                <option value="reprimand">لفت نظر</option>
-                <option value="deduction">خصم راتب</option>
-                <option value="suspension">إيقاف</option>
+                {PENALTY_TYPES.map(t => (
+                  <option key={t.value} value={t.value}>{t.icon} {t.label}</option>
+                ))}
               </select>
               {isAdmin && (
                 <>
@@ -331,17 +340,16 @@ export default function PenaltiesPage({ isSuperAdmin = false, isEmployee = false
                 </div>
                 <div>
                   <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">نوع الجزاء</label>
-                  <select value={form.type} onChange={e => setForm(f => ({...f, type: e.target.value}))}
+                  <select value={form.type} onChange={e => setForm(f => ({...f, type: e.target.value, amount: ''}))}
                     className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50">
-                    <option value="warning">⚠️ إنذار</option>
-                    <option value="reprimand">📋 لفت نظر</option>
-                    <option value="deduction">💰 خصم راتب</option>
-                    <option value="suspension">🚫 إيقاف</option>
+                    {PENALTY_TYPES.map(t => (
+                      <option key={t.value} value={t.value}>{t.icon} {t.label}</option>
+                    ))}
                   </select>
                 </div>
-                {form.type === 'deduction' && (
+                {AMOUNT_TYPES.has(form.type) && (
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">مبلغ الخصم (جنيه)</label>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">المبلغ (جنيه)</label>
                     <input type="number" min="0" value={form.amount} onChange={e => setForm(f => ({...f, amount: e.target.value}))}
                       className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600"
                       placeholder="0" />
@@ -389,14 +397,13 @@ export default function PenaltiesPage({ isSuperAdmin = false, isEmployee = false
                         <div className="grid sm:grid-cols-2 gap-3">
                           <select value={editForm.type} onChange={e => setEditForm(f => ({...f, type: e.target.value}))}
                             className="bg-white/5 border border-white/8 rounded-xl px-3 py-2 text-slate-300 text-sm focus:outline-none">
-                            <option value="warning">⚠️ إنذار</option>
-                            <option value="reprimand">📋 لفت نظر</option>
-                            <option value="deduction">💰 خصم راتب</option>
-                            <option value="suspension">🚫 إيقاف</option>
+                            {PENALTY_TYPES.map(t => (
+                              <option key={t.value} value={t.value}>{t.icon} {t.label}</option>
+                            ))}
                           </select>
-                          {editForm.type === 'deduction' && (
+                          {AMOUNT_TYPES.has(editForm.type) && (
                             <input type="number" value={editForm.amount || ''} onChange={e => setEditForm(f => ({...f, amount: e.target.value}))}
-                              placeholder="مبلغ الخصم" className="bg-white/5 border border-white/8 rounded-xl px-3 py-2 text-white text-sm focus:outline-none" />
+                              placeholder="المبلغ (جنيه)" className="bg-white/5 border border-white/8 rounded-xl px-3 py-2 text-white text-sm focus:outline-none" />
                           )}
                         </div>
                         <textarea rows={2} value={editForm.reason} onChange={e => setEditForm(f => ({...f, reason: e.target.value}))}

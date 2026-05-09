@@ -53,10 +53,19 @@ router.post('/', requireAuth as any, async (req: any, res) => {
     }).returning()
 
     const typeLabel: Record<string, string> = {
-      warning: '⚠️ إنذار',
-      deduction: '💰 خصم راتب',
-      reprimand: '📋 لفت نظر',
-      suspension: '🚫 إيقاف',
+      verbal_warning:    '💬 تنبيه شفهي',
+      reprimand:         '📋 لفت نظر',
+      warning:           '⚠️ إنذار',
+      final_warning:     '🔔 إنذار نهائي',
+      late_penalty:      '⏰ جزاء تأخر',
+      absence_deduction: '📅 خصم غياب',
+      deduction:         '💰 خصم راتب',
+      bonus_forfeiture:  '🎁 حرمان من مكافأة',
+      task_failure:      '📌 إخلال بالمهام',
+      suspension:        '🚫 إيقاف عن العمل',
+      demotion:          '📉 تخفيض درجة وظيفية',
+      termination:       '❌ إنهاء خدمة',
+      other:             '📌 أخرى',
     }
     const label = typeLabel[penalty.type] || penalty.type
 
