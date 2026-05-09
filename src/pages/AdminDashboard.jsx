@@ -8,6 +8,8 @@ import FileAttachment from '../components/FileAttachment'
 import DraggableOfficeMap from '../components/DraggableOfficeMap'
 import { playNotificationSound, showBrowserNotification } from '../lib/sound'
 import AssetsPage from './AssetsPage'
+import PenaltiesPage from './PenaltiesPage'
+import ComplaintsPage from './ComplaintsPage'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -105,6 +107,19 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [ticketPage, setTicketPage] = useState(1)
   const [userPage, setUserPage] = useState(1)
   const [ticketHistoryMap, setTicketHistoryMap] = useState({})
+  const [liveAttendance, setLiveAttendance] = useState(null)
+  const [loadingLive, setLoadingLive] = useState(false)
+  const [attendanceCorrections, setAttendanceCorrections] = useState([])
+  const [loadingCorrections, setLoadingCorrections] = useState(false)
+  const [leaveCalendar, setLeaveCalendar] = useState([])
+  const [leaveCalendarMonth, setLeaveCalendarMonth] = useState(new Date().getMonth())
+  const [leaveCalendarYear, setLeaveCalendarYear] = useState(new Date().getFullYear())
+  const [leaveReport, setLeaveReport] = useState(null)
+  const [leaveReportYear, setLeaveReportYear] = useState(new Date().getFullYear())
+  const [leaveReportMonth, setLeaveReportMonth] = useState(new Date().getMonth() + 1)
+  const [loadingLeaveReport, setLoadingLeaveReport] = useState(false)
+  const [penaltiesRefreshKey, setPenaltiesRefreshKey] = useState(0)
+  const [complaintsRefreshKey, setComplaintsRefreshKey] = useState(0)
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
@@ -281,6 +296,35 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
   async function fetchTemplates() {
     try { setTemplates(await api.getTemplates()) } catch {}
+  }
+
+  async function fetchLiveAttendance() {
+    setLoadingLive(true)
+    try { setLiveAttendance(await api.getLiveAttendance()) } catch {}
+    setLoadingLive(false)
+  }
+
+  async function fetchAttendanceCorrections() {
+    setLoadingCorrections(true)
+    try { setAttendanceCorrections(await api.getAttendanceCorrections()) } catch {}
+    setLoadingCorrections(false)
+  }
+
+  async function reviewCorrection(id, status, note) {
+    try {
+      await api.reviewAttendanceCorrection(id, status, note)
+      fetchAttendanceCorrections()
+    } catch (err) { setMsg('Error: ' + err.message) }
+  }
+
+  async function fetchLeaveCalendar() {
+    try { setLeaveCalendar(await api.getLeaveCalendar()) } catch {}
+  }
+
+  async function fetchLeaveReport() {
+    setLoadingLeaveReport(true)
+    try { setLeaveReport(await api.getLeaveMonthlyReport(leaveReportYear, leaveReportMonth)) } catch {}
+    setLoadingLeaveReport(false)
   }
 
   async function createTemplate(e) {
@@ -771,6 +815,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     { key: 'requests',    label: 'Requests',    icon: 'requests',    badge: requests.filter(r=>r.request_status==='pending_review').length },
     { key: 'leave',       label: 'Leave',       icon: 'leave',       badge: leaveRequests.filter(r=>r.status==='pending').length },
     { key: 'assets',      label: 'Assets',      icon: 'assets' },
+    { key: 'penalties',   label: 'Penalties',   icon: 'performance' },
+    { key: 'complaints',  label: 'Complaints',  icon: 'requests' },
     { key: 'users',       label: 'Users',       icon: 'users' },
     { key: 'attendance',  label: 'Attendance',  icon: 'attendance' },
     { key: 'performance', label: 'Performance', icon: 'performance' },
@@ -779,6 +825,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   function handleAdminTabChange(t) {
     setTab(t); setSelectedTicket(null)
     if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings() }
+    if (t === 'attendance') { fetchLiveAttendance(); fetchAttendanceCorrections() }
+    if (t === 'leave') { fetchLeaveCalendar() }
   }
 
   // ── Ticket detail view ──
@@ -1395,6 +1443,75 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </form>
             )}
 
+            {/* Leave Calendar */}
+            {leaveCalendar.length > 0 && (
+              <div className="glass-card rounded-2xl p-5 mb-4" style={{border:'1px solid rgba(16,185,129,0.15)'}}>
+                <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">📅 تقويم الإجازات المعتمدة</h3>
+                <div className="space-y-2 max-h-48 overflow-y-auto" style={{scrollbarWidth:'none'}}>
+                  {leaveCalendar.map(l => {
+                    const typeColors = { annual: 'text-emerald-400', sick: 'text-blue-400', emergency: 'text-orange-400', unpaid: 'text-red-400' }
+                    const typeLabels = { annual: 'سنوية', sick: 'مرضية', emergency: 'طارئة', unpaid: 'بدون راتب' }
+                    return (
+                      <div key={l.id} className="flex items-center gap-3 p-2.5 rounded-xl" style={{background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)'}}>
+                        <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" style={{boxShadow:'0 0 5px rgba(52,211,153,0.5)'}} />
+                        <span className="text-slate-200 text-sm flex-1">{l.user?.full_name || l.user?.email}</span>
+                        <span className={`text-xs ${typeColors[l.leave_type] || 'text-slate-400'}`}>{typeLabels[l.leave_type] || l.leave_type}</span>
+                        <span className="text-slate-500 text-xs">{l.start_date} → {l.end_date}</span>
+                        <span className="text-slate-400 text-xs">{l.days_count} يوم</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Monthly Leave Report */}
+            <div className="glass-card rounded-2xl p-5 mb-4" style={{border:'1px solid rgba(99,102,241,0.15)'}}>
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <h3 className="text-white font-semibold text-sm">📊 التقرير الشهري للإجازات</h3>
+                <div className="flex gap-2 flex-wrap items-center">
+                  <select value={leaveReportYear} onChange={e=>setLeaveReportYear(Number(e.target.value))} className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-1.5 focus:outline-none">
+                    {Array.from({length:3},(_,i)=>new Date().getFullYear()-i).map(y=><option key={y} value={y}>{y}</option>)}
+                  </select>
+                  <select value={leaveReportMonth} onChange={e=>setLeaveReportMonth(Number(e.target.value))} className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-1.5 focus:outline-none">
+                    {['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'].map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+                  </select>
+                  <button onClick={fetchLeaveReport} disabled={loadingLeaveReport} className="text-xs text-indigo-300 bg-indigo-900/30 hover:bg-indigo-800/50 px-3 py-1.5 rounded-xl border border-indigo-500/20 transition-all disabled:opacity-50">
+                    {loadingLeaveReport ? '...' : 'عرض التقرير'}
+                  </button>
+                </div>
+              </div>
+              {leaveReport && (
+                <div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                    {[
+                      { label: 'الإجمالي', val: leaveReport.stats.total, color: 'text-slate-300' },
+                      { label: 'معتمدة', val: leaveReport.stats.approved, color: 'text-emerald-400' },
+                      { label: 'معلقة', val: leaveReport.stats.pending, color: 'text-yellow-400' },
+                      { label: 'مرفوضة', val: leaveReport.stats.rejected, color: 'text-red-400' },
+                    ].map(s => (
+                      <div key={s.label} className="text-center p-2 rounded-xl" style={{background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)'}}>
+                        <p className={`text-lg font-bold ${s.color}`}>{s.val}</p>
+                        <p className="text-slate-500 text-[11px]">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {leaveReport.stats.topUsers.length > 0 && (
+                    <div>
+                      <p className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold mb-2">الأكثر إجازة</p>
+                      {leaveReport.stats.topUsers.slice(0,5).map((u,i) => (
+                        <div key={i} className="flex items-center justify-between py-1.5 border-b border-white/5">
+                          <span className="text-slate-300 text-sm">{u.user?.full_name || u.user?.email || '—'}</span>
+                          <span className="text-yellow-400 text-xs font-semibold">{u.days} أيام</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {!leaveReport && !loadingLeaveReport && <p className="text-slate-500 text-sm text-center py-3">اختر الشهر ثم اضغط عرض التقرير</p>}
+            </div>
+
             {leaveRequests.length === 0 && (
               <div className="glass-card rounded-2xl py-12" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
                 <div className="empty-state"><p className="text-slate-500 text-sm">No leave requests yet</p></div>
@@ -1446,6 +1563,16 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Assets Tab */}
         {tab === 'assets' && (
           <AssetsPage isSuperAdmin={isSuperAdmin} />
+        )}
+
+        {/* Penalties Tab */}
+        {tab === 'penalties' && (
+          <PenaltiesPage isSuperAdmin={isSuperAdmin} />
+        )}
+
+        {/* Complaints Tab */}
+        {tab === 'complaints' && (
+          <ComplaintsPage isSuperAdmin={isSuperAdmin} />
         )}
 
         {/* Users Tab */}
@@ -1634,6 +1761,83 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Attendance Tab */}
         {tab === 'attendance' && (
           <div>
+            {/* Live Board */}
+            <div className="glass-card rounded-2xl p-5 mb-5" style={{border:'1px solid rgba(16,185,129,0.18)'}}>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h3 className="text-white font-semibold text-sm flex items-center gap-2">🟢 لوحة الحضور اللحظية</h3>
+                <button onClick={fetchLiveAttendance} disabled={loadingLive} className="text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-900/20 px-3 py-1.5 rounded-lg border border-emerald-500/20 transition-all disabled:opacity-50">
+                  {loadingLive ? 'جاري التحديث...' : '↻ تحديث'}
+                </button>
+              </div>
+              {liveAttendance ? (
+                <>
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    {[
+                      { label: 'في المكتب', val: liveAttendance.summary.in, color: 'text-emerald-400', bg: 'bg-emerald-900/20', border: 'border-emerald-500/20' },
+                      { label: 'غادر', val: liveAttendance.summary.out, color: 'text-blue-400', bg: 'bg-blue-900/20', border: 'border-blue-500/20' },
+                      { label: 'غائب', val: liveAttendance.summary.absent, color: 'text-red-400', bg: 'bg-red-900/20', border: 'border-red-500/20' },
+                    ].map(s => (
+                      <div key={s.label} className={`rounded-xl p-3 text-center ${s.bg} border ${s.border}`}>
+                        <p className={`text-2xl font-black ${s.color}`}>{s.val}</p>
+                        <p className="text-slate-500 text-[11px] mt-0.5">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    {liveAttendance.employees.map(emp => (
+                      <div key={emp.id} className="flex items-center gap-3 p-2.5 rounded-xl" style={{background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)'}}>
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${emp.status === 'in' ? 'bg-emerald-400' : emp.status === 'out' ? 'bg-blue-400' : 'bg-red-400'}`} style={emp.status === 'in' ? {boxShadow:'0 0 6px rgba(52,211,153,0.7)'} : {}} />
+                        <span className="text-slate-200 text-sm flex-1">{emp.full_name || emp.email}</span>
+                        {emp.status === 'in' && emp.login_time && <span className="text-emerald-400 text-xs">دخل {new Date(emp.login_time).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}</span>}
+                        {emp.status === 'out' && emp.logout_time && <span className="text-blue-400 text-xs">خرج {new Date(emp.logout_time).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}</span>}
+                        {emp.status === 'absent' && <span className="text-red-400 text-xs">غائب</span>}
+                        {emp.late_minutes > 5 && <span className="text-yellow-400 text-xs bg-yellow-900/20 px-2 py-0.5 rounded-full border border-yellow-500/20">تأخر {emp.late_minutes}د</span>}
+                        {emp.overtime_minutes > 0 && <span className="text-purple-400 text-xs bg-purple-900/20 px-2 py-0.5 rounded-full border border-purple-500/20">ov {emp.overtime_minutes}د</span>}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-6">
+                  <p className="text-slate-500 text-sm mb-3">اضغط تحديث لعرض من في المكتب الآن</p>
+                  <button onClick={fetchLiveAttendance} className="bg-emerald-800/50 hover:bg-emerald-700/60 text-emerald-300 text-sm px-4 py-2 rounded-xl border border-emerald-600/20 transition-all">عرض اللوحة الحية</button>
+                </div>
+              )}
+            </div>
+
+            {/* Correction Requests */}
+            <div className="glass-card rounded-2xl p-5 mb-5" style={{border:'1px solid rgba(99,102,241,0.15)'}}>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h3 className="text-white font-semibold text-sm flex items-center gap-2">🔧 طلبات تصحيح الحضور</h3>
+                <button onClick={fetchAttendanceCorrections} disabled={loadingCorrections} className="text-xs text-indigo-400 hover:text-indigo-300 bg-indigo-900/20 px-3 py-1.5 rounded-lg border border-indigo-500/20 transition-all disabled:opacity-50">
+                  {loadingCorrections ? '...' : '↻ تحديث'}
+                </button>
+              </div>
+              {attendanceCorrections.filter(c => c.status === 'pending').length === 0 ? (
+                <p className="text-slate-500 text-sm text-center py-4">لا توجد طلبات تصحيح معلقة</p>
+              ) : (
+                <div className="space-y-3">
+                  {attendanceCorrections.filter(c => c.status === 'pending').map(c => (
+                    <div key={c.id} className="p-4 rounded-xl border border-yellow-500/20 bg-yellow-900/10">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-white font-medium text-sm">{c.user?.full_name || c.user?.email}</p>
+                          <p className="text-slate-400 text-xs mt-0.5">تاريخ: {c.date}</p>
+                          {c.requested_login && <p className="text-slate-400 text-xs">وقت الدخول المطلوب: {c.requested_login}</p>}
+                          {c.requested_logout && <p className="text-slate-400 text-xs">وقت الخروج المطلوب: {c.requested_logout}</p>}
+                          <p className="text-slate-300 text-xs mt-1">السبب: {c.reason}</p>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button onClick={() => reviewCorrection(c.id, 'approved', '')} className="text-xs text-emerald-300 bg-emerald-900/30 hover:bg-emerald-800/50 px-3 py-1.5 rounded-lg border border-emerald-600/20 transition-all">قبول</button>
+                          <button onClick={() => reviewCorrection(c.id, 'rejected', '')} className="text-xs text-red-300 bg-red-900/30 hover:bg-red-800/50 px-3 py-1.5 rounded-lg border border-red-600/20 transition-all">رفض</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
               <h2 className="text-white font-semibold text-sm">Attendance</h2>
               <div className="flex items-center gap-2 flex-wrap">

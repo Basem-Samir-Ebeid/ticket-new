@@ -113,6 +113,10 @@ export const api = {
   registerLogout: (latitude, longitude) => request('POST', '/attendance/logout', { latitude, longitude }),
   deleteAttendance: (id) => request('DELETE', `/attendance/${id}`),
   getMonthlyAttendanceReport: (year, month) => request('GET', `/attendance/monthly-report?year=${year}&month=${month}`),
+  getLiveAttendance: () => request('GET', '/attendance/live'),
+  getAttendanceCorrections: () => request('GET', '/attendance/corrections'),
+  createAttendanceCorrection: (data) => request('POST', '/attendance/corrections', data),
+  reviewAttendanceCorrection: (id, status, admin_note) => request('PATCH', `/attendance/corrections/${id}`, { status, admin_note }),
 
   // Leaves
   getLeaves: () => request('GET', '/leaves'),
@@ -120,6 +124,9 @@ export const api = {
   approveLeave: (id) => request('PATCH', `/leaves/${id}/approve`),
   rejectLeave: (id, note) => request('PATCH', `/leaves/${id}/reject`, { note }),
   deleteLeave: (id) => request('DELETE', `/leaves/${id}`),
+  getLeaveCalendar: () => request('GET', '/leaves/calendar'),
+  getLeaveBalance: (user_id) => request('GET', `/leaves/balance${user_id ? '?user_id=' + user_id : ''}`),
+  getLeaveMonthlyReport: (year, month) => request('GET', `/leaves/monthly-report?year=${year}&month=${month}`),
 
   // Notifications
   getNotifications: () => request('GET', '/notifications'),
@@ -173,6 +180,18 @@ export const api = {
   deleteAsset: (id) => request('DELETE', `/assets/${id}`),
   getAssetHistory: (id) => request('GET', `/assets/${id}/history`),
   getAssetTickets: (id) => request('GET', `/assets/${id}/tickets`),
+
+  // Penalties
+  getPenalties: () => request('GET', '/penalties'),
+  createPenalty: (data) => request('POST', '/penalties', data),
+  updatePenalty: (id, data) => request('PATCH', `/penalties/${id}`, data),
+  deletePenalty: (id) => request('DELETE', `/penalties/${id}`),
+
+  // Complaints
+  getComplaints: () => request('GET', '/complaints'),
+  createComplaint: (data) => request('POST', '/complaints', data),
+  updateComplaint: (id, data) => request('PATCH', `/complaints/${id}`, data),
+  deleteComplaint: (id) => request('DELETE', `/complaints/${id}`),
 }
 
 // ─── CSV Export helper ───────────────────────────────────────────────────────

@@ -6,6 +6,8 @@ import Sidebar from '../components/Sidebar'
 import StatusBadge from '../components/StatusBadge'
 import AttendanceButton from '../components/AttendanceButton'
 import FileAttachment from '../components/FileAttachment'
+import PenaltiesPage from './PenaltiesPage'
+import ComplaintsPage from './ComplaintsPage'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -58,6 +60,13 @@ export default function EmployeeDashboard() {
   const [changePasswordMsg, setChangePasswordMsg] = useState('')
   const [leaveMsg, setLeaveMsg] = useState('')
   const [submittingLeave, setSubmittingLeave] = useState(false)
+  const [leaveBalance, setLeaveBalance] = useState(null)
+
+  const [correctionForm, setCorrectionForm] = useState({ date: '', requested_login: '', requested_logout: '', reason: '' })
+  const [showCorrectionForm, setShowCorrectionForm] = useState(false)
+  const [submittingCorrection, setSubmittingCorrection] = useState(false)
+  const [correctionMsg, setCorrectionMsg] = useState('')
+  const [myCorrections, setMyCorrections] = useState([])
 
   const selectedTicketRef = useRef(null)
   useEffect(() => { selectedTicketRef.current = selectedTicket }, [selectedTicket])
@@ -68,8 +77,10 @@ export default function EmployeeDashboard() {
       fetchMyRequests()
       checkTodayLogin()
       fetchLeaveRequests()
+      fetchLeaveBalance()
       fetchTemplates()
       fetchMyAssets()
+      fetchMyCorrections()
     }
   }, [user])
 
@@ -78,6 +89,28 @@ export default function EmployeeDashboard() {
       const all = await api.getAssets()
       setMyAssets(all.filter(a => a.assigned_to === user?.id && a.status === 'active'))
     } catch {}
+  }
+
+  async function fetchLeaveBalance() {
+    try { setLeaveBalance(await api.getLeaveBalance()) } catch {}
+  }
+
+  async function fetchMyCorrections() {
+    try { setMyCorrections(await api.getAttendanceCorrections()) } catch {}
+  }
+
+  async function submitCorrectionRequest(e) {
+    e.preventDefault()
+    if (!correctionForm.date || !correctionForm.reason.trim()) return
+    setSubmittingCorrection(true); setCorrectionMsg('')
+    try {
+      await api.createAttendanceCorrection(correctionForm)
+      setCorrectionMsg('✓ تم إرسال طلب التصحيح بنجاح')
+      setCorrectionForm({ date: '', requested_login: '', requested_logout: '', reason: '' })
+      setShowCorrectionForm(false)
+      fetchMyCorrections()
+    } catch (err) { setCorrectionMsg('خطأ: ' + err.message) }
+    setSubmittingCorrection(false)
   }
 
   useEffect(() => {
@@ -351,6 +384,8 @@ export default function EmployeeDashboard() {
     { key: 'assigned',    label: 'Assigned',    icon: 'assigned' },
     { key: 'myTickets',   label: 'My Tickets',  icon: 'myTickets' },
     { key: 'leave',       label: 'Leave',       icon: 'leave' },
+    { key: 'penalties',   label: 'Penalties',   icon: 'performance' },
+    { key: 'complaints',  label: 'Complaints',  icon: 'requests' },
     ...(profile?.can_view_attendance ? [{ key: 'attendance', label: 'Attendance', icon: 'attendance' }] : []),
     { key: 'profile',     label: 'Profile',     icon: 'profile' },
   ]
@@ -900,7 +935,37 @@ export default function EmployeeDashboard() {
           </>
         )}
 
+        {activeTab === 'penalties' && (
+          <PenaltiesPage isEmployee />
+        )}
+
+        {activeTab === 'complaints' && (
+          <ComplaintsPage isEmployee />
+        )}
+
         {activeTab === 'leave' && (
+          <div className="space-y-4">
+          {/* Leave Balance */}
+          {leaveBalance && (
+            <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(16,185,129,0.18)'}}>
+              <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">📊 رصيد إجازاتي</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: 'سنوية', val: leaveBalance.annual ?? '—', total: 21, color: 'text-emerald-400', bg: 'bg-emerald-900/20', border: 'border-emerald-500/20' },
+                  { label: 'مرضية', val: leaveBalance.sick ?? '—', total: 14, color: 'text-blue-400', bg: 'bg-blue-900/20', border: 'border-blue-500/20' },
+                  { label: 'طارئة', val: leaveBalance.emergency ?? '—', total: 7, color: 'text-orange-400', bg: 'bg-orange-900/20', border: 'border-orange-500/20' },
+                  { label: 'المستخدمة', val: leaveBalance.used ?? 0, total: null, color: 'text-red-400', bg: 'bg-red-900/20', border: 'border-red-500/20' },
+                ].map(b => (
+                  <div key={b.label} className={`rounded-xl p-3 text-center ${b.bg} border ${b.border}`}>
+                    <p className={`text-2xl font-black ${b.color}`}>{b.val}</p>
+                    <p className="text-slate-500 text-[11px] mt-0.5">{b.label}</p>
+                    {b.total && <p className="text-slate-600 text-[10px]">من {b.total}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-white font-semibold text-sm">Leave Requests</h2>
@@ -953,12 +1018,14 @@ export default function EmployeeDashboard() {
                       {r.status==='pending' ? 'Pending' : r.status==='approved' ? 'Approved' : 'Rejected'}
                     </span>
                     <span className="text-slate-400 text-sm">{new Date(r.start_date).toLocaleDateString()} — {new Date(r.end_date).toLocaleDateString()}</span>
+                    {r.days_count && <span className="text-slate-500 text-xs">{r.days_count} يوم</span>}
                   </div>
                   {r.reason && <p className="text-slate-500 text-xs mt-1">{r.reason}</p>}
                   {r.admin_note && <p className="text-slate-400 text-xs mt-2 rounded-xl px-3 py-2" style={{background:'rgba(255,255,255,0.04)'}}><span className="text-slate-500">Note: </span>{r.admin_note}</p>}
                 </div>
               ))}
             </div>
+          </div>
           </div>
         )}
 
@@ -1010,6 +1077,65 @@ export default function EmployeeDashboard() {
 
         {activeTab === 'attendance' && profile?.can_view_attendance && (
           <>
+            {/* Correction Request */}
+            <div className="glass-card rounded-2xl p-5 mb-5" style={{border:'1px solid rgba(99,102,241,0.15)'}}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-white font-semibold text-sm">🔧 طلب تصحيح حضور</h3>
+                <button onClick={() => setShowCorrectionForm(v => !v)} className="text-xs text-indigo-400 hover:text-indigo-300 bg-indigo-900/20 px-3 py-1.5 rounded-lg border border-indigo-500/20 transition-all">
+                  {showCorrectionForm ? 'إخفاء' : '+ طلب جديد'}
+                </button>
+              </div>
+              {correctionMsg && (
+                <div className={`mb-3 px-3 py-2 rounded-xl text-sm ${correctionMsg.startsWith('✓') ? 'bg-emerald-900/30 text-emerald-300 border border-emerald-500/20' : 'bg-red-900/30 text-red-300 border border-red-500/20'}`}>{correctionMsg}</div>
+              )}
+              {showCorrectionForm && (
+                <form onSubmit={submitCorrectionRequest} className="space-y-3 animate-scaleIn">
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">التاريخ</label>
+                      <input type="date" required value={correctionForm.date} onChange={e=>setCorrectionForm(f=>({...f,date:e.target.value}))}
+                        className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">وقت الدخول المطلوب</label>
+                      <input type="time" value={correctionForm.requested_login} onChange={e=>setCorrectionForm(f=>({...f,requested_login:e.target.value}))}
+                        className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">وقت الخروج المطلوب</label>
+                      <input type="time" value={correctionForm.requested_logout} onChange={e=>setCorrectionForm(f=>({...f,requested_logout:e.target.value}))}
+                        className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">سبب التصحيح</label>
+                    <input required value={correctionForm.reason} onChange={e=>setCorrectionForm(f=>({...f,reason:e.target.value}))}
+                      className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600"
+                      placeholder="اكتب سبب طلب التصحيح..." />
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={submittingCorrection} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm px-5 py-2 rounded-xl font-medium transition-all">
+                      {submittingCorrection ? 'جاري الإرسال...' : 'إرسال الطلب'}
+                    </button>
+                    <button type="button" onClick={() => setShowCorrectionForm(false)} className="btn-ghost text-sm px-4 py-2">إلغاء</button>
+                  </div>
+                </form>
+              )}
+              {myCorrections.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold">طلباتي السابقة</p>
+                  {myCorrections.slice(0, 5).map(c => (
+                    <div key={c.id} className="flex items-center gap-3 p-2.5 rounded-xl" style={{background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)'}}>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c.status==='approved' ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-500/20' : c.status==='rejected' ? 'bg-red-900/30 text-red-400 border border-red-500/20' : 'bg-yellow-900/30 text-yellow-400 border border-yellow-500/20'}`}>
+                        {c.status==='approved' ? '✓ مقبول' : c.status==='rejected' ? '✗ مرفوض' : '⏳ انتظار'}
+                      </span>
+                      <span className="text-slate-400 text-xs flex-1">{c.date} — {c.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-white font-semibold text-sm">Attendance Table</h2>
               <input type="date" value={attendanceDate} onChange={e=>setAttendanceDate(e.target.value)} className="bg-white/5 border border-white/8 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 transition-all" />

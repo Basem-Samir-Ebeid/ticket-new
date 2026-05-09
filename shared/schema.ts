@@ -12,6 +12,9 @@ export const profiles = pgTable('profiles', {
   can_view_attendance: boolean('can_view_attendance').notNull().default(false),
   must_change_password: boolean('must_change_password').notNull().default(true),
   leave_balance: integer('leave_balance').notNull().default(14),
+  sick_leave_balance: integer('sick_leave_balance').notNull().default(7),
+  emergency_leave_balance: integer('emergency_leave_balance').notNull().default(3),
+  work_start_hour: integer('work_start_hour').notNull().default(9),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -87,6 +90,7 @@ export const leaveRequests = pgTable('leave_requests', {
   leave_type: text('leave_type').notNull().default('annual'),
   start_date: date('start_date').notNull(),
   end_date: date('end_date').notNull(),
+  days_count: integer('days_count').notNull().default(1),
   reason: text('reason'),
   status: text('status').notNull().default('pending'),
   admin_note: text('admin_note'),
@@ -180,5 +184,44 @@ export const assetHistory = pgTable('asset_history', {
   description: text('description'),
   old_value: text('old_value'),
   new_value: text('new_value'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const penalties = pgTable('penalties', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  type: text('type').notNull().default('warning'),
+  reason: text('reason').notNull(),
+  amount: doublePrecision('amount'),
+  notes: text('notes'),
+  issued_by: uuid('issued_by').references(() => profiles.id, { onDelete: 'set null' }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const complaints = pgTable('complaints', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  complainant_id: uuid('complainant_id').references(() => profiles.id, { onDelete: 'set null' }),
+  against_user_id: uuid('against_user_id').references(() => profiles.id, { onDelete: 'set null' }),
+  subject: text('subject').notNull(),
+  description: text('description').notNull(),
+  status: text('status').notNull().default('pending'),
+  is_anonymous: boolean('is_anonymous').notNull().default(false),
+  admin_response: text('admin_response'),
+  resolved_by: uuid('resolved_by').references(() => profiles.id, { onDelete: 'set null' }),
+  resolved_at: timestamp('resolved_at', { withTimezone: true }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const attendanceCorrections = pgTable('attendance_corrections', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  date: date('date').notNull(),
+  requested_login: text('requested_login'),
+  requested_logout: text('requested_logout'),
+  reason: text('reason').notNull(),
+  status: text('status').notNull().default('pending'),
+  admin_note: text('admin_note'),
+  reviewed_by: uuid('reviewed_by').references(() => profiles.id, { onDelete: 'set null' }),
+  reviewed_at: timestamp('reviewed_at', { withTimezone: true }),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })

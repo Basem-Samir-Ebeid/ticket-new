@@ -1,9 +1,9 @@
 import { Router } from 'express'
 import { db } from '../db'
-import { loginTimes, profiles } from '../../shared/schema'
-import { eq, and, gte, lte } from 'drizzle-orm'
+import { loginTimes, profiles, notifications, attendanceCorrections, penalties } from '../../shared/schema'
+import { eq, and, gte, lte, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
-import { broadcastAll } from '../ws'
+import { broadcast, broadcastAll } from '../ws'
 import { getOfficeConfig } from '../officeConfig'
 
 const router = Router()
@@ -38,21 +38,11 @@ async function checkGeofence(
 ): Promise<{ allowed: boolean; error?: string; distance?: number; effectiveRadius?: number }> {
   const coords = validateCoords(rawLat, rawLng)
   if (!coords) {
-    console.warn(`[Attendance][${action}] رُفض: إحداثيات غير صالحة — lat=${rawLat}, lng=${rawLng}`)
     return { allowed: false, error: 'إحداثيات غير صالحة أو مرفوضة. تأكد من تفعيل GPS.' }
   }
 
   const cfg = await getOfficeConfig()
   const distance = haversineDistance(coords.lat, coords.lng, cfg.latitude, cfg.longitude)
-
-  console.log(
-    `[Attendance][${action}] ` +
-    `المستخدم=(${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}) | ` +
-    `المكتب=(${cfg.latitude.toFixed(6)}, ${cfg.longitude.toFixed(6)}) | ` +
-    `المسافة=${distance.toFixed(1)}م | ` +
-    `الحد المسموح=${cfg.radius_meters}م | ` +
-    `النتيجة=${distance <= cfg.radius_meters ? 'مسموح ✓' : 'مرفوض ✗'}`
-  )
 
   if (!isFinite(distance) || distance > cfg.radius_meters) {
     return {
@@ -68,6 +58,10 @@ async function checkGeofence(
 
 function getLocalDateString(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+}
+
+function getLocalHour(date = new Date()) {
+  return parseInt(date.toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'Africa/Cairo' }))
 }
 
 router.get('/', requireAuth as any, async (req: any, res) => {
@@ -106,8 +100,67 @@ router.get('/today', requireAuth as any, async (req: any, res) => {
       .where(and(eq(loginTimes.user_id, req.user.id), eq(loginTimes.date, today)))
     res.json(record || null)
   } catch (err: any) {
-    console.error('GET /attendance/today error:', err)
     res.status(500).json({ error: err?.message || 'Failed to get today attendance' })
+  }
+})
+
+router.get('/live', requireAuth as any, async (req: any, res) => {
+  try {
+    const allowed = req.profile.role === 'admin' || req.profile.role === 'super_admin'
+    if (!allowed) return res.status(403).json({ error: 'Admin only' })
+
+    const today = getLocalDateString()
+    const rows = await db.select().from(loginTimes).where(eq(loginTimes.date, today))
+
+    const allProfiles = await db.select({
+      id: profiles.id, full_name: profiles.full_name, email: profiles.email,
+      role: profiles.role, profile_picture_url: profiles.profile_picture_url, work_start_hour: profiles.work_start_hour
+    }).from(profiles)
+    const profileMap = new Map(allProfiles.map(p => [p.id, p]))
+
+    const attendanceMap = new Map(rows.map(r => [r.user_id, r]))
+
+    const employees = allProfiles.filter(p => p.role === 'employee')
+
+    const result = employees.map(emp => {
+      const record = attendanceMap.get(emp.id)
+      const isIn = record && !record.logout_time
+      const isOut = record && !!record.logout_time
+
+      let lateMinutes = 0
+      if (record && record.login_time) {
+        const loginHour = getLocalHour(new Date(record.login_time))
+        const loginMinute = new Date(record.login_time).getMinutes()
+        const workStart = emp.work_start_hour || 9
+        const minutesSinceStart = (loginHour - workStart) * 60 + loginMinute
+        lateMinutes = Math.max(0, minutesSinceStart)
+      }
+
+      let overtimeMinutes = 0
+      if (record && record.login_time && record.logout_time) {
+        const totalMinutes = (new Date(record.logout_time).getTime() - new Date(record.login_time).getTime()) / 60000
+        const standardMinutes = 8 * 60
+        overtimeMinutes = Math.max(0, Math.round(totalMinutes - standardMinutes))
+      }
+
+      return {
+        ...emp,
+        status: isIn ? 'in' : isOut ? 'out' : 'absent',
+        login_time: record?.login_time || null,
+        logout_time: record?.logout_time || null,
+        late_minutes: lateMinutes,
+        overtime_minutes: overtimeMinutes,
+      }
+    })
+
+    const inCount = result.filter(r => r.status === 'in').length
+    const outCount = result.filter(r => r.status === 'out').length
+    const absentCount = result.filter(r => r.status === 'absent').length
+
+    res.json({ date: today, employees: result, summary: { in: inCount, out: outCount, absent: absentCount } })
+  } catch (err: any) {
+    console.error('GET /attendance/live error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get live attendance' })
   }
 })
 
@@ -137,9 +190,38 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
       longitude: Number(longitude),
     }).returning()
 
-    console.log(`[Attendance][check-in] تم تسجيل حضور المستخدم ${req.user.id} بنجاح — المسافة=${Math.round(geo.distance!)}م`)
+    const workStartHour = req.profile.work_start_hour || 9
+    const nowHour = getLocalHour()
+    const nowMinute = new Date().getMinutes()
+    const lateMinutes = Math.max(0, (nowHour - workStartHour) * 60 + nowMinute)
+
+    if (lateMinutes > 5) {
+      const admins = await db.select({ id: profiles.id }).from(profiles)
+        .where(or(eq(profiles.role, 'admin'), eq(profiles.role, 'super_admin')))
+      const empName = req.profile.full_name || req.profile.email
+      const h = Math.floor(lateMinutes / 60)
+      const m = lateMinutes % 60
+      const lateStr = h > 0 ? `${h} ساعة ${m} دقيقة` : `${m} دقيقة`
+      for (const admin of admins) {
+        const [notif] = await db.insert(notifications).values({
+          user_id: admin.id,
+          message: `⏰ تأخير: ${empName} سجّل حضوره متأخراً بـ ${lateStr}`,
+        }).returning()
+        broadcast(admin.id, 'notification', notif)
+      }
+
+      if (lateMinutes >= 60) {
+        await db.insert(penalties).values({
+          user_id: req.user.id,
+          type: 'warning',
+          reason: `تأخر عن موعد العمل بمقدار ${lateStr} بتاريخ ${today}`,
+          issued_by: null,
+        })
+      }
+    }
+
     broadcastAll('attendance_update', { action: 'login', user_id: req.user.id, date: today })
-    res.json(record)
+    res.json({ ...record, late_minutes: lateMinutes })
   } catch (err: any) {
     console.error('POST /attendance/login error:', err)
     res.status(500).json({ error: err?.message || 'Failed to check in' })
@@ -172,9 +254,11 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
       logout_longitude: Number(longitude),
     }).where(and(eq(loginTimes.user_id, req.user.id), eq(loginTimes.date, today))).returning()
 
-    console.log(`[Attendance][check-out] تم تسجيل انصراف المستخدم ${req.user.id} بنجاح — المسافة=${Math.round(geo.distance!)}م`)
+    const totalMinutes = (new Date(record.logout_time!).getTime() - new Date(record.login_time).getTime()) / 60000
+    const overtimeMinutes = Math.max(0, Math.round(totalMinutes - 8 * 60))
+
     broadcastAll('attendance_update', { action: 'logout', user_id: req.user.id, date: today })
-    res.json(record)
+    res.json({ ...record, overtime_minutes: overtimeMinutes })
   } catch (err: any) {
     console.error('POST /attendance/logout error:', err)
     res.status(500).json({ error: err?.message || 'Failed to check out' })
@@ -206,27 +290,42 @@ router.get('/monthly-report', requireAuth as any, async (req: any, res) => {
       .where(and(gte(loginTimes.date, firstDay), lte(loginTimes.date, lastDay)))
 
     const allProfiles = await db.select({
-      id: profiles.id, full_name: profiles.full_name, email: profiles.email, role: profiles.role
+      id: profiles.id, full_name: profiles.full_name, email: profiles.email, role: profiles.role, work_start_hour: profiles.work_start_hour
     }).from(profiles)
 
-    const statsMap = new Map<string, { profile: any; days: string[]; totalMinutes: number }>()
+    const statsMap = new Map<string, { profile: any; days: string[]; totalMinutes: number; overtimeMinutes: number; lateCount: number; lateTotalMinutes: number }>()
 
     for (const p of allProfiles) {
       if (p.role === 'admin' || p.role === 'super_admin') continue
-      statsMap.set(p.id, { profile: p, days: [], totalMinutes: 0 })
+      statsMap.set(p.id, { profile: p, days: [], totalMinutes: 0, overtimeMinutes: 0, lateCount: 0, lateTotalMinutes: 0 })
     }
 
     for (const r of rows) {
       if (!statsMap.has(r.user_id)) continue
       const entry = statsMap.get(r.user_id)!
+      const prof = entry.profile
       if (!entry.days.includes(r.date)) entry.days.push(r.date)
       if (r.login_time && r.logout_time) {
         const mins = (new Date(r.logout_time).getTime() - new Date(r.login_time).getTime()) / 60000
-        if (mins > 0) entry.totalMinutes += mins
+        if (mins > 0) {
+          entry.totalMinutes += mins
+          const overtime = Math.max(0, mins - 8 * 60)
+          entry.overtimeMinutes += overtime
+        }
+      }
+      if (r.login_time) {
+        const loginHour = getLocalHour(new Date(r.login_time))
+        const loginMin = new Date(r.login_time).getMinutes()
+        const workStart = prof.work_start_hour || 9
+        const lateMin = Math.max(0, (loginHour - workStart) * 60 + loginMin)
+        if (lateMin > 5) {
+          entry.lateCount++
+          entry.lateTotalMinutes += lateMin
+        }
       }
     }
 
-    const report = Array.from(statsMap.values()).map(({ profile, days, totalMinutes }) => ({
+    const report = Array.from(statsMap.values()).map(({ profile, days, totalMinutes, overtimeMinutes, lateCount, lateTotalMinutes }) => ({
       id: profile.id,
       full_name: profile.full_name,
       email: profile.email,
@@ -237,14 +336,104 @@ router.get('/monthly-report', requireAuth as any, async (req: any, res) => {
       attendance_rate: workingDays > 0 ? Math.round((days.length / workingDays) * 100) : 0,
       total_minutes: Math.round(totalMinutes),
       avg_minutes_per_day: days.length > 0 ? Math.round(totalMinutes / days.length) : 0,
+      overtime_minutes: Math.round(overtimeMinutes),
+      late_count: lateCount,
+      late_total_minutes: Math.round(lateTotalMinutes),
     }))
 
     report.sort((a, b) => b.attendance_rate - a.attendance_rate)
-
     res.json({ year, month, working_days: workingDays, employees: report })
   } catch (err: any) {
     console.error('GET /attendance/monthly-report error:', err)
     res.status(500).json({ error: err?.message || 'Failed to generate report' })
+  }
+})
+
+router.get('/corrections', requireAuth as any, async (req: any, res) => {
+  try {
+    const isAdmin = req.profile.role === 'admin' || req.profile.role === 'super_admin'
+    let rows
+    if (isAdmin) {
+      rows = await db.select().from(attendanceCorrections).orderBy(desc(attendanceCorrections.created_at))
+    } else {
+      rows = await db.select().from(attendanceCorrections)
+        .where(eq(attendanceCorrections.user_id, req.user.id))
+        .orderBy(desc(attendanceCorrections.created_at))
+    }
+
+    const allProfiles = await db.select({
+      id: profiles.id, full_name: profiles.full_name, email: profiles.email
+    }).from(profiles)
+    const profileMap = new Map(allProfiles.map(p => [p.id, p]))
+
+    res.json(rows.map(r => ({
+      ...r,
+      user: profileMap.get(r.user_id) || null,
+      reviewed_by_user: r.reviewed_by ? profileMap.get(r.reviewed_by) || null : null,
+    })))
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to get corrections' })
+  }
+})
+
+router.post('/corrections', requireAuth as any, async (req: any, res) => {
+  try {
+    const { date, requested_login, requested_logout, reason } = req.body
+    if (!date || !reason) return res.status(400).json({ error: 'Date and reason are required' })
+
+    const [correction] = await db.insert(attendanceCorrections).values({
+      user_id: req.user.id,
+      date,
+      requested_login: requested_login || null,
+      requested_logout: requested_logout || null,
+      reason,
+      status: 'pending',
+    }).returning()
+
+    const admins = await db.select({ id: profiles.id }).from(profiles)
+      .where(or(eq(profiles.role, 'admin'), eq(profiles.role, 'super_admin')))
+    const empName = req.profile.full_name || req.profile.email
+    for (const admin of admins) {
+      const [notif] = await db.insert(notifications).values({
+        user_id: admin.id,
+        message: `🔧 طلب تصحيح حضور من ${empName} بتاريخ ${date}`,
+      }).returning()
+      broadcast(admin.id, 'notification', notif)
+    }
+
+    broadcastAll('attendance_update', { action: 'correction_created' })
+    res.json(correction)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to create correction request' })
+  }
+})
+
+router.patch('/corrections/:id', requireAuth as any, async (req: any, res) => {
+  try {
+    if (req.profile.role !== 'admin' && req.profile.role !== 'super_admin')
+      return res.status(403).json({ error: 'Admin only' })
+
+    const { status, admin_note } = req.body
+    const [correction] = await db.update(attendanceCorrections).set({
+      status,
+      admin_note: admin_note || null,
+      reviewed_by: req.user.id,
+      reviewed_at: new Date(),
+    }).where(eq(attendanceCorrections.id, req.params.id)).returning()
+
+    if (correction && correction.user_id) {
+      const label = status === 'approved' ? '✅ تم قبول' : '❌ تم رفض'
+      const [notif] = await db.insert(notifications).values({
+        user_id: correction.user_id,
+        message: `${label} طلب تصحيح الحضور بتاريخ ${correction.date}${admin_note ? ` — ${admin_note}` : ''}`,
+      }).returning()
+      broadcast(correction.user_id, 'notification', notif)
+    }
+
+    broadcastAll('attendance_update', { action: 'correction_updated' })
+    res.json(correction)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to update correction' })
   }
 })
 
@@ -255,7 +444,6 @@ router.delete('/:id', requireAuth as any, async (req: any, res) => {
     broadcastAll('attendance_update', { action: 'deleted' })
     res.json({ success: true })
   } catch (err: any) {
-    console.error('DELETE /attendance/:id error:', err)
     res.status(500).json({ error: err?.message || 'Failed to delete attendance record' })
   }
 })
