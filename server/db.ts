@@ -11,10 +11,11 @@ if (!connectionString) {
 }
 
 const isNeon = connectionString.includes('neon.tech')
+const requiresSsl = isNeon || connectionString.includes('sslmode=require')
 
 export const pool = new Pool({
   connectionString,
-  ssl: isNeon ? { rejectUnauthorized: false } : false,
+  ssl: requiresSsl ? { rejectUnauthorized: false } : false,
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
