@@ -1,10 +1,6 @@
-import fs from 'fs'
-import path from 'path'
 import { db } from './db'
 import { officeSettings } from '../shared/schema'
 import { eq } from 'drizzle-orm'
-
-const CONFIG_FILE = path.join(process.cwd(), 'server', 'office-config.json')
 
 export interface OfficeConfig {
   latitude: number
@@ -28,18 +24,6 @@ function isValidConfig(cfg: any): cfg is OfficeConfig {
   )
 }
 
-function readFileConfig(): OfficeConfig | null {
-  try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const raw = fs.readFileSync(CONFIG_FILE, 'utf-8')
-      const parsed = JSON.parse(raw)
-      const cfg = { ...DEFAULT_CONFIG, ...parsed }
-      if (isValidConfig(cfg)) return cfg
-    }
-  } catch {}
-  return null
-}
-
 export async function getOfficeConfig(): Promise<OfficeConfig> {
   try {
     const [row] = await db.select().from(officeSettings).where(eq(officeSettings.id, 'main')).limit(1)
@@ -54,9 +38,6 @@ export async function getOfficeConfig(): Promise<OfficeConfig> {
   } catch (err) {
     console.error('[officeConfig] Failed to read from DB:', err)
   }
-
-  const fileCfg = readFileConfig()
-  if (fileCfg) return fileCfg
 
   return { ...DEFAULT_CONFIG }
 }
@@ -74,14 +55,4 @@ export async function saveOfficeConfig(config: OfficeConfig): Promise<void> {
         updated_at: new Date(),
       },
     })
-
-  try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8')
-  } catch {}
-}
-
-export function saveOfficeConfigToFile(config: OfficeConfig): void {
-  try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8')
-  } catch {}
 }

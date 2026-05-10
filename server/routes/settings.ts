@@ -91,7 +91,7 @@ router.get('/log', requireAuth as any, async (req: any, res) => {
 router.get('/smtp', requireAuth as any, async (req: any, res) => {
   try {
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
-    const config = getSmtpConfig()
+    const config = await getSmtpConfig()
     res.json({ ...config, password: config.password ? '••••••••' : '' })
   } catch (err: any) {
     console.error('GET /settings/smtp error:', err)
@@ -104,7 +104,7 @@ router.post('/smtp', requireAuth as any, async (req: any, res) => {
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
     const { host, port, secure, user, password, from_name, from_email, enabled } = req.body
 
-    const existing = getSmtpConfig()
+    const existing = await getSmtpConfig()
     const updates: any = {}
     if (host !== undefined) updates.host = String(host).trim()
     if (port !== undefined) updates.port = Number(port) || 587
@@ -116,7 +116,7 @@ router.post('/smtp', requireAuth as any, async (req: any, res) => {
     if (from_email !== undefined) updates.from_email = String(from_email).trim()
     if (enabled !== undefined) updates.enabled = Boolean(enabled)
 
-    const saved = saveSmtpConfig(updates)
+    const saved = await saveSmtpConfig(updates)
     res.json({ ...saved, password: saved.password ? '••••••••' : '' })
   } catch (err: any) {
     console.error('POST /settings/smtp error:', err)
@@ -127,7 +127,7 @@ router.post('/smtp', requireAuth as any, async (req: any, res) => {
 router.post('/smtp/test', requireAuth as any, async (req: any, res) => {
   try {
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
-    const config = getSmtpConfig()
+    const config = await getSmtpConfig()
     const testEmail = req.body.test_email || req.profile.email
 
     if (!config.host || !config.user || !config.password) {
@@ -163,7 +163,7 @@ router.post('/smtp/test', requireAuth as any, async (req: any, res) => {
 router.get('/github-sync', requireAuth as any, async (req: any, res) => {
   try {
     if (!isSuperAdmin(req.profile.role)) return res.status(403).json({ error: 'Super admin only' })
-    const config = getGitHubSyncConfig()
+    const config = await getGitHubSyncConfig()
     res.json({
       repo_url: config.repo_url,
       branch: config.branch,
@@ -194,11 +194,11 @@ router.post('/github-sync', requireAuth as any, async (req: any, res) => {
       return res.status(400).json({ error: 'Branch name contains invalid characters' })
     }
 
-    const existing = getGitHubSyncConfig()
+    const existing = await getGitHubSyncConfig()
     const newToken = token !== undefined ? String(token) : existing.token
 
     const config = { repo_url: cleanUrl, branch: cleanBranch, token: newToken }
-    saveGitHubSyncConfig(config)
+    await saveGitHubSyncConfig(config)
 
     let gitRemoteError: string | null = null
     try {
@@ -234,7 +234,7 @@ router.post('/github-sync/test', requireAuth as any, async (req: any, res) => {
   try {
     if (!isSuperAdmin(req.profile.role)) return res.status(403).json({ error: 'Super admin only' })
 
-    const config = getGitHubSyncConfig()
+    const config = await getGitHubSyncConfig()
     const token = req.body.token !== undefined ? String(req.body.token) : config.token
     const repo_url = String(req.body.repo_url || config.repo_url || '').trim()
 

@@ -1,7 +1,8 @@
-import fs from 'fs'
-import path from 'path'
+import { db } from './db'
+import { systemSettings } from '../shared/schema'
+import { eq } from 'drizzle-orm'
 
-const CONFIG_FILE = path.join(process.cwd(), 'server', 'smtp-config.json')
+const SMTP_KEY = 'smtp_config'
 
 export interface SmtpConfig {
   host: string
@@ -25,23 +26,22 @@ const DEFAULT_CONFIG: SmtpConfig = {
   enabled: false,
 }
 
-export function getSmtpConfig(): SmtpConfig {
+export async function getSmtpConfig(): Promise<SmtpConfig> {
   try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const raw = fs.readFileSync(CONFIG_FILE, 'utf-8')
-      return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }
-    }
+    const [row] = await db.select({ value: systemSettings.value })
+      .from(systemSettings)
+      .where(eq(systemSettings.key, SMTP_KEY))
+      .limit(1)
+    if (row?.value) return { ...DEFAULT_CONFIG, ...JSON.parse(row.value) }
   } catch {}
   return { ...DEFAULT_CONFIG }
 }
 
-export function saveSmtpConfig(config: Partial<SmtpConfig>): SmtpConfig {
-  const existing = getSmtpConfig()
+export async function saveSmtpConfig(config: Partial<SmtpConfig>): Promise<SmtpConfig> {
+  const existing = await getSmtpConfig()
   const merged: SmtpConfig = { ...existing, ...config }
-  try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf-8')
-  } catch (err) {
-    console.error('[smtpConfig] Failed to save config:', err)
-  }
+  await db.insert(systemSettings)
+    .values({ key: SMTP_KEY, value: JSON.stringify(merged) })
+    .onConflictDoUpdate({ target: systemSettings.key, set: { value: JSON.stringify(merged), updated_at: new Date() } })
   return merged
 }

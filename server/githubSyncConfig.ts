@@ -1,7 +1,8 @@
-import fs from 'fs'
-import path from 'path'
+import { db } from './db'
+import { systemSettings } from '../shared/schema'
+import { eq } from 'drizzle-orm'
 
-const CONFIG_FILE = path.join(process.cwd(), 'server', 'github-sync-config.json')
+const GITHUB_KEY = 'github_sync_config'
 
 export interface GitHubSyncConfig {
   repo_url: string
@@ -9,22 +10,27 @@ export interface GitHubSyncConfig {
   token: string
 }
 
-const DEFAULT_CONFIG: GitHubSyncConfig = {
+const DEFAULT_GITHUB_CONFIG: GitHubSyncConfig = {
   repo_url: '',
   branch: 'main',
   token: '',
 }
 
-export function getGitHubSyncConfig(): GitHubSyncConfig {
+export async function getGitHubSyncConfig(): Promise<GitHubSyncConfig> {
   try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const raw = fs.readFileSync(CONFIG_FILE, 'utf-8')
-      return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }
-    }
+    const [row] = await db.select({ value: systemSettings.value })
+      .from(systemSettings)
+      .where(eq(systemSettings.key, GITHUB_KEY))
+      .limit(1)
+    if (row?.value) return { ...DEFAULT_GITHUB_CONFIG, ...JSON.parse(row.value) }
   } catch {}
-  return { ...DEFAULT_CONFIG }
+  return { ...DEFAULT_GITHUB_CONFIG }
 }
 
-export function saveGitHubSyncConfig(config: GitHubSyncConfig): void {
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600 })
+export async function saveGitHubSyncConfig(config: GitHubSyncConfig): Promise<void> {
+  const existing = await getGitHubSyncConfig()
+  const merged = { ...existing, ...config }
+  await db.insert(systemSettings)
+    .values({ key: GITHUB_KEY, value: JSON.stringify(merged) })
+    .onConflictDoUpdate({ target: systemSettings.key, set: { value: JSON.stringify(merged), updated_at: new Date() } })
 }
