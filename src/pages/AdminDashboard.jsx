@@ -94,6 +94,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [testingGithubSync, setTestingGithubSync] = useState(false)
   const [githubSyncTestResult, setGithubSyncTestResult] = useState(null)
   const [githubSyncLoaded, setGithubSyncLoaded] = useState(false)
+  const [triggeringGithubSync, setTriggeringGithubSync] = useState(false)
+  const [githubSyncTriggerResult, setGithubSyncTriggerResult] = useState(null)
   const [smtpForm, setSmtpForm] = useState({ host: '', port: 587, secure: false, user: '', password: '', from_name: 'Finest IT', from_email: '', enabled: false })
   const [smtpMsg, setSmtpMsg] = useState('')
   const [savingSmtp, setSavingSmtp] = useState(false)
@@ -565,6 +567,29 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       setGithubSyncMsg('Error: ' + err.message)
     }
     setSavingGithubSync(false)
+  }
+
+  async function handleTriggerGithubSync() {
+    setTriggeringGithubSync(true)
+    setGithubSyncTriggerResult(null)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/settings/github-sync/trigger', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      const label = data.result ? `[${data.result}] ` : ''
+      if (res.ok) {
+        setGithubSyncTriggerResult({ ok: true, message: label + (data.message || 'Sync completed successfully.') })
+      } else {
+        setGithubSyncTriggerResult({ ok: false, message: label + (data.message || data.error || 'Sync failed.') })
+      }
+      await fetchGithubSyncStatus()
+    } catch (err) {
+      setGithubSyncTriggerResult({ ok: false, message: err.message || 'Sync trigger failed.' })
+    }
+    setTriggeringGithubSync(false)
   }
 
   async function handleTestGithubSync() {
@@ -3563,6 +3588,13 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       </div>
                     )}
 
+                    {githubSyncTriggerResult && (
+                      <div className={`px-4 py-3 rounded-xl text-sm flex items-start gap-2 ${githubSyncTriggerResult.ok ? 'bg-emerald-900/20 text-emerald-400 border border-emerald-500/20' : 'bg-red-900/20 text-red-400 border border-red-500/20'}`}>
+                        <span>{githubSyncTriggerResult.ok ? '✓' : '✗'}</span>
+                        <span>{githubSyncTriggerResult.message}</span>
+                      </div>
+                    )}
+
                     {githubSyncMsg && (
                       <div className={`px-4 py-3 rounded-xl text-sm ${githubSyncMsg.startsWith('Error') ? 'bg-red-900/20 text-red-400 border border-red-500/20' : 'bg-emerald-900/20 text-emerald-400 border border-emerald-500/20'}`}>
                         {githubSyncMsg}
@@ -3605,6 +3637,29 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             Test Connection
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleTriggerGithubSync}
+                        disabled={triggeringGithubSync}
+                        className="border border-blue-500/20 hover:border-blue-400/40 bg-blue-900/20 hover:bg-blue-900/40 disabled:opacity-50 text-blue-400 hover:text-blue-300 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-2"
+                      >
+                        {triggeringGithubSync ? (
+                          <>
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                            </svg>
+                            Syncing…
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                            </svg>
+                            Sync Now
                           </>
                         )}
                       </button>

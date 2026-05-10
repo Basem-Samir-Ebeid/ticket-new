@@ -8,7 +8,9 @@ import { getAutoAssignConfig, saveAutoAssignConfig } from '../autoAssignConfig'
 import { db } from '../db'
 import { settingsLog } from '../../shared/schema'
 import { desc } from 'drizzle-orm'
-import { execFileSync } from 'child_process'
+import { execFileSync, execFile } from 'child_process'
+import path from 'path'
+import fs from 'fs'
 import https from 'https'
 import nodemailer from 'nodemailer'
 
@@ -295,6 +297,49 @@ router.post('/github-sync/test', requireAuth as any, async (req: any, res) => {
   } catch (err: any) {
     console.error('POST /github-sync/test error:', err)
     res.status(500).json({ error: err?.message || 'Test connection failed' })
+  }
+})
+
+router.post('/github-sync/trigger', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isSuperAdmin(req.profile.role)) return res.status(403).json({ error: 'Super admin only' })
+
+    const scriptPath = path.join(process.cwd(), 'scripts', 'github-sync.sh')
+    const statusFile = path.join(process.cwd(), '.github-sync-status')
+
+    const { exitCode, stderr } = await new Promise<{ exitCode: number; stderr: string }>((resolve) => {
+      execFile('bash', [scriptPath], { timeout: 60000, env: { ...process.env } }, (err, _stdout, errOutput) => {
+        resolve({
+          exitCode: err ? ((err as any).code ?? 1) : 0,
+          stderr: errOutput || '',
+        })
+      })
+    })
+
+    // Read the status file written by the script for the canonical result message
+    let result = 'UNKNOWN'
+    let message = ''
+    try {
+      const raw = fs.readFileSync(statusFile, 'utf8').trim()
+      const match = raw.match(/^\[([^\]]+)\]\s+(\w+):\s+(.+)$/)
+      if (match) {
+        result = match[2]
+        message = match[3]
+      } else {
+        message = raw
+      }
+    } catch {
+      message = exitCode === 0 ? 'Sync completed.' : stderr.trim() || 'Sync failed.'
+    }
+
+    const ok = exitCode === 0
+    if (ok) {
+      return res.json({ ok: true, result, message })
+    }
+    return res.status(500).json({ ok: false, result, message: message || stderr.trim() || 'Sync failed with no output.' })
+  } catch (err: any) {
+    console.error('POST /github-sync/trigger error:', err)
+    res.status(500).json({ ok: false, message: err?.message || 'Sync trigger failed' })
   }
 })
 
