@@ -109,7 +109,11 @@ export async function sendWhatsAppToUser(userId: string, text: string): Promise<
 // Legacy: global admin notification (tries Green API first, falls back to CallMeBot)
 export async function sendWhatsAppNotification(text: string): Promise<void> {
   const config = await getWhatsAppConfig()
-  if (!config.enabled) return
+  console.log('[WA-DEBUG] sendWhatsAppNotification called, enabled:', config.enabled, 'token exists:', !!config.greenapi_token, 'phone:', config.phone)
+  if (!config.enabled) {
+    console.log('[WA-DEBUG] WhatsApp disabled, skipping')
+    return
+  }
   try {
     if (config.greenapi_instance_id && config.greenapi_token && config.phone) {
       await sendViaGreenApi(config.phone, text)
