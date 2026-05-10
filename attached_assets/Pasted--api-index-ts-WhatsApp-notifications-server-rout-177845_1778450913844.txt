@@ -1,0 +1,96 @@
+افتح ملف api/index.ts
+
+المطلوب إضافة WhatsApp notifications مباشرة في هذا الملف (وليس في server/routes) لأن Vercel يستخدم هذا الملف فقط.
+
+1. أضف هذه الدالة المساعدة بعد دالة getAppSetting:
+
+async function sendWhatsApp(phone, message) {
+  try {
+    const cfg = await getAppSetting('whatsapp')
+    if (!cfg.enabled || !cfg.greenapi_instance_id || !cfg.greenapi_token) return
+    const chatId = String(phone).replace(/\D/g, '') + '@c.us'
+    const url = `https://api.green-api.com/waInstance${cfg.greenapi_instance_id}/sendMessage/${cfg.greenapi_token}`
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, message }),
+      signal: AbortSignal.timeout(10000)
+    })
+    console.log('[WA] Sent to:', chatId)
+  } catch (err) {
+    console.error('[WA] Error:', err.message)
+  }
+}
+
+async function sendWhatsAppToUserId(userId, message) {
+  try {
+    const { rows } = await getPool().query('SELECT whatsapp_phone FROM profiles WHERE id=$1', [userId])
+    if (rows[0]?.whatsapp_phone) await sendWhatsApp(rows[0].whatsapp_phone, message)
+  } catch (err) {
+    console.error('[WA] sendWhatsAppToUserId error:', err.message)
+  }
+}
+
+async function sendWhatsAppToAdmins(message) {
+  try {
+    const { rows } = await getPool().query("SELECT whatsapp_phone FROM profiles WHERE role IN ('admin','super_admin') AND whatsapp_phone IS NOT NULL")
+    for (const r of rows) await sendWhatsApp(r.whatsapp_phone, message)
+  } catch (err) {
+    console.error('[WA] sendWhatsAppToAdmins error:', err.message)
+  }
+}
+
+2. في POST /api/tickets بعد السطر: res.json(ticket)
+أضف:
+
+// WhatsApp notifications
+try {
+  if (ticket.assigned_to) {
+    await sendWhatsAppToUserId(ticket.assigned_to,
+      `🎫 *تيكيت جديد موجه إليك*\n\nالعنوان: ${ticket.title}\nالأولوية: ${ticket.priority}\nمن: ${req.profile.full_name || req.profile.email}`
+    )
+  }
+  await sendWhatsAppToAdmins(
+    `🎫 *تيكيت جديد في النظام*\n\nالعنوان: ${ticket.title}\nمن: ${req.profile.full_name || req.profile.email}\nالأولوية: ${ticket.priority}`
+  )
+} catch (waErr) { console.error('[WA] ticket error:', waErr.message) }
+
+3. في POST /api/leaves بعد السطر: res.json({ ...rows[0], conflict_count: conflicting.length })
+أضف:
+
+// WhatsApp notifications
+try {
+  const typeLabel = { annual: 'سنوية', sick: 'مرضية', emergency: 'طارئة', unpaid: 'بدون راتب' }
+  await sendWhatsAppToAdmins(
+    `🏖️ *طلب إجازة جديد*\n\nالموظف: ${req.profile.full_name || req.profile.email}\nالنوع: ${typeLabel[ltype] || ltype}\nمن: ${start_date}\nإلى: ${end_date}\nعدد الأيام: ${days}`
+  )
+} catch (waErr) { console.error('[WA] leave error:', waErr.message) }
+
+4. في PATCH /api/leaves/:id/approve بعد: res.json(leave)
+أضف:
+
+// WhatsApp notification to employee
+try {
+  if (leave?.user_id) {
+    const typeLabel = { annual: 'سنوية', sick: 'مرضية', emergency: 'طارئة', unpaid: 'بدون راتب' }
+    await sendWhatsAppToUserId(leave.user_id,
+      `✅ *تمت الموافقة على إجازتك*\n\nالنوع: ${typeLabel[leave.leave_type] || leave.leave_type}\nمن: ${leave.start_date}\nإلى: ${leave.end_date}\nعدد الأيام: ${leave.days_count}`
+    )
+  }
+} catch (waErr) { console.error('[WA] approve error:', waErr.message) }
+
+5. في PATCH /api/leaves/:id/reject بعد: res.json(leave)
+أضف:
+
+// WhatsApp notification to employee
+try {
+  if (leave?.user_id) {
+    await sendWhatsAppToUserId(leave.user_id,
+      `❌ *تم رفض طلب إجازتك*\n\nمن: ${leave.start_date}\nإلى: ${leave.end_date}${note ? '\nالسبب: ' + note : ''}`
+    )
+  }
+} catch (waErr) { console.error('[WA] reject error:', waErr.message) }
+
+6. اعمل git push بعد التعديل
+
+مهم: لا تحذف أي كود موجود.

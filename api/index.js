@@ -847,6 +847,7 @@ app.post('/api/tickets', requireAuth, async (req, res) => {
        now, status === 'pending' ? now : null, status === 'solved' ? now : null]
     )
     const ticket = rows[0]
+    const creatorName = req.profile.full_name || req.profile.email
     if (is_request) {
       const { rows: admins } = await db.query("SELECT id FROM profiles WHERE role IN ('admin','super_admin')")
       for (const admin of admins) {
@@ -854,8 +855,10 @@ app.post('/api/tickets', requireAuth, async (req, res) => {
           [admin.id, ticket.id, `📝 New ticket request: ${title}`])
       }
       sendPushToAdmins('📝 New Ticket Request', title, '/').catch(() => {})
+      sendWhatsAppToAdmins(`📝 طلب تيكت جديد من ${creatorName}: "${title}"`).catch(() => {})
     } else {
       sendPushToAdmins('🎫 New Ticket', title, '/').catch(() => {})
+      sendWhatsAppToAdmins(`🎫 تيكت جديد من ${creatorName}: "${title}"`).catch(() => {})
     }
     res.json(ticket)
   } catch (err) {
@@ -1170,6 +1173,7 @@ app.post('/api/leaves', requireAuth, async (req, res) => {
       await db.query('INSERT INTO notifications (user_id, message) VALUES ($1,$2)',
         [admin.id, `🌴 طلب إجازة ${typeLabel[ltype] || ltype} من ${senderName} (${start_date} → ${end_date} | ${days} أيام)${conflictNote}`])
     }
+    sendWhatsAppToAdmins(`🌴 طلب إجازة ${typeLabel[ltype] || ltype} من ${senderName} (${start_date} → ${end_date} | ${days} أيام)${conflictNote}`).catch(() => {})
     res.json({ ...rows[0], conflict_count: conflicting.length })
   } catch (err) {
     console.error('[POST /leaves] Error:', err.message)
@@ -1204,6 +1208,7 @@ app.patch('/api/leaves/:id/approve', requireAuth, async (req, res) => {
       }
       await db.query('INSERT INTO notifications (user_id, message) VALUES ($1,$2)',
         [leave.user_id, `✅ تمت الموافقة على إجازتك ${typeLabel[ltype] || ltype} (${leave.start_date} → ${leave.end_date} | ${days} أيام)`])
+      sendWhatsAppToUserId(leave.user_id, `✅ تمت الموافقة على إجازتك ${typeLabel[ltype] || ltype} (${leave.start_date} → ${leave.end_date} | ${days} أيام)`).catch(() => {})
     }
     res.json(leave)
   } catch (err) {
@@ -1241,6 +1246,7 @@ app.patch('/api/leaves/:id/reject', requireAuth, async (req, res) => {
       }
       await db.query('INSERT INTO notifications (user_id, message) VALUES ($1,$2)',
         [leave.user_id, `❌ تم رفض طلب إجازتك (${leave.start_date} → ${leave.end_date})${note ? ' — ' + note : ''}`])
+      sendWhatsAppToUserId(leave.user_id, `❌ تم رفض طلب إجازتك (${leave.start_date} → ${leave.end_date})${note ? ' — ' + note : ''}`).catch(() => {})
     }
     res.json(leave)
   } catch (err) {
@@ -1513,6 +1519,45 @@ async function setAppSetting(key, value) {
     [key, JSON.stringify(value)]
   )
   return value
+}
+
+// ── WHATSAPP HELPERS ───────────────────────────────────────────────────────────
+async function sendWhatsApp(phone, message) {
+  try {
+    const cfg = await getAppSetting('whatsapp')
+    if (!cfg.enabled || !cfg.greenapi_instance_id || !cfg.greenapi_token) return
+    const chatId = phone.replace(/\D/g, '') + '@c.us'
+    const url = `https://api.green-api.com/waInstance${cfg.greenapi_instance_id}/sendMessage/${cfg.greenapi_token}`
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, message }),
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!r.ok) console.error('[WA] sendWhatsApp error:', r.status)
+  } catch (err) {
+    console.error('[WA] sendWhatsApp exception:', err.message)
+  }
+}
+async function sendWhatsAppToUserId(userId, message) {
+  try {
+    const { rows } = await getPool().query('SELECT whatsapp_phone FROM profiles WHERE id=$1', [userId])
+    const phone = rows[0]?.whatsapp_phone
+    if (!phone) return
+    await sendWhatsApp(phone, message)
+  } catch (err) {
+    console.error('[WA] sendWhatsAppToUserId exception:', err.message)
+  }
+}
+async function sendWhatsAppToAdmins(message) {
+  try {
+    const { rows } = await getPool().query(
+      "SELECT whatsapp_phone FROM profiles WHERE role IN ('admin','super_admin') AND whatsapp_phone IS NOT NULL AND whatsapp_phone != ''"
+    )
+    for (const r of rows) await sendWhatsApp(r.whatsapp_phone, message)
+  } catch (err) {
+    console.error('[WA] sendWhatsAppToAdmins exception:', err.message)
+  }
 }
 
 // ── WHATSAPP SETTINGS ─────────────────────────────────────────────────────────
