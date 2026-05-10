@@ -160,26 +160,25 @@ router.post('/:id/test-whatsapp', requireAuth as any, requireAdmin as any, async
   try {
     const [user] = await db.select({
       whatsapp_phone: profiles.whatsapp_phone,
-      whatsapp_apikey: profiles.whatsapp_apikey,
       full_name: profiles.full_name,
       email: profiles.email,
     }).from(profiles).where(eq(profiles.id, req.params.id)).limit(1)
 
     if (!user) return res.status(404).json({ error: 'User not found' })
-    if (!user.whatsapp_phone || !user.whatsapp_apikey) {
-      return res.status(400).json({ error: 'هذا المستخدم لا يملك رقم واتساب أو API key محفوظ' })
+    if (!user.whatsapp_phone) {
+      return res.status(400).json({ error: 'هذا المستخدم لا يملك رقم واتساب محفوظ — أضف رقمه أولاً' })
     }
 
     const name = user.full_name || user.email
     await sendWhatsAppToPhone(
       user.whatsapp_phone,
-      user.whatsapp_apikey,
+      '',
       `✅ Finest IT — اختبار ناجح!\nمرحباً ${name}، ستصلك إشعارات التيكتات والحضور والإجازات هنا.`
     )
     res.json({ ok: true, message: 'تم إرسال رسالة اختبار! تحقق من واتساب.' })
   } catch (err: any) {
     console.error('POST /users/:id/test-whatsapp error:', err)
-    res.status(500).json({ error: err?.message || 'فشل إرسال رسالة الاختبار' })
+    res.status(500).json({ error: err?.message || 'فشل إرسال رسالة الاختبار — تأكد من إعدادات Green API في الإعدادات العامة' })
   }
 })
 

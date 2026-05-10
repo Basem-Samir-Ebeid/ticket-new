@@ -304,7 +304,12 @@ router.get('/whatsapp', requireAuth as any, async (req: any, res) => {
   try {
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
     const config = getWhatsAppConfig()
-    res.json({ phone: config.phone, apikey: config.apikey ? '••••••••' : '', enabled: config.enabled })
+    res.json({
+      enabled: config.enabled,
+      greenapi_instance_id: config.greenapi_instance_id || '',
+      greenapi_token: config.greenapi_token ? '••••••••' : '',
+      phone: config.phone || '',
+    })
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to load WhatsApp settings' })
   }
@@ -313,15 +318,21 @@ router.get('/whatsapp', requireAuth as any, async (req: any, res) => {
 router.post('/whatsapp', requireAuth as any, async (req: any, res) => {
   try {
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
-    const { phone, apikey, enabled } = req.body
+    const { enabled, greenapi_instance_id, greenapi_token, phone } = req.body
     const existing = getWhatsAppConfig()
     const updates: any = {}
-    if (phone !== undefined) updates.phone = String(phone).trim().replace(/\s/g, '')
-    if (apikey !== undefined && apikey !== '••••••••') updates.apikey = String(apikey).trim()
-    else updates.apikey = existing.apikey
     if (enabled !== undefined) updates.enabled = Boolean(enabled)
+    if (greenapi_instance_id !== undefined) updates.greenapi_instance_id = String(greenapi_instance_id).trim()
+    if (greenapi_token !== undefined && greenapi_token !== '••••••••') updates.greenapi_token = String(greenapi_token).trim()
+    else updates.greenapi_token = existing.greenapi_token
+    if (phone !== undefined) updates.phone = String(phone).trim().replace(/\s/g, '')
     const saved = saveWhatsAppConfig(updates)
-    res.json({ phone: saved.phone, apikey: saved.apikey ? '••••••••' : '', enabled: saved.enabled })
+    res.json({
+      enabled: saved.enabled,
+      greenapi_instance_id: saved.greenapi_instance_id || '',
+      greenapi_token: saved.greenapi_token ? '••••••••' : '',
+      phone: saved.phone || '',
+    })
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to save WhatsApp settings' })
   }
@@ -331,13 +342,16 @@ router.post('/whatsapp/test', requireAuth as any, async (req: any, res) => {
   try {
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
     const config = getWhatsAppConfig()
-    if (!config.phone || !config.apikey) {
-      return res.status(400).json({ error: 'Phone number and API key are required' })
+    if (!config.greenapi_instance_id || !config.greenapi_token) {
+      return res.status(400).json({ error: 'يرجى إدخال Instance ID و API Token أولاً' })
     }
-    await sendWhatsAppNotification('✅ Finest IT — اختبار ناجح! ستصلك إشعارات التكيتات الجديدة هنا.')
-    res.json({ ok: true, message: 'Test message sent! Check your WhatsApp.' })
+    if (!config.phone) {
+      return res.status(400).json({ error: 'يرجى إدخال رقم واتساب للاختبار' })
+    }
+    await sendWhatsAppNotification('✅ Finest IT — اختبار ناجح! ستصلك إشعارات التيكتات والحضور والإجازات هنا.')
+    res.json({ ok: true, message: 'تم إرسال رسالة اختبار! تحقق من واتساب.' })
   } catch (err: any) {
-    res.status(400).json({ error: err?.message || 'Failed to send test message' })
+    res.status(400).json({ error: err?.message || 'فشل إرسال رسالة الاختبار' })
   }
 })
 

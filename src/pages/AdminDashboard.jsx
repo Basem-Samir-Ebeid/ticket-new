@@ -100,7 +100,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [testingSmtp, setTestingSmtp] = useState(false)
   const [smtpTestResult, setSmtpTestResult] = useState(null)
   const [smtpLoaded, setSmtpLoaded] = useState(false)
-  const [waForm, setWaForm] = useState({ phone: '', apikey: '', enabled: false })
+  const [waForm, setWaForm] = useState({ enabled: false, greenapi_instance_id: '', greenapi_token: '', phone: '' })
   const [waMsg, setWaMsg] = useState('')
   const [savingWa, setSavingWa] = useState(false)
   const [testingWa, setTestingWa] = useState(false)
@@ -452,7 +452,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   async function fetchWhatsAppSettings() {
     try {
       const data = await api.getWhatsAppSettings()
-      setWaForm({ phone: data.phone || '', apikey: '', enabled: data.enabled || false })
+      setWaForm({
+        enabled: data.enabled || false,
+        greenapi_instance_id: data.greenapi_instance_id || '',
+        greenapi_token: '',
+        phone: data.phone || '',
+      })
     } catch {}
     setWaLoaded(true)
   }
@@ -463,7 +468,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     try {
       await api.saveWhatsAppSettings(waForm)
       setWaMsg('✓ تم حفظ إعدادات واتساب!')
-      setWaForm(f => ({ ...f, apikey: '' }))
+      setWaForm(f => ({ ...f, greenapi_token: '' }))
     } catch (err) { setWaMsg('Error: ' + err.message) }
     setSavingWa(false)
   }
@@ -1972,12 +1977,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <textarea value={userForm.notes} onChange={e=>setUserForm(f=>({...f,notes:e.target.value}))} rows={2} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/40 placeholder-slate-600 transition-all resize-none" placeholder="أي ملاحظات إضافية..." />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">📱 رقم واتساب (CallMeBot)</label>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">📱 رقم واتساب</label>
                     <input value={userForm.whatsapp_phone} onChange={e=>setUserForm(f=>({...f,whatsapp_phone:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="+201023588751" dir="ltr" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">🔑 CallMeBot API Key</label>
-                    <input value={userForm.whatsapp_apikey} onChange={e=>setUserForm(f=>({...f,whatsapp_apikey:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="أدخل الـ API key الخاص بالمستخدم" dir="ltr" />
+                    <p className="text-[10px] text-slate-600 mt-1">أدخل الرقم مع كود الدولة — ستصله الإشعارات تلقائياً بعد تفعيل Green API</p>
                   </div>
                 </div>
 
@@ -2123,13 +2125,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <textarea value={userForm.notes} onChange={e=>setUserForm(f=>({...f,notes:e.target.value}))} rows={2} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/40 placeholder-slate-600 transition-all resize-none" placeholder="أي ملاحظات إضافية..." />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">📱 رقم واتساب (CallMeBot)</label>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">📱 رقم واتساب</label>
                     <input value={userForm.whatsapp_phone} onChange={e=>setUserForm(f=>({...f,whatsapp_phone:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="+201023588751" dir="ltr" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">🔑 CallMeBot API Key</label>
-                    <input value={userForm.whatsapp_apikey} onChange={e=>setUserForm(f=>({...f,whatsapp_apikey:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="أدخل الـ API key الخاص بالمستخدم" dir="ltr" />
-                    <p className="text-[10px] text-slate-600 mt-1">للحصول على الـ API Key: ابعت <span className="text-emerald-500 font-mono">I allow callmebot to send me messages</span> على واتساب للرقم <span className="text-emerald-500 font-mono">+34 644 58 66 60</span></p>
+                    <p className="text-[10px] text-slate-600 mt-1">أدخل الرقم مع كود الدولة — ستصله الإشعارات تلقائياً عبر Green API</p>
                   </div>
                 </div>
 
@@ -3191,7 +3189,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </form>
             </div>
 
-            {/* WhatsApp Notifications */}
+            {/* WhatsApp Notifications — Green API */}
             <div className="glass-card rounded-2xl p-6 animate-fadeIn" style={{border:'1px solid rgba(37,211,102,0.15)'}}>
               <div className="flex items-center gap-3 mb-5">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(37,211,102,0.15)', border:'1px solid rgba(37,211,102,0.25)'}}>
@@ -3201,16 +3199,17 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 </div>
                 <div>
                   <h2 className="text-white font-semibold text-lg">WhatsApp Notifications</h2>
-                  <p className="text-slate-400 text-xs">استقبل رسائل واتساب فورية عند وصول تكيت جديد</p>
+                  <p className="text-slate-400 text-xs">أرسل إشعارات واتساب للموظفين تلقائياً — بدون أي خطوة من الموظف</p>
                 </div>
               </div>
 
               {/* Setup instructions */}
-              <div className="mb-5 p-4 rounded-xl text-xs space-y-1.5" style={{background:'rgba(37,211,102,0.06)', border:'1px solid rgba(37,211,102,0.15)'}}>
-                <p className="text-emerald-400 font-semibold mb-2">خطوات التفعيل (مجاني عبر CallMeBot):</p>
-                <p className="text-slate-400">١. أضف الرقم <span className="text-white font-mono">+34 644 58 66 60</span> في جهات اتصالك</p>
-                <p className="text-slate-400">٢. ابعت لهذا الرقم على واتساب: <span className="text-white font-mono">I allow callmebot to send me messages</span></p>
-                <p className="text-slate-400">٣. هيوصلك رد برقم الـ API key — اكتبه في الحقل أدناه</p>
+              <div className="mb-5 p-4 rounded-xl text-xs space-y-2" style={{background:'rgba(37,211,102,0.06)', border:'1px solid rgba(37,211,102,0.15)'}}>
+                <p className="text-emerald-400 font-semibold mb-2">🟢 خطوات التفعيل عبر Green API (مجاني — 3000 رسالة/شهر):</p>
+                <p className="text-slate-400">١. سجّل في <a href="https://green-api.com" target="_blank" rel="noreferrer" className="text-emerald-400 underline">green-api.com</a> وأنشئ Instance جديد</p>
+                <p className="text-slate-400">٢. افتح الـ Instance وامسح الـ QR Code بواتساب أي رقم (رقم الشركة مثلاً)</p>
+                <p className="text-slate-400">٣. انسخ <span className="text-white font-mono">idInstance</span> و <span className="text-white font-mono">apiTokenInstance</span> وحطهم في الحقول أدناه</p>
+                <p className="text-slate-400">٤. أضف أرقام واتساب الموظفين في إعدادات كل مستخدم — وهيوصلهم كل حاجة تلقائياً</p>
               </div>
 
               <form onSubmit={handleSaveWhatsApp} className="space-y-4">
@@ -3220,19 +3219,23 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">رقم الواتساب (مع كود الدولة)</label>
-                    <input value={waForm.phone} onChange={e=>setWaForm(f=>({...f,phone:e.target.value}))} placeholder="+201012345678" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Instance ID</label>
+                    <input value={waForm.greenapi_instance_id} onChange={e=>setWaForm(f=>({...f,greenapi_instance_id:e.target.value}))} placeholder="مثال: 1101234567" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">API Key (من CallMeBot)</label>
-                    <input value={waForm.apikey} onChange={e=>setWaForm(f=>({...f,apikey:e.target.value}))} placeholder="مثال: 1234567" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">API Token Instance</label>
+                    <input value={waForm.greenapi_token} onChange={e=>setWaForm(f=>({...f,greenapi_token:e.target.value}))} placeholder={waForm.greenapi_token ? '••••••••' : 'الصق الـ token هنا'} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
                   </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">رقم الاختبار (لتجربة الإرسال)</label>
+                  <input value={waForm.phone} onChange={e=>setWaForm(f=>({...f,phone:e.target.value}))} placeholder="+201012345678" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
                 </div>
                 {waMsg && <p className={`text-sm rounded-xl px-3 py-2 ${waMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{waMsg}</p>}
                 {waTestResult && <p className={`text-sm rounded-xl px-3 py-2 ${waTestResult.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>{waTestResult.ok ? '✓ ' : '✗ '}{waTestResult.message}</p>}
                 <div className="flex gap-2 flex-wrap">
                   <button type="submit" disabled={savingWa} className="text-sm px-4 py-2 rounded-xl font-medium text-white disabled:opacity-50 transition-all" style={{background:'rgba(37,211,102,0.2)', border:'1px solid rgba(37,211,102,0.3)'}}>{savingWa ? 'جاري الحفظ...' : 'حفظ الإعدادات'}</button>
-                  <button type="button" onClick={handleTestWhatsApp} disabled={testingWa||!waForm.phone} className="btn-ghost disabled:opacity-50 text-sm px-4 py-2">{testingWa ? 'جاري الإرسال...' : 'إرسال رسالة تجريبية'}</button>
+                  <button type="button" onClick={handleTestWhatsApp} disabled={testingWa||!waForm.greenapi_instance_id} className="btn-ghost disabled:opacity-50 text-sm px-4 py-2">{testingWa ? 'جاري الإرسال...' : '📱 إرسال رسالة تجريبية'}</button>
                 </div>
               </form>
             </div>
