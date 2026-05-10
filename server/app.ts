@@ -47,9 +47,29 @@ app.use('/api/complaints', complaintRoutes)
 
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(process.cwd(), 'dist')))
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(process.cwd(), 'dist', 'index.html'))
+  app.get('*', (_req, res, next) => {
+    const filePath = path.join(process.cwd(), 'dist', 'index.html')
+    res.sendFile(filePath, (err) => {
+      if (err) next(err)
+    })
   })
 }
+
+// 404 handler — always return JSON for API routes
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` })
+  }
+  next()
+})
+
+// Global error handler — ensures all errors return JSON for API routes
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[Express error]', err?.message || err)
+  if (req.path.startsWith('/api/')) {
+    return res.status(err?.status || 500).json({ error: err?.message || 'Internal server error' })
+  }
+  res.status(err?.status || 500).send(err?.message || 'Internal server error')
+})
 
 export default app
