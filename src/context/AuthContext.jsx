@@ -124,23 +124,7 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function attemptAttendanceLogout() {
-    if (!user) return
-    try {
-      const todayLogin = await api.getTodayAttendance()
-      if (!todayLogin || todayLogin.logout_time) return
-      const position = await new Promise((resolve, reject) => {
-        if (!navigator.geolocation) { reject(new Error('Geolocation not supported')); return }
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true, timeout: 10000, maximumAge: 0,
-        })
-      })
-      await api.registerLogout(position.coords.latitude, position.coords.longitude)
-    } catch {}
-  }
-
   async function signOut() {
-    await attemptAttendanceLogout()
     await forceSignOut()
   }
 
