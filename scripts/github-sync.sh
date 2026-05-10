@@ -97,7 +97,8 @@ notify_failure() {
   # control characters that would break the JSON string.
   local error_snippet
   error_snippet=$(printf '%s' "${error_msg:0:200}" \
-    | sed 's/\\/\\\\/g; s/"/\\"/g; s/   /\\t/g' \
+    | sed 's/\\/\\\\/g; s/"/\\"/g' \
+    | tr '\t' ' ' \
     | tr -d '\r' \
     | sed ':a;N;$!ba;s/\n/\\n/g')
 
