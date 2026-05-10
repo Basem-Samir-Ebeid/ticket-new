@@ -368,10 +368,24 @@ router.post('/whatsapp', requireAuth as any, async (req: any, res) => {
     const updates: any = {}
     if (enabled !== undefined) updates.enabled = Boolean(enabled)
     if (greenapi_instance_id !== undefined) updates.greenapi_instance_id = String(greenapi_instance_id).trim()
-    if (greenapi_token !== undefined && greenapi_token !== '••••••••') updates.greenapi_token = String(greenapi_token).trim()
-    else updates.greenapi_token = existing.greenapi_token
+
+    // Only update token if a real non-empty, non-masked value was provided
+    if (greenapi_token !== undefined && greenapi_token !== '••••••••' && String(greenapi_token).trim() !== '') {
+      updates.greenapi_token = String(greenapi_token).trim()
+      console.log('[WhatsApp] greenapi_token updated (new value provided)')
+    } else {
+      updates.greenapi_token = existing.greenapi_token
+      console.log('[WhatsApp] greenapi_token kept unchanged (empty or masked value received)')
+    }
+
     if (phone !== undefined) updates.phone = String(phone).trim().replace(/\s/g, '')
+
+    console.log('[WhatsApp] Saving config — enabled:', updates.enabled, '| instance_id:', updates.greenapi_instance_id, '| token_set:', Boolean(updates.greenapi_token), '| phone:', updates.phone)
+
     const saved = await saveWhatsAppConfig(updates)
+
+    console.log('[WhatsApp] Config saved — token_in_db:', Boolean(saved.greenapi_token))
+
     res.json({
       enabled: saved.enabled,
       greenapi_instance_id: saved.greenapi_instance_id || '',
@@ -379,6 +393,7 @@ router.post('/whatsapp', requireAuth as any, async (req: any, res) => {
       phone: saved.phone || '',
     })
   } catch (err: any) {
+    console.error('POST /settings/whatsapp error:', err)
     res.status(500).json({ error: err?.message || 'Failed to save WhatsApp settings' })
   }
 })
