@@ -152,6 +152,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [autoAssignMsg, setAutoAssignMsg] = useState('')
   const [autoAssignNewCategory, setAutoAssignNewCategory] = useState('')
   const [autoAssignNewUserId, setAutoAssignNewUserId] = useState('')
+  const [githubSyncAlert, setGithubSyncAlert] = useState(null)
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
@@ -193,11 +194,18 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       checkTodayLogin()
       try { const res = await api.getAttendance(selectedDateRef.current); setLoginTimes(Array.isArray(res) ? res : []) } catch { setLoginTimes([]) }
     }
-    const onNotification = () => {
-      playNotificationSound()
-      showBrowserNotification('Finest — إشعار جديد', 'لديك إشعار جديد')
+    const onNotification = (e) => {
+      const notifMessage = e.detail?.message || ''
+      const isGithubSyncFailure = isSuperAdmin && notifMessage.includes('GitHub sync failed')
+      if (isGithubSyncFailure) {
+        setGithubSyncAlert({ message: notifMessage, time: new Date().toLocaleTimeString() })
+        showBrowserNotification('Finest — GitHub Sync Failed', notifMessage)
+        fetchGithubSyncStatus()
+      } else {
+        playNotificationSound()
+        showBrowserNotification('Finest — إشعار جديد', 'لديك إشعار جديد')
+      }
       fetchTickets(); fetchRequests(); fetchLeaveRequests()
-      if (isSuperAdmin) fetchGithubSyncStatus()
     }
     const onPenaltyUpdate = () => {
       setPenaltiesRefreshKey(k => k + 1)
@@ -1187,6 +1195,25 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {msg && (
           <div className={`mb-4 px-4 py-3 rounded-lg animate-fadeIn ${msg.startsWith('Error') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'}`}>
             {msg}
+          </div>
+        )}
+
+        {isSuperAdmin && githubSyncAlert && (
+          <div className="mb-4 flex items-start gap-3 px-4 py-3 rounded-xl animate-fadeIn"
+            style={{background:'rgba(239,68,68,0.12)', border:'1px solid rgba(239,68,68,0.35)'}}>
+            <span className="mt-0.5 flex-shrink-0">
+              <svg className="w-5 h-5 text-red-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-red-400 font-semibold text-sm">GitHub Sync Failed</p>
+              <p className="text-red-300/80 text-xs mt-0.5 break-words">{githubSyncAlert.message}</p>
+              <p className="text-red-400/50 text-xs mt-1">{githubSyncAlert.time} · <button className="underline hover:text-red-300 transition-colors" onClick={() => setTab('settings')}>Go to Settings → GitHub Sync</button></p>
+            </div>
+            <button onClick={() => setGithubSyncAlert(null)} className="flex-shrink-0 text-red-400/60 hover:text-red-300 transition-colors" aria-label="Dismiss">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
           </div>
         )}
 

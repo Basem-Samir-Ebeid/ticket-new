@@ -92,16 +92,21 @@ notify_failure() {
     return
   fi
 
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "[github-sync] WARN: jq is not installed — cannot send admin failure notification." >&2
-    return
-  fi
+  # Build JSON payload without jq so this works in any POSIX shell environment.
+  # Truncate error to 200 chars and escape backslashes, double-quotes, and
+  # control characters that would break the JSON string.
+  local error_snippet
+  error_snippet=$(printf '%s' "${error_msg:0:200}" \
+    | sed 's/\\/\\\\/g; s/"/\\"/g; s/   /\\t/g' \
+    | tr -d '\r' \
+    | sed ':a;N;$!ba;s/\n/\\n/g')
+
+  local branch_escaped
+  branch_escaped=$(printf '%s' "$branch" \
+    | sed 's/\\/\\\\/g; s/"/\\"/g')
 
   local payload
-  payload=$(jq -n \
-    --arg branch "$branch" \
-    --arg error "${error_msg:0:200}" \
-    '{branch: $branch, error: $error}')
+  payload="{\"branch\":\"${branch_escaped}\",\"error\":\"${error_snippet}\"}"
 
   local http_code
   http_code=$(curl -s -o /dev/null -w "%{http_code}" \
