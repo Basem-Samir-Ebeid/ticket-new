@@ -189,7 +189,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     }
     const onAttendanceUpdate = async () => {
       checkTodayLogin()
-      try { setLoginTimes(await api.getAttendance(selectedDateRef.current)) } catch {}
+      try { const res = await api.getAttendance(selectedDateRef.current); setLoginTimes(Array.isArray(res) ? res : []) } catch { setLoginTimes([]) }
     }
     const onNotification = () => {
       playNotificationSound()
@@ -569,7 +569,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     setTestingGithubSync(false)
   }
   async function fetchLoginTimes() {
-    try { setLoginTimes(await api.getAttendance(selectedDate)) } catch (e) {
+    try { const res = await api.getAttendance(selectedDate); setLoginTimes(Array.isArray(res) ? res : []) } catch (e) {
       setMsg('Error: ' + e.message); setLoginTimes([])
     }
   }
@@ -2485,13 +2485,16 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   {loadingLive ? 'جاري التحديث...' : '↻ تحديث'}
                 </button>
               </div>
-              {liveAttendance ? (
+              {liveAttendance?.error && (
+                <p className="text-red-400 text-sm text-center py-4">{liveAttendance.error}</p>
+              )}
+              {liveAttendance && !liveAttendance.error ? (
                 <>
                   <div className="grid grid-cols-3 gap-3 mb-4">
                     {[
-                      { label: 'في المكتب', val: liveAttendance.summary.in, color: 'text-emerald-400', bg: 'bg-emerald-900/20', border: 'border-emerald-500/20' },
-                      { label: 'غادر', val: liveAttendance.summary.out, color: 'text-blue-400', bg: 'bg-blue-900/20', border: 'border-blue-500/20' },
-                      { label: 'غائب', val: liveAttendance.summary.absent, color: 'text-red-400', bg: 'bg-red-900/20', border: 'border-red-500/20' },
+                      { label: 'في المكتب', val: liveAttendance.summary?.in ?? 0, color: 'text-emerald-400', bg: 'bg-emerald-900/20', border: 'border-emerald-500/20' },
+                      { label: 'غادر', val: liveAttendance.summary?.out ?? 0, color: 'text-blue-400', bg: 'bg-blue-900/20', border: 'border-blue-500/20' },
+                      { label: 'غائب', val: liveAttendance.summary?.absent ?? 0, color: 'text-red-400', bg: 'bg-red-900/20', border: 'border-red-500/20' },
                     ].map(s => (
                       <div key={s.label} className={`rounded-xl p-3 text-center ${s.bg} border ${s.border}`}>
                         <p className={`text-2xl font-black ${s.color}`}>{s.val}</p>
@@ -2500,7 +2503,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     ))}
                   </div>
                   <div className="space-y-2">
-                    {liveAttendance.employees.map(emp => (
+                    {(liveAttendance.employees || []).map(emp => (
                       <div key={emp.id} className="flex items-center gap-3 p-2.5 rounded-xl" style={{background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)'}}>
                         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${emp.status === 'in' ? 'bg-emerald-400' : emp.status === 'out' ? 'bg-blue-400' : 'bg-red-400'}`} style={emp.status === 'in' ? {boxShadow:'0 0 6px rgba(52,211,153,0.7)'} : {}} />
                         <span className="text-slate-200 text-sm flex-1">{emp.full_name || emp.email}</span>
