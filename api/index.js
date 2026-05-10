@@ -637,11 +637,16 @@ app.get('/api/auth/verify-reset-token', async (req, res) => {
 app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
   try {
     const isSuperAdmin = req.profile?.role === 'super_admin'
-    const cols = isSuperAdmin
-      ? 'id, email, full_name, role, can_view_attendance, profile_picture_url, must_change_password, leave_balance, plain_password, created_at'
-      : 'id, email, full_name, role, can_view_attendance, profile_picture_url, must_change_password, leave_balance, created_at'
-    const { rows } = await getPool().query(`SELECT ${cols} FROM profiles ORDER BY created_at DESC`)
-    res.json(rows)
+    const { rows } = await getPool().query('SELECT * FROM profiles ORDER BY created_at DESC')
+    const users = rows.map(u => {
+      const { password_hash, ...rest } = u
+      if (!isSuperAdmin) {
+        const { plain_password, ...noPass } = rest
+        return noPass
+      }
+      return rest
+    })
+    res.json(users)
   } catch (err) {
     console.error('[GET /users] Error:', err.message)
     res.status(500).json({ error: 'Failed to get users' })
@@ -650,7 +655,11 @@ app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
 
 app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { email, password, full_name, role, can_view_attendance, profile_picture_url } = req.body
+    const {
+      email, password, full_name, role, can_view_attendance, profile_picture_url,
+      department, job_title, phone, national_id, hire_date, birth_date,
+      gender, address, employment_type, employee_code, direct_manager, notes, whatsapp_phone,
+    } = req.body
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
     const db = getPool()
@@ -658,11 +667,23 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
     if (existing.length) return res.status(400).json({ error: 'Email already in use' })
     const password_hash = await bcrypt.hash(password, 10)
     const { rows } = await db.query(
-      `INSERT INTO profiles (email, password_hash, plain_password, full_name, role, can_view_attendance, profile_picture_url, must_change_password)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,true) RETURNING id, email, full_name, role, can_view_attendance, profile_picture_url, must_change_password, leave_balance, created_at`,
-      [email.toLowerCase(), password_hash, password, full_name || null, role || 'employee', can_view_attendance || false, profile_picture_url || null]
+      `INSERT INTO profiles (
+        email, password_hash, plain_password, full_name, role, can_view_attendance, profile_picture_url,
+        must_change_password, department, job_title, phone, national_id, hire_date, birth_date,
+        gender, address, employment_type, employee_code, direct_manager, notes, whatsapp_phone
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+      RETURNING *`,
+      [
+        email.toLowerCase(), password_hash, password, full_name || null, role || 'employee',
+        can_view_attendance || false, profile_picture_url || null,
+        department || null, job_title || null, phone || null, national_id || null,
+        hire_date || null, birth_date || null, gender || null, address || null,
+        employment_type || 'full_time', employee_code || null, direct_manager || null,
+        notes || null, whatsapp_phone || null,
+      ]
     )
-    res.json(rows[0])
+    const { password_hash: _ph, ...safeUser } = rows[0]
+    res.json(safeUser)
   } catch (err) {
     console.error('[POST /users] Error:', err.message)
     res.status(500).json({ error: 'Failed to create user' })
@@ -782,7 +803,7 @@ app.get('/api/tickets', requireAuth, async (req, res) => {
   try {
     const q = isAdminRole(req.profile.role)
       ? await getPool().query("SELECT * FROM tickets WHERE is_request=false ORDER BY created_at DESC")
-      : await getPool().query("SELECT * FROM tickets WHERE assigned_to=$1 AND is_request=false ORDER BY created_at DESC", [req.user.id])
+      : await getPool().query("SELECT * FROM tickets WHERE (assigned_to=$1 OR created_by=$1) AND is_request=false ORDER BY created_at DESC", [req.user.id])
     res.json(await withProfiles(q.rows))
   } catch (err) {
     console.error('[GET /tickets] Error:', err.message)
@@ -1110,18 +1131,48 @@ app.post('/api/leaves', requireAuth, async (req, res) => {
     const { start_date, end_date, reason, leave_type } = req.body
     if (!start_date || !end_date) return res.status(400).json({ error: 'Dates required' })
     const db = getPool()
+    const ltype = leave_type || 'annual'
+
+    function calcWorkingDays(s, e) {
+      let count = 0
+      const cur = new Date(s), end = new Date(e)
+      while (cur <= end) { const d = cur.getDay(); if (d !== 0 && d !== 6) count++; cur.setDate(cur.getDate() + 1) }
+      return Math.max(1, count)
+    }
+    const days = calcWorkingDays(start_date, end_date)
+
+    const { rows: profRows } = await db.query('SELECT leave_balance, sick_leave_balance, emergency_leave_balance FROM profiles WHERE id=$1', [req.user.id])
+    const prof = profRows[0] || {}
+    const balanceMap = { annual: prof.leave_balance || 0, sick: prof.sick_leave_balance || 0, emergency: prof.emergency_leave_balance || 0, unpaid: 999 }
+
+    const { rows: pendingLeaves } = await db.query("SELECT days_count FROM leave_requests WHERE user_id=$1 AND leave_type=$2 AND status='pending'", [req.user.id, ltype])
+    const pendingDays = pendingLeaves.reduce((s, l) => s + (l.days_count || 1), 0)
+    const available = (balanceMap[ltype] ?? 0) - pendingDays
+
+    if (ltype !== 'unpaid' && days > available) {
+      return res.status(400).json({ error: `رصيد الإجازة غير كافٍ. المتاح: ${available} يوم، المطلوب: ${days} يوم.` })
+    }
+
+    const { rows: conflicting } = await db.query(
+      "SELECT id FROM leave_requests WHERE user_id=$1 AND status='approved' AND start_date<=$2 AND end_date>=$3",
+      [req.user.id, end_date, start_date]
+    )
+
     const { rows } = await db.query(
-      "INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, reason, status) VALUES ($1,$2,$3,$4,$5,'pending') RETURNING *",
-      [req.user.id, leave_type || 'annual', start_date, end_date, reason || null]
+      "INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, reason, days_count, status) VALUES ($1,$2,$3,$4,$5,$6,'pending') RETURNING *",
+      [req.user.id, ltype, start_date, end_date, reason || null, days]
     )
     const senderName = req.profile.full_name || req.profile.email
     const { rows: admins } = await db.query("SELECT id FROM profiles WHERE role IN ('admin','super_admin')")
+    const typeLabel = { annual: 'سنوية', sick: 'مرضية', emergency: 'طارئة', unpaid: 'بدون راتب' }
+    const conflictNote = conflicting.length > 0 ? ` ⚠️ تعارض مع ${conflicting.length} إجازة أخرى!` : ''
     for (const admin of admins) {
       await db.query('INSERT INTO notifications (user_id, message) VALUES ($1,$2)',
-        [admin.id, `🌴 New leave request from ${senderName} (${start_date} → ${end_date})`])
+        [admin.id, `🌴 طلب إجازة ${typeLabel[ltype] || ltype} من ${senderName} (${start_date} → ${end_date} | ${days} أيام)${conflictNote}`])
     }
-    res.json(rows[0])
+    res.json({ ...rows[0], conflict_count: conflicting.length })
   } catch (err) {
+    console.error('[POST /leaves] Error:', err.message)
     res.status(500).json({ error: 'Failed to submit leave request' })
   }
 })
@@ -1129,15 +1180,34 @@ app.post('/api/leaves', requireAuth, async (req, res) => {
 app.patch('/api/leaves/:id/approve', requireAuth, async (req, res) => {
   try {
     if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
-    const { rows } = await getPool().query(
+    const db = getPool()
+    const { rows: existing } = await db.query('SELECT * FROM leave_requests WHERE id=$1', [req.params.id])
+    if (!existing[0]) return res.status(404).json({ error: 'Leave request not found' })
+    const { rows } = await db.query(
       "UPDATE leave_requests SET status='approved', admin_note=null, decided_by=$1, decided_at=$2 WHERE id=$3 RETURNING *",
       [req.user.id, new Date(), req.params.id]
     )
     const leave = rows[0]
-    if (leave) await getPool().query('INSERT INTO notifications (user_id, message) VALUES ($1,$2)',
-      [leave.user_id, `✅ Your leave request (${leave.start_date} → ${leave.end_date}) was approved`])
+    if (leave && existing[0].status !== 'approved') {
+      const days = leave.days_count || 1
+      const ltype = leave.leave_type || 'annual'
+      const typeLabel = { annual: 'سنوية', sick: 'مرضية', emergency: 'طارئة', unpaid: 'بدون راتب' }
+      if (ltype === 'annual') {
+        const { rows: p } = await db.query('SELECT leave_balance FROM profiles WHERE id=$1', [leave.user_id])
+        await db.query('UPDATE profiles SET leave_balance=$1 WHERE id=$2', [Math.max(0, (p[0]?.leave_balance || 0) - days), leave.user_id])
+      } else if (ltype === 'sick') {
+        const { rows: p } = await db.query('SELECT sick_leave_balance FROM profiles WHERE id=$1', [leave.user_id])
+        await db.query('UPDATE profiles SET sick_leave_balance=$1 WHERE id=$2', [Math.max(0, (p[0]?.sick_leave_balance || 0) - days), leave.user_id])
+      } else if (ltype === 'emergency') {
+        const { rows: p } = await db.query('SELECT emergency_leave_balance FROM profiles WHERE id=$1', [leave.user_id])
+        await db.query('UPDATE profiles SET emergency_leave_balance=$1 WHERE id=$2', [Math.max(0, (p[0]?.emergency_leave_balance || 0) - days), leave.user_id])
+      }
+      await db.query('INSERT INTO notifications (user_id, message) VALUES ($1,$2)',
+        [leave.user_id, `✅ تمت الموافقة على إجازتك ${typeLabel[ltype] || ltype} (${leave.start_date} → ${leave.end_date} | ${days} أيام)`])
+    }
     res.json(leave)
   } catch (err) {
+    console.error('[PATCH /leaves/:id/approve] Error:', err.message)
     res.status(500).json({ error: 'Failed to approve leave' })
   }
 })
@@ -1146,15 +1216,35 @@ app.patch('/api/leaves/:id/reject', requireAuth, async (req, res) => {
   try {
     if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
     const { note } = req.body
-    const { rows } = await getPool().query(
+    const db = getPool()
+    const { rows: existing } = await db.query('SELECT * FROM leave_requests WHERE id=$1', [req.params.id])
+    if (!existing[0]) return res.status(404).json({ error: 'Leave request not found' })
+    const { rows } = await db.query(
       "UPDATE leave_requests SET status='rejected', admin_note=$1, decided_by=$2, decided_at=$3 WHERE id=$4 RETURNING *",
       [note || null, req.user.id, new Date(), req.params.id]
     )
     const leave = rows[0]
-    if (leave) await getPool().query('INSERT INTO notifications (user_id, message) VALUES ($1,$2)',
-      [leave.user_id, `❌ Your leave request (${leave.start_date} → ${leave.end_date}) was rejected${note ? ' — ' + note : ''}`])
+    if (leave) {
+      if (existing[0].status === 'approved') {
+        const days = leave.days_count || 1
+        const ltype = leave.leave_type || 'annual'
+        if (ltype === 'annual') {
+          const { rows: p } = await db.query('SELECT leave_balance FROM profiles WHERE id=$1', [leave.user_id])
+          await db.query('UPDATE profiles SET leave_balance=$1 WHERE id=$2', [(p[0]?.leave_balance || 0) + days, leave.user_id])
+        } else if (ltype === 'sick') {
+          const { rows: p } = await db.query('SELECT sick_leave_balance FROM profiles WHERE id=$1', [leave.user_id])
+          await db.query('UPDATE profiles SET sick_leave_balance=$1 WHERE id=$2', [(p[0]?.sick_leave_balance || 0) + days, leave.user_id])
+        } else if (ltype === 'emergency') {
+          const { rows: p } = await db.query('SELECT emergency_leave_balance FROM profiles WHERE id=$1', [leave.user_id])
+          await db.query('UPDATE profiles SET emergency_leave_balance=$1 WHERE id=$2', [(p[0]?.emergency_leave_balance || 0) + days, leave.user_id])
+        }
+      }
+      await db.query('INSERT INTO notifications (user_id, message) VALUES ($1,$2)',
+        [leave.user_id, `❌ تم رفض طلب إجازتك (${leave.start_date} → ${leave.end_date})${note ? ' — ' + note : ''}`])
+    }
     res.json(leave)
   } catch (err) {
+    console.error('[PATCH /leaves/:id/reject] Error:', err.message)
     res.status(500).json({ error: 'Failed to reject leave' })
   }
 })
@@ -1376,22 +1466,36 @@ app.post('/api/users/:id/test-whatsapp', requireAuth, requireAdmin, async (req, 
 
 app.post('/api/users/bulk-reset-leave', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { leave_balance, sick_leave_balance, emergency_leave_balance, user_ids } = req.body
-    let q = 'UPDATE profiles SET'
+    const { leave_balance, sick_leave_balance, emergency_leave_balance, roles, user_ids } = req.body
+    if (leave_balance === undefined && sick_leave_balance === undefined && emergency_leave_balance === undefined) {
+      return res.status(400).json({ error: 'At least one balance field is required' })
+    }
+    const db = getPool()
     const sets = [], vals = []
     if (leave_balance !== undefined) { sets.push(` leave_balance=$${vals.length + 1}`); vals.push(Number(leave_balance)) }
     if (sick_leave_balance !== undefined) { sets.push(` sick_leave_balance=$${vals.length + 1}`); vals.push(Number(sick_leave_balance)) }
     if (emergency_leave_balance !== undefined) { sets.push(` emergency_leave_balance=$${vals.length + 1}`); vals.push(Number(emergency_leave_balance)) }
-    if (!sets.length) return res.status(400).json({ error: 'No fields to update' })
-    q += sets.join(',')
-    if (user_ids?.length) {
+
+    if (roles?.length) {
+      const { rows: profRoles } = await db.query('SELECT id, role FROM profiles')
+      const filteredIds = profRoles.filter(u => roles.includes(u.role)).map(u => u.id)
+      let updated = 0
+      for (const uid of filteredIds) {
+        await db.query(`UPDATE profiles SET ${sets.join(',')} WHERE id=$${vals.length + 1}`, [...vals, uid])
+        updated++
+      }
+      res.json({ success: true, updated })
+    } else if (user_ids?.length) {
       const ph = user_ids.map((_, i) => `$${vals.length + i + 1}`).join(',')
-      q += ` WHERE id IN (${ph})`
-      vals.push(...user_ids)
+      await db.query(`UPDATE profiles SET ${sets.join(',')} WHERE id IN (${ph})`, [...vals, ...user_ids])
+      res.json({ success: true, updated: user_ids.length })
+    } else {
+      await db.query(`UPDATE profiles SET ${sets.join(',')}`, vals)
+      const { rows } = await db.query('SELECT COUNT(*) FROM profiles')
+      res.json({ success: true, updated: parseInt(rows[0].count) })
     }
-    await getPool().query(q, vals)
-    res.json({ success: true })
   } catch (err) {
+    console.error('[bulk-reset-leave] Error:', err.message)
     res.status(500).json({ error: 'Failed to reset leave balances' })
   }
 })
@@ -1860,10 +1964,29 @@ app.get('/api/leaves/calendar', requireAuth, async (req, res) => {
 
 app.get('/api/leaves/balance', requireAuth, async (req, res) => {
   try {
-    const userId = req.query.user_id || req.user.id
-    const { rows } = await getPool().query('SELECT leave_balance, sick_leave_balance, emergency_leave_balance FROM profiles WHERE id=$1', [userId])
+    const targetId = req.query.user_id || req.user.id
+    const isAdmin = isAdminRole(req.profile.role)
+    if (targetId !== req.user.id && !isAdmin) return res.status(403).json({ error: 'Forbidden' })
+    const db = getPool()
+    const { rows } = await db.query('SELECT id, full_name, email, leave_balance, sick_leave_balance, emergency_leave_balance FROM profiles WHERE id=$1', [targetId])
     if (!rows[0]) return res.status(404).json({ error: 'User not found' })
-    res.json({ annual: rows[0].leave_balance, sick: rows[0].sick_leave_balance, emergency: rows[0].emergency_leave_balance })
+    const prof = rows[0]
+    const { rows: approvedLeaves } = await db.query("SELECT leave_type, days_count FROM leave_requests WHERE user_id=$1 AND status='approved'", [targetId])
+    const usedByType = { annual: 0, sick: 0, emergency: 0, unpaid: 0 }
+    for (const l of approvedLeaves) {
+      const t = l.leave_type || 'annual'
+      if (!usedByType[t]) usedByType[t] = 0
+      usedByType[t] += l.days_count || 1
+    }
+    res.json({
+      user: { id: prof.id, full_name: prof.full_name, email: prof.email, leave_balance: prof.leave_balance, sick_leave_balance: prof.sick_leave_balance, emergency_leave_balance: prof.emergency_leave_balance },
+      balance: {
+        annual: { total: prof.leave_balance, used: usedByType.annual, remaining: Math.max(0, prof.leave_balance - usedByType.annual) },
+        sick: { total: prof.sick_leave_balance, used: usedByType.sick, remaining: Math.max(0, prof.sick_leave_balance - usedByType.sick) },
+        emergency: { total: prof.emergency_leave_balance, used: usedByType.emergency, remaining: Math.max(0, prof.emergency_leave_balance - usedByType.emergency) },
+        unpaid: { total: 999, used: usedByType.unpaid, remaining: 999 },
+      }
+    })
   } catch (err) { res.status(500).json({ error: 'Failed to get leave balance' }) }
 })
 
@@ -1875,8 +1998,34 @@ app.get('/api/leaves/monthly-report', requireAuth, async (req, res) => {
     const month = parseInt(req.query.month) || (now.getMonth() + 1)
     const firstDay = `${year}-${String(month).padStart(2, '0')}-01`
     const lastDay = `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`
-    const { rows } = await getPool().query("SELECT lr.*, p.full_name, p.email FROM leave_requests lr JOIN profiles p ON p.id=lr.user_id WHERE lr.start_date >= $1 AND lr.start_date <= $2 ORDER BY lr.start_date", [firstDay, lastDay])
-    res.json({ year, month, leaves: rows })
+    const db = getPool()
+    const { rows } = await db.query('SELECT * FROM leave_requests WHERE start_date >= $1 AND start_date <= $2', [firstDay, lastDay])
+    const { rows: profs } = await db.query('SELECT id, full_name, email, role, leave_balance, sick_leave_balance, emergency_leave_balance FROM profiles')
+    const pm = new Map(profs.map(p => [p.id, p]))
+
+    const stats = {
+      total: rows.length,
+      approved: rows.filter(r => r.status === 'approved').length,
+      rejected: rows.filter(r => r.status === 'rejected').length,
+      pending: rows.filter(r => r.status === 'pending').length,
+      byType: {},
+      topUsers: [],
+    }
+    for (const r of rows) {
+      if (!stats.byType[r.leave_type]) stats.byType[r.leave_type] = 0
+      stats.byType[r.leave_type]++
+    }
+    const userLeaveMap = new Map()
+    for (const r of rows.filter(x => x.status === 'approved')) {
+      const days = r.days_count || 1
+      userLeaveMap.set(r.user_id, (userLeaveMap.get(r.user_id) || 0) + days)
+    }
+    stats.topUsers = Array.from(userLeaveMap.entries())
+      .map(([id, days]) => ({ user: pm.get(id) || null, days }))
+      .sort((a, b) => b.days - a.days)
+      .slice(0, 10)
+
+    res.json({ year, month, stats, leaves: rows.map(r => ({ ...r, user: pm.get(r.user_id) || null })) })
   } catch (err) { res.status(500).json({ error: 'Failed to get leave report' }) }
 })
 
