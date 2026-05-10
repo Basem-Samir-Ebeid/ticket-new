@@ -1,17 +1,13 @@
-import fs from 'fs'
-import path from 'path'
 import { db } from './db'
-import { profiles } from '../shared/schema'
+import { profiles, systemSettings } from '../shared/schema'
 import { eq } from 'drizzle-orm'
-
-const CONFIG_FILE = path.join(process.cwd(), 'server', 'whatsapp-config.json')
 
 export interface WhatsAppConfig {
   enabled: boolean
   // Green API (primary — send to any number without recipient activation)
   greenapi_instance_id: string
   greenapi_token: string
-  // CallMeBot (legacy admin-only global notification)
+  // Admin global notification phone
   phone: string
   apikey: string
 }
@@ -24,24 +20,23 @@ const DEFAULT_CONFIG: WhatsAppConfig = {
   apikey: '',
 }
 
-export function getWhatsAppConfig(): WhatsAppConfig {
+export async function getWhatsAppConfig(): Promise<WhatsAppConfig> {
   try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const raw = fs.readFileSync(CONFIG_FILE, 'utf-8')
-      return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }
-    }
+    const [row] = await db.select({ value: systemSettings.value })
+      .from(systemSettings)
+      .where(eq(systemSettings.key, 'whatsapp_config'))
+      .limit(1)
+    if (row?.value) return { ...DEFAULT_CONFIG, ...JSON.parse(row.value) }
   } catch {}
   return { ...DEFAULT_CONFIG }
 }
 
-export function saveWhatsAppConfig(config: Partial<WhatsAppConfig>): WhatsAppConfig {
-  const existing = getWhatsAppConfig()
+export async function saveWhatsAppConfig(config: Partial<WhatsAppConfig>): Promise<WhatsAppConfig> {
+  const existing = await getWhatsAppConfig()
   const merged: WhatsAppConfig = { ...existing, ...config }
-  try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf-8')
-  } catch (err) {
-    console.error('[whatsappConfig] Failed to save config:', err)
-  }
+  await db.insert(systemSettings)
+    .values({ key: 'whatsapp_config', value: JSON.stringify(merged) })
+    .onConflictDoUpdate({ target: systemSettings.key, set: { value: JSON.stringify(merged), updated_at: new Date() } })
   return merged
 }
 
@@ -53,7 +48,7 @@ function toGreenApiChatId(phone: string): string {
 
 // Send via Green API (no recipient activation needed — just add phone number)
 async function sendViaGreenApi(phone: string, text: string): Promise<void> {
-  const config = getWhatsAppConfig()
+  const config = await getWhatsAppConfig()
   if (!config.greenapi_instance_id || !config.greenapi_token) {
     throw new Error('Green API غير مُفعَّل — يرجى إدخال Instance ID و Token في الإعدادات')
   }
@@ -90,7 +85,7 @@ export async function sendWhatsAppToPhone(phone: string, _apikey: string, text: 
 // Send to a specific user (only needs whatsapp_phone in profile)
 export async function sendWhatsAppToUser(userId: string, text: string): Promise<void> {
   try {
-    const config = getWhatsAppConfig()
+    const config = await getWhatsAppConfig()
     if (!config.enabled) return
 
     const [prof] = await db.select({
@@ -106,7 +101,7 @@ export async function sendWhatsAppToUser(userId: string, text: string): Promise<
 
 // Legacy: global admin notification (tries Green API first, falls back to CallMeBot)
 export async function sendWhatsAppNotification(text: string): Promise<void> {
-  const config = getWhatsAppConfig()
+  const config = await getWhatsAppConfig()
   if (!config.enabled) return
   try {
     if (config.greenapi_instance_id && config.greenapi_token && config.phone) {

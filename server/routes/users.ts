@@ -14,7 +14,7 @@ router.get('/', requireAuth as any, requireAdmin as any, async (req: any, res) =
     const isSuperAdmin = req.profile?.role === 'super_admin'
     const rows = await db.select().from(profiles).orderBy(desc(profiles.created_at))
     const users = rows.map(u => {
-      const { password_hash, whatsapp_apikey, ...rest } = u
+      const { password_hash, ...rest } = u
       if (!isSuperAdmin) {
         const { plain_password, ...noPass } = rest
         return noPass
@@ -64,7 +64,7 @@ router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) 
       notes: notes || null,
     }).returning()
 
-    const { password_hash: _, whatsapp_apikey: _ak, ...safeUser } = user
+    const { password_hash: _, ...safeUser } = user
     res.json(safeUser)
   } catch (err: any) {
     console.error('POST /users error:', err)
@@ -79,7 +79,7 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
       leave_balance, sick_leave_balance, emergency_leave_balance, work_start_hour,
       department, job_title, phone, national_id, hire_date, birth_date,
       gender, address, employment_type, employee_code, direct_manager, notes,
-      whatsapp_phone, whatsapp_apikey,
+      whatsapp_phone,
     } = req.body
 
     const updateData: Record<string, any> = { full_name, role, can_view_attendance, profile_picture_url }
@@ -96,7 +96,6 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
 
     // WhatsApp fields
     if (whatsapp_phone !== undefined) updateData.whatsapp_phone = whatsapp_phone?.trim() || null
-    if (whatsapp_apikey !== undefined) updateData.whatsapp_apikey = whatsapp_apikey?.trim() || null
 
     const [user] = await db.update(profiles)
       .set(updateData)
@@ -104,7 +103,7 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
       .returning()
 
     if (!user) return res.status(404).json({ error: 'User not found' })
-    const { password_hash, whatsapp_apikey: _wak, ...safeUser } = user
+    const { password_hash, ...safeUser } = user
     res.json(safeUser)
   } catch (err: any) {
     console.error('PATCH /users/:id error:', err)

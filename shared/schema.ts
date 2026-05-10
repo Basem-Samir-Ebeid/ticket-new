@@ -29,8 +29,13 @@ export const profiles = pgTable('profiles', {
   direct_manager: text('direct_manager'),
   notes: text('notes'),
   whatsapp_phone: text('whatsapp_phone'),
-  whatsapp_apikey: text('whatsapp_apikey'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const systemSettings = pgTable('system_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
 export const tickets = pgTable('tickets', {

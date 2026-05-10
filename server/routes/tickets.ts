@@ -5,8 +5,7 @@ import { eq, and, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { sendPushToAdmins } from './push'
-import { sendWhatsAppNotification } from '../whatsappConfig'
-import { sendWhatsAppToUser } from '../whatsapp'
+import { sendWhatsAppNotification, sendWhatsAppToUser } from '../whatsappConfig'
 import { findAutoAssignUser } from '../autoAssignConfig'
 import {
   notifyAdminsNewTicket,

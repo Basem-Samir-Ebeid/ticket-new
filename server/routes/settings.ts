@@ -303,7 +303,7 @@ router.post('/github-sync/test', requireAuth as any, async (req: any, res) => {
 router.get('/whatsapp', requireAuth as any, async (req: any, res) => {
   try {
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
-    const config = getWhatsAppConfig()
+    const config = await getWhatsAppConfig()
     res.json({
       enabled: config.enabled,
       greenapi_instance_id: config.greenapi_instance_id || '',
@@ -319,14 +319,14 @@ router.post('/whatsapp', requireAuth as any, async (req: any, res) => {
   try {
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
     const { enabled, greenapi_instance_id, greenapi_token, phone } = req.body
-    const existing = getWhatsAppConfig()
+    const existing = await getWhatsAppConfig()
     const updates: any = {}
     if (enabled !== undefined) updates.enabled = Boolean(enabled)
     if (greenapi_instance_id !== undefined) updates.greenapi_instance_id = String(greenapi_instance_id).trim()
     if (greenapi_token !== undefined && greenapi_token !== '••••••••') updates.greenapi_token = String(greenapi_token).trim()
     else updates.greenapi_token = existing.greenapi_token
     if (phone !== undefined) updates.phone = String(phone).trim().replace(/\s/g, '')
-    const saved = saveWhatsAppConfig(updates)
+    const saved = await saveWhatsAppConfig(updates)
     res.json({
       enabled: saved.enabled,
       greenapi_instance_id: saved.greenapi_instance_id || '',
@@ -341,7 +341,7 @@ router.post('/whatsapp', requireAuth as any, async (req: any, res) => {
 router.post('/whatsapp/test', requireAuth as any, async (req: any, res) => {
   try {
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
-    const config = getWhatsAppConfig()
+    const config = await getWhatsAppConfig()
     if (!config.greenapi_instance_id || !config.greenapi_token) {
       return res.status(400).json({ error: 'يرجى إدخال Instance ID و API Token أولاً' })
     }

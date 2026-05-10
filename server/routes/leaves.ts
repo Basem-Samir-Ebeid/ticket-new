@@ -4,7 +4,7 @@ import { leaveRequests, profiles, notifications } from '../../shared/schema'
 import { eq, desc, or, and, gte, lte } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
-import { sendWhatsAppToUser } from '../whatsapp'
+import { sendWhatsAppToUser } from '../whatsappConfig'
 
 const router = Router()
 

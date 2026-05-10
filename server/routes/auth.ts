@@ -19,7 +19,7 @@ router.post('/login', async (req, res) => {
     if (!valid) return res.status(401).json({ error: 'Invalid email or password' })
 
     const token = signToken(profile.id)
-    const { password_hash, whatsapp_apikey, ...safeProfile } = profile
+    const { password_hash, ...safeProfile } = profile
     res.json({ token, user: safeProfile })
   } catch (err: any) {
     console.error('POST /login error:', err)
@@ -29,7 +29,7 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', requireAuth as any, async (req: any, res) => {
   try {
-    const { password_hash, whatsapp_apikey, ...safeProfile } = req.profile
+    const { password_hash, ...safeProfile } = req.profile
     res.json(safeProfile)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to get profile' })
@@ -38,12 +38,11 @@ router.get('/me', requireAuth as any, async (req: any, res) => {
 
 router.patch('/profile', requireAuth as any, async (req: any, res) => {
   try {
-    const { full_name, profile_picture_url, phone, whatsapp_apikey } = req.body
+    const { full_name, profile_picture_url, phone } = req.body
     const updates: any = {}
     if (full_name !== undefined) updates.full_name = full_name || null
     if (profile_picture_url !== undefined) updates.profile_picture_url = profile_picture_url || null
     if (phone !== undefined) updates.phone = phone || null
-    if (whatsapp_apikey !== undefined) updates.whatsapp_apikey = whatsapp_apikey || null
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' })
 
     const [user] = await db.update(profiles).set(updates).where(eq(profiles.id, req.user.id)).returning()

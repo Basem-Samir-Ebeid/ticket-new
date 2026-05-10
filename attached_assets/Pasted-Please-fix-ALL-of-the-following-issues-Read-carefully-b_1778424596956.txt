@@ -1,0 +1,223 @@
+Please fix ALL of the following issues. Read carefully before making any changes.
+
+---
+
+## 🔴 FIX 1 — Two Conflicting WhatsApp Imports in tickets.ts
+
+**File:** `server/routes/tickets.ts` lines 8–9
+
+Currently the file imports from TWO different WhatsApp files simultaneously:
+```ts
+import { sendWhatsAppNotification } from '../whatsappConfig'  // Green API
+import { sendWhatsAppToUser } from '../whatsapp'              // CallMeBot — WRONG
+```
+
+This means ticket assignment notifications go through CallMeBot (broken) while admin notifications go through Green API.
+
+**Fix:** Remove the import from `../whatsapp` and import `sendWhatsAppToUser` from `../whatsappConfig` instead:
+```ts
+import { sendWhatsAppNotification, sendWhatsAppToUser } from '../whatsappConfig'
+```
+Then **delete the file `server/whatsapp.ts`** entirely — it uses CallMeBot and is no longer needed.
+
+---
+
+## 🔴 FIX 2 — Wrong WhatsApp Import in leaves.ts
+
+**File:** `server/routes/leaves.ts` line 7
+
+Currently:
+```ts
+import { sendWhatsAppToUser } from '../whatsapp'  // CallMeBot — WRONG
+```
+
+**Fix:** Change to:
+```ts
+import { sendWhatsAppToUser } from '../whatsappConfig'  // Green API — CORRECT
+```
+
+---
+
+## 🔴 FIX 3 — "No fields to update" Bug When Saving whatsapp_phone
+
+**File:** `src/pages/AdminDashboard.jsx` — function `saveUserWhatsApp`
+
+Current code (line 494):
+```js
+await api.updateUser(userId, { whatsapp_phone: edits.whatsapp_phone ?? '', whatsapp_apikey: edits.whatsapp_apikey ?? '' })
+```
+
+The problem: `whatsapp_apikey` is being sent in the request body. In `server/routes/users.ts`, the `updateData` object starts with `{ full_name, role, can_view_attendance, profile_picture_url }` — these are always included even if undefined, which means `Object.keys(updateData)` is never empty. So the "No fields to update" check is NOT the issue here.
+
+The REAL cause: the server receives `whatsapp_apikey` in the body but then strips it from the response via destructuring. Meanwhile the frontend state update on line 495 sets `whatsapp_apikey` from `edits` — but `edits` may not have `whatsapp_apikey` defined if the user only typed a phone number, causing the save to appear broken.
+
+**Fix in `AdminDashboard.jsx`:** Since we are using Green API (no per-user apikey needed), simplify `saveUserWhatsApp` to only send `whatsapp_phone`:
+```js
+async function saveUserWhatsApp(userId) {
+  const edits = waUserEdits[userId] || {}
+  setWaUserSaving(s => ({ ...s, [userId]: true }))
+  try {
+    const phone = edits.whatsapp_phone?.trim() ?? ''
+    await api.updateUser(userId, { whatsapp_phone: phone })
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, whatsapp_phone: phone } : u))
+    setWaUserEdits(e => { const n = { ...e }; delete n[userId]; return n })
+    setWaUserTestResults(r => ({ ...r, [userId]: { ok: true, message: '✓ تم الحفظ' } }))
+    setTimeout(() => setWaUserTestResults(r => { const n = { ...r }; delete n[userId]; return n }), 2500)
+  } catch (err) {
+    setWaUserTestResults(r => ({ ...r, [userId]: { ok: false, message: err.message } }))
+  }
+  setWaUserSaving(s => ({ ...s, [userId]: false }))
+}
+```
+
+**Fix in `server/routes/users.ts`:** Remove `whatsapp_apikey` from the PATCH handler entirely since Green API doesn't need it per user:
+- Remove `whatsapp_apikey` from the destructured `req.body`
+- Remove `if (whatsapp_apikey !== undefined) updateData.whatsapp_apikey = ...`
+- Remove `whatsapp_apikey: _wak` from the returning destructure — just use `password_hash`
+
+---
+
+## 🔴 FIX 4 — Test Button Fails Because It Reads From DB Before Save
+
+**File:** `src/pages/AdminDashboard.jsx` — function `testUserWhatsAppMsg`
+
+Problem: Admin types a phone number → clicks "اختبار" WITHOUT clicking "حفظ" first → test fails because server reads `whatsapp_phone` from DB which is still empty/old.
+
+Current `testUserWhatsAppMsg`:
+```js
+async function testUserWhatsAppMsg(userId) {
+  setWaUserTestingId(userId)
+  setWaUserTestResults(r => ({ ...r, [userId]: null }))
+  try {
+    const data = await api.testUserWhatsApp(userId)
+    setWaUserTestResults(r => ({ ...r, [userId]: { ok: true, message: data.message || '✓ تم الإرسال' } }))
+  } catch (err) {
+    setWaUserTestResults(r => ({ ...r, [userId]: { ok: false, message: err.message } }))
+  }
+  setWaUserTestingId(null)
+}
+```
+
+**Fix:** Auto-save the current input value before running the test:
+```js
+async function testUserWhatsAppMsg(userId) {
+  setWaUserTestingId(userId)
+  setWaUserTestResults(r => ({ ...r, [userId]: null }))
+  try {
+    // If there are unsaved edits, save them first so the server has the latest phone
+    const edits = waUserEdits[userId]
+    if (edits?.whatsapp_phone !== undefined) {
+      const phone = edits.whatsapp_phone?.trim() ?? ''
+      if (!phone) {
+        setWaUserTestResults(r => ({ ...r, [userId]: { ok: false, message: 'أدخل رقم الواتساب أولاً' } }))
+        setWaUserTestingId(null)
+        return
+      }
+      await api.updateUser(userId, { whatsapp_phone: phone })
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, whatsapp_phone: phone } : u))
+      setWaUserEdits(e => { const n = { ...e }; delete n[userId]; return n })
+    }
+    const data = await api.testUserWhatsApp(userId)
+    setWaUserTestResults(r => ({ ...r, [userId]: { ok: true, message: data.message || '✅ تم الإرسال بنجاح' } }))
+  } catch (err) {
+    setWaUserTestResults(r => ({ ...r, [userId]: { ok: false, message: err.message } }))
+  }
+  setWaUserTestingId(null)
+}
+```
+
+Also update `hasPhone` logic so the test button is enabled when the user is EDITING and has typed a phone, even before saving:
+```js
+const hasPhone = !!(isEditing ? editVal.whatsapp_phone?.trim() : u.whatsapp_phone?.trim())
+```
+(This line already exists — just verify it uses `?.trim()` so whitespace-only values don't count as valid.)
+
+---
+
+## 🔴 FIX 5 — whatsapp-config.json Saved to Filesystem (Lost on Replit Restart)
+
+**File:** `server/whatsappConfig.ts`
+
+Green API config (`greenapi_instance_id`, `greenapi_token`, `enabled`, `phone`) is saved to `server/whatsapp-config.json`. On Replit, the filesystem resets between restarts, so all settings are lost silently.
+
+**Fix:** Move the WhatsApp config to the database. Add a `whatsapp_config` key to the existing `office_settings` table (or create a new `system_settings` table if one doesn't exist).
+
+Replace `getWhatsAppConfig()` and `saveWhatsAppConfig()` with DB-backed versions:
+```ts
+export async function getWhatsAppConfig(): Promise<WhatsAppConfig> {
+  try {
+    const [row] = await db.select({ value: officeSettings.value })
+      .from(officeSettings)
+      .where(eq(officeSettings.key, 'whatsapp_config'))
+      .limit(1)
+    if (row?.value) return { ...DEFAULT_CONFIG, ...JSON.parse(row.value) }
+  } catch {}
+  return { ...DEFAULT_CONFIG }
+}
+
+export async function saveWhatsAppConfig(config: Partial<WhatsAppConfig>): Promise<WhatsAppConfig> {
+  const existing = await getWhatsAppConfig()
+  const merged: WhatsAppConfig = { ...existing, ...config }
+  await db.insert(officeSettings)
+    .values({ key: 'whatsapp_config', value: JSON.stringify(merged) })
+    .onConflictDoUpdate({ target: officeSettings.key, set: { value: JSON.stringify(merged) } })
+  return merged
+}
+```
+Make sure `officeSettings` is imported from the schema. Check `shared/schema.ts` for the correct table name and key/value column names.
+
+---
+
+## 🟡 FIX 6 — Remove whatsapp_apikey from Schema and Frontend (No Longer Needed)
+
+Since we are using Green API exclusively, `whatsapp_apikey` per user is not needed.
+
+1. In `shared/schema.ts`, remove the `whatsapp_apikey` column from the `profiles` table, then run `npm run db:push`.
+2. In `AdminDashboard.jsx`, remove all references to `whatsapp_apikey` in:
+   - `userForm` initial state
+   - `waUserEdits` state
+   - The save handler
+   - Any input fields for `whatsapp_apikey`
+3. In `server/routes/users.ts`, remove `whatsapp_apikey` from GET response stripping, PATCH handler, and returning destructure.
+4. In `server/routes/auth.ts`, remove any `whatsapp_apikey` handling.
+
+---
+
+## 🟡 FIX 7 — db.ts: Add Graceful Error if Database Secret is Missing
+
+**File:** `server/db.ts`
+
+If `NEON_DATABASE_URL` or `DATABASE_URL` is not set in Replit Secrets, the server crashes with an unhelpful error.
+
+**Fix:** Add at the top of `server/db.ts`:
+```ts
+const connectionString = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL
+if (!connectionString) {
+  console.error('[DB] FATAL: Set NEON_DATABASE_URL or DATABASE_URL in Replit Secrets')
+  process.exit(1)
+}
+```
+
+---
+
+## 🟡 FIX 8 — initVapid() Called on Every Push Notification
+
+**File:** `server/routes/push.ts`
+
+`initVapid()` calls `webpush.setVapidDetails(...)` inside `sendPushToAdmins()` / `sendPushToUser()` on every single send.
+
+**Fix:** Call `initVapid()` once at server startup in `server/index.ts` or `server/app.ts`:
+```ts
+import { initVapid } from './routes/push'
+initVapid()
+```
+Then remove the per-call invocation inside the push functions.
+
+---
+
+## Priority Order
+1. Fix 1 + Fix 2 (wrong WhatsApp imports — tickets and leaves broken)
+2. Fix 3 + Fix 4 (save and test bugs in admin panel)
+3. Fix 5 (whatsapp config lost on restart)
+4. Fix 6 (remove unused whatsapp_apikey)
+5. Fix 7 + Fix 8 (stability improvements)

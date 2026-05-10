@@ -35,7 +35,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [showCreateUser, setShowCreateUser] = useState(false)
   const [showCreateTicket, setShowCreateTicket] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
-  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '', whatsapp_apikey: '' })
+  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '' })
   const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
   const [ticketAssets, setTicketAssets] = useState([])
   const [msg, setMsg] = useState('')
@@ -491,8 +491,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     const edits = waUserEdits[userId] || {}
     setWaUserSaving(s => ({ ...s, [userId]: true }))
     try {
-      await api.updateUser(userId, { whatsapp_phone: edits.whatsapp_phone ?? '', whatsapp_apikey: edits.whatsapp_apikey ?? '' })
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, whatsapp_phone: edits.whatsapp_phone ?? u.whatsapp_phone, whatsapp_apikey: edits.whatsapp_apikey ?? u.whatsapp_apikey } : u))
+      const phone = edits.whatsapp_phone?.trim() ?? ''
+      await api.updateUser(userId, { whatsapp_phone: phone })
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, whatsapp_phone: phone } : u))
       setWaUserEdits(e => { const n = { ...e }; delete n[userId]; return n })
       setWaUserTestResults(r => ({ ...r, [userId]: { ok: true, message: '✓ تم الحفظ' } }))
       setTimeout(() => setWaUserTestResults(r => { const n = { ...r }; delete n[userId]; return n }), 2500)
@@ -506,8 +507,20 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     setWaUserTestingId(userId)
     setWaUserTestResults(r => ({ ...r, [userId]: null }))
     try {
+      const edits = waUserEdits[userId]
+      if (edits?.whatsapp_phone !== undefined) {
+        const phone = edits.whatsapp_phone?.trim() ?? ''
+        if (!phone) {
+          setWaUserTestResults(r => ({ ...r, [userId]: { ok: false, message: 'أدخل رقم الواتساب أولاً' } }))
+          setWaUserTestingId(null)
+          return
+        }
+        await api.updateUser(userId, { whatsapp_phone: phone })
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, whatsapp_phone: phone } : u))
+        setWaUserEdits(e => { const n = { ...e }; delete n[userId]; return n })
+      }
       const data = await api.testUserWhatsApp(userId)
-      setWaUserTestResults(r => ({ ...r, [userId]: { ok: true, message: data.message || '✓ تم الإرسال' } }))
+      setWaUserTestResults(r => ({ ...r, [userId]: { ok: true, message: data.message || '✅ تم الإرسال بنجاح' } }))
     } catch (err) {
       setWaUserTestResults(r => ({ ...r, [userId]: { ok: false, message: err.message } }))
     }
@@ -721,7 +734,6 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         direct_manager: userForm.direct_manager,
         notes: userForm.notes,
         whatsapp_phone: userForm.whatsapp_phone,
-        whatsapp_apikey: userForm.whatsapp_apikey,
       })
       setMsg('✓ User updated!'); setEditingUser(null); setProfilePicFile(null); fetchUsers()
     } catch (e) { setMsg('Error: ' + e.message) }
@@ -768,7 +780,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       }
       await api.createUser({ ...userForm, profile_picture_url })
       setMsg('✓ User created!')
-      setUserForm({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '', whatsapp_apikey: '' })
+      setUserForm({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '' })
       setProfilePicFile(null)
       setShowCreateUser(false)
       fetchUsers()
@@ -1859,11 +1871,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   .filter(u => !waUserSearch || (u.full_name||u.email||'').toLowerCase().includes(waUserSearch.toLowerCase()) || (u.email||'').toLowerCase().includes(waUserSearch.toLowerCase()))
                   .map(u => {
                     const isEditing = u.id in waUserEdits
-                    const editVal = waUserEdits[u.id] || { whatsapp_phone: u.whatsapp_phone || '', whatsapp_apikey: u.whatsapp_apikey || '' }
+                    const editVal = waUserEdits[u.id] || { whatsapp_phone: u.whatsapp_phone || '' }
                     const isSaving = waUserSaving[u.id]
                     const isTesting = waUserTestingId === u.id
                     const testResult = waUserTestResults[u.id]
-                    const hasPhone = !!(isEditing ? editVal.whatsapp_phone : u.whatsapp_phone)
+                    const hasPhone = !!(isEditing ? editVal.whatsapp_phone?.trim() : u.whatsapp_phone?.trim())
 
                     return (
                       <div key={u.id} className="rounded-xl p-3 transition-colors" style={{background: isEditing ? 'rgba(37,211,102,0.05)' : 'rgba(255,255,255,0.02)', border: isEditing ? '1px solid rgba(37,211,102,0.2)' : '1px solid rgba(255,255,255,0.06)'}}>
@@ -1896,7 +1908,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                                 dir="ltr"
                                 value={isEditing ? editVal.whatsapp_phone : (u.whatsapp_phone || '')}
                                 onChange={e => setWaUserEdits(ed => ({ ...ed, [u.id]: { ...editVal, whatsapp_phone: e.target.value } }))}
-                                onFocus={() => { if (!isEditing) setWaUserEdits(ed => ({ ...ed, [u.id]: { whatsapp_phone: u.whatsapp_phone || '', whatsapp_apikey: u.whatsapp_apikey || '' } })) }}
+                                onFocus={() => { if (!isEditing) setWaUserEdits(ed => ({ ...ed, [u.id]: { whatsapp_phone: u.whatsapp_phone || '' } })) }}
                                 placeholder="+201xxxxxxxxx"
                                 className="bg-white/5 border rounded-xl pl-8 pr-3 py-1.5 text-white text-sm focus:outline-none placeholder-slate-600 transition-all w-40"
                                 style={{borderColor: isEditing ? 'rgba(37,211,102,0.4)' : 'rgba(255,255,255,0.08)', direction:'ltr'}}
@@ -2449,7 +2461,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button onClick={()=>setEmployeeProfileId(u.id)} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">ملف</button>
-                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7,work_start_hour:u.work_start_hour??9,department:u.department||'',job_title:u.job_title||'',phone:u.phone||'',national_id:u.national_id||'',hire_date:u.hire_date||'',birth_date:u.birth_date||'',gender:u.gender||'',address:u.address||'',employment_type:u.employment_type||'full_time',employee_code:u.employee_code||'',direct_manager:u.direct_manager||'',notes:u.notes||'',whatsapp_phone:u.whatsapp_phone||'',whatsapp_apikey:u.whatsapp_apikey||''})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
+                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7,work_start_hour:u.work_start_hour??9,department:u.department||'',job_title:u.job_title||'',phone:u.phone||'',national_id:u.national_id||'',hire_date:u.hire_date||'',birth_date:u.birth_date||'',gender:u.gender||'',address:u.address||'',employment_type:u.employment_type||'full_time',employee_code:u.employee_code||'',direct_manager:u.direct_manager||'',notes:u.notes||'',whatsapp_phone:u.whatsapp_phone||''})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
                           <button onClick={()=>openResetPwd(u)} disabled={resettingUserId===u.id} className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 transition-colors">{resettingUserId===u.id ? '...' : 'Reset Pwd'}</button>
                           <button onClick={()=>deleteUser(u.id)} disabled={loading} className="text-xs text-red-400/70 hover:text-red-400 disabled:opacity-50 transition-colors">Delete</button>
                         </div>
