@@ -366,7 +366,10 @@ router.post('/whatsapp', requireAuth as any, async (req: any, res) => {
     const { enabled, greenapi_instance_id, greenapi_token, phone } = req.body
     const existing = await getWhatsAppConfig()
     const updates: any = {}
-    if (enabled !== undefined) updates.enabled = Boolean(enabled)
+    if (enabled !== undefined) {
+      const enabledBool = enabled === true || enabled === 'true'
+      updates.enabled = enabledBool
+    }
     if (greenapi_instance_id !== undefined) updates.greenapi_instance_id = String(greenapi_instance_id).trim()
 
     // Only update token if a real non-empty, non-masked value was provided

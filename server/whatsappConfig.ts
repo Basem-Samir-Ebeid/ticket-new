@@ -34,6 +34,9 @@ export async function getWhatsAppConfig(): Promise<WhatsAppConfig> {
 export async function saveWhatsAppConfig(config: Partial<WhatsAppConfig>): Promise<WhatsAppConfig> {
   const existing = await getWhatsAppConfig()
   const merged: WhatsAppConfig = { ...existing, ...config }
+  if (typeof merged.enabled !== 'boolean') {
+    merged.enabled = merged.enabled === true || (merged.enabled as any) === 'true'
+  }
   await db.insert(systemSettings)
     .values({ key: 'whatsapp_config', value: JSON.stringify(merged) })
     .onConflictDoUpdate({ target: systemSettings.key, set: { value: JSON.stringify(merged), updated_at: new Date() } })
@@ -86,7 +89,11 @@ export async function sendWhatsAppToPhone(phone: string, _apikey: string, text: 
 export async function sendWhatsAppToUser(userId: string, text: string): Promise<void> {
   try {
     const config = await getWhatsAppConfig()
-    if (!config.enabled) return
+    console.log('[WA-DEBUG] sendWhatsAppToUser called, userId:', userId, 'enabled:', config.enabled, 'token exists:', !!config.greenapi_token)
+    if (!config.enabled) {
+      console.log('[WA-DEBUG] WhatsApp disabled, skipping')
+      return
+    }
 
     const [prof] = await db.select({
       whatsapp_phone: profiles.whatsapp_phone,
