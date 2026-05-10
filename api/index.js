@@ -671,7 +671,12 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
 
 app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { full_name, role, can_view_attendance, profile_picture_url, leave_balance } = req.body
+    const {
+      full_name, role, can_view_attendance, profile_picture_url, leave_balance,
+      sick_leave_balance, emergency_leave_balance, work_start_hour, department,
+      job_title, phone, national_id, hire_date, birth_date, gender, address,
+      employment_type, employee_code, direct_manager, notes, whatsapp_phone,
+    } = req.body
     const fields = [], values = []
     let idx = 1
     if (full_name !== undefined) { fields.push(`full_name=$${idx++}`); values.push(full_name) }
@@ -679,6 +684,22 @@ app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
     if (can_view_attendance !== undefined) { fields.push(`can_view_attendance=$${idx++}`); values.push(can_view_attendance) }
     if (profile_picture_url !== undefined) { fields.push(`profile_picture_url=$${idx++}`); values.push(profile_picture_url) }
     if (leave_balance !== undefined) { fields.push(`leave_balance=$${idx++}`); values.push(leave_balance) }
+    if (sick_leave_balance !== undefined) { fields.push(`sick_leave_balance=$${idx++}`); values.push(sick_leave_balance) }
+    if (emergency_leave_balance !== undefined) { fields.push(`emergency_leave_balance=$${idx++}`); values.push(emergency_leave_balance) }
+    if (work_start_hour !== undefined) { fields.push(`work_start_hour=$${idx++}`); values.push(work_start_hour) }
+    if (department !== undefined) { fields.push(`department=$${idx++}`); values.push(department) }
+    if (job_title !== undefined) { fields.push(`job_title=$${idx++}`); values.push(job_title) }
+    if (phone !== undefined) { fields.push(`phone=$${idx++}`); values.push(phone) }
+    if (national_id !== undefined) { fields.push(`national_id=$${idx++}`); values.push(national_id) }
+    if (hire_date !== undefined) { fields.push(`hire_date=$${idx++}`); values.push(hire_date) }
+    if (birth_date !== undefined) { fields.push(`birth_date=$${idx++}`); values.push(birth_date) }
+    if (gender !== undefined) { fields.push(`gender=$${idx++}`); values.push(gender) }
+    if (address !== undefined) { fields.push(`address=$${idx++}`); values.push(address) }
+    if (employment_type !== undefined) { fields.push(`employment_type=$${idx++}`); values.push(employment_type) }
+    if (employee_code !== undefined) { fields.push(`employee_code=$${idx++}`); values.push(employee_code) }
+    if (direct_manager !== undefined) { fields.push(`direct_manager=$${idx++}`); values.push(direct_manager) }
+    if (notes !== undefined) { fields.push(`notes=$${idx++}`); values.push(notes) }
+    if (whatsapp_phone !== undefined) { fields.push(`whatsapp_phone=$${idx++}`); values.push(whatsapp_phone) }
     if (!fields.length) return res.status(400).json({ error: 'No fields to update' })
     values.push(req.params.id)
     const { rows } = await getPool().query(
