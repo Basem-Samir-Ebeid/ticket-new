@@ -151,6 +151,8 @@ router.post('/', requireAuth as any, async (req: any, res) => {
 
     const creatorName = req.profile?.full_name || req.profile?.email || 'Someone'
 
+    console.log('[WA-DEBUG] Starting WhatsApp notification for ticket')
+
     // Check if linked asset is under maintenance → urgent alert to admins
     let linkedAsset: any = null
     if (asset_id) {
