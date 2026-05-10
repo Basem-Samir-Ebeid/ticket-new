@@ -101,6 +101,23 @@ async function ensureSchema() {
       );
 
       ALTER TABLE profiles ADD COLUMN IF NOT EXISTS leave_balance INTEGER NOT NULL DEFAULT 14;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sick_leave_balance INTEGER NOT NULL DEFAULT 7;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS emergency_leave_balance INTEGER NOT NULL DEFAULT 3;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS work_start_hour INTEGER NOT NULL DEFAULT 9;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS department TEXT;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS job_title TEXT;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS phone TEXT;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS national_id TEXT;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS hire_date DATE;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_date DATE;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gender TEXT;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS address TEXT;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS employment_type TEXT DEFAULT 'full_time';
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS employee_code TEXT;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS direct_manager TEXT;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS notes TEXT;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS whatsapp_phone TEXT;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS whatsapp_apikey TEXT;
 
       CREATE TABLE IF NOT EXISTS tickets (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -245,6 +262,94 @@ async function ensureSchema() {
         used BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS assets (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'other',
+        serial_number TEXT UNIQUE,
+        brand TEXT,
+        model TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        condition TEXT NOT NULL DEFAULT 'good',
+        purchase_date DATE,
+        warranty_expires DATE,
+        purchase_price DOUBLE PRECISION,
+        location TEXT,
+        notes TEXT,
+        image_url TEXT,
+        assigned_to UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS asset_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        asset_id UUID NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+        changed_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        changed_by_name TEXT,
+        action TEXT NOT NULL,
+        description TEXT,
+        old_value TEXT,
+        new_value TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS penalties (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        type TEXT NOT NULL DEFAULT 'warning',
+        reason TEXT NOT NULL,
+        amount DOUBLE PRECISION,
+        notes TEXT,
+        issued_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS complaints (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        complainant_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        against_user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        subject TEXT NOT NULL,
+        description TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        is_anonymous BOOLEAN NOT NULL DEFAULT false,
+        admin_response TEXT,
+        resolved_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        resolved_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS auto_assign_rules (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        category TEXT NOT NULL UNIQUE,
+        user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        user_name TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS attendance_corrections (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        date DATE NOT NULL,
+        requested_login TEXT,
+        requested_logout TEXT,
+        reason TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        admin_note TEXT,
+        reviewed_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        reviewed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value JSONB NOT NULL DEFAULT '{}',
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS days_count INTEGER NOT NULL DEFAULT 1;
 
       INSERT INTO office_settings (id, latitude, longitude, radius_meters)
       VALUES ('main', 30.0803897, 31.3524335, 20)
@@ -1175,6 +1280,583 @@ app.get('/api/settings/log', requireAuth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Failed to load settings log' })
   }
+})
+
+// ── PROFILE UPDATE ────────────────────────────────────────────────────────────
+app.patch('/api/auth/profile', requireAuth, async (req, res) => {
+  try {
+    const { full_name, profile_picture_url, phone, department, job_title, address, gender, birth_date, whatsapp_phone } = req.body
+    const updates = {}
+    if (full_name !== undefined) updates.full_name = full_name
+    if (profile_picture_url !== undefined) updates.profile_picture_url = profile_picture_url
+    if (phone !== undefined) updates.phone = phone
+    if (department !== undefined) updates.department = department
+    if (job_title !== undefined) updates.job_title = job_title
+    if (address !== undefined) updates.address = address
+    if (gender !== undefined) updates.gender = gender
+    if (birth_date !== undefined) updates.birth_date = birth_date
+    if (whatsapp_phone !== undefined) updates.whatsapp_phone = whatsapp_phone
+    const sets = Object.keys(updates).map((k, i) => `${k}=$${i + 2}`).join(', ')
+    if (!sets) return res.json(req.profile)
+    const vals = [req.user.id, ...Object.values(updates)]
+    const { rows } = await getPool().query(`UPDATE profiles SET ${sets} WHERE id=$1 RETURNING *`, vals)
+    const { password_hash, ...safe } = rows[0]
+    res.json(safe)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update profile' })
+  }
+})
+
+// ── ADDITIONAL USER ROUTES ────────────────────────────────────────────────────
+app.get('/api/users/:id/profile', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await getPool().query('SELECT * FROM profiles WHERE id=$1', [req.params.id])
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' })
+    const { password_hash, plain_password, ...safe } = rows[0]
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+    const { rows: att } = await getPool().query('SELECT * FROM login_times WHERE user_id=$1 ORDER BY date DESC', [req.params.id])
+    const thisMonth = att.filter(a => a.date >= monthStart)
+    const completed = thisMonth.filter(a => a.logout_time)
+    const avgHours = completed.length > 0 ? completed.reduce((s, a) => s + (new Date(a.logout_time) - new Date(a.login_time)) / 3600000, 0) / completed.length : 0
+    const { rows: tkts } = await getPool().query('SELECT id,title,status,priority,created_at,category FROM tickets WHERE assigned_to=$1 ORDER BY created_at DESC LIMIT 10', [req.params.id])
+    const { rows: leaves } = await getPool().query('SELECT * FROM leave_requests WHERE user_id=$1 ORDER BY created_at DESC LIMIT 10', [req.params.id])
+    const { rows: pens } = await getPool().query('SELECT * FROM penalties WHERE user_id=$1 ORDER BY created_at DESC LIMIT 10', [req.params.id]).catch(() => ({ rows: [] }))
+    const { rows: assts } = await getPool().query('SELECT * FROM assets WHERE assigned_to=$1', [req.params.id]).catch(() => ({ rows: [] }))
+    res.json({
+      profile: safe,
+      attendance: { thisMonthDays: thisMonth.length, avgHoursPerDay: Math.round(avgHours * 10) / 10, totalRecords: att.length, recentDays: thisMonth.slice(0, 5) },
+      tickets: { assigned: tkts, created: [], stats: { open: tkts.filter(t => t.status === 'opened').length, pending: tkts.filter(t => t.status === 'pending').length, solved: tkts.filter(t => t.status === 'solved').length, total: tkts.length } },
+      leaves: { list: leaves, stats: { approved: leaves.filter(l => l.status === 'approved').length, pending: leaves.filter(l => l.status === 'pending').length, rejected: leaves.filter(l => l.status === 'rejected').length, totalDays: leaves.filter(l => l.status === 'approved').reduce((s, l) => s + (l.days_count || 0), 0) }, balance: { annual: safe.leave_balance, sick: safe.sick_leave_balance, emergency: safe.emergency_leave_balance } },
+      penalties: { list: pens, stats: { total: pens.length, totalAmount: pens.reduce((s, p) => s + (p.amount || 0), 0), warnings: pens.filter(p => p.type === 'warning').length, deductions: pens.filter(p => p.type === 'deduction').length } },
+      assets: assts,
+    })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get employee profile' })
+  }
+})
+
+app.post('/api/users/:id/test-whatsapp', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await getPool().query('SELECT whatsapp_phone, full_name, email FROM profiles WHERE id=$1', [req.params.id])
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' })
+    if (!rows[0].whatsapp_phone) return res.status(400).json({ error: 'هذا المستخدم لا يملك رقم واتساب محفوظ — أضف رقمه أولاً' })
+    const cfg = await getAppSetting('whatsapp')
+    if (!cfg.greenapi_instance_id || !cfg.greenapi_token) return res.status(400).json({ error: 'Green API غير مُفعَّل — يرجى إدخال Instance ID و Token في الإعدادات' })
+    const chatId = rows[0].whatsapp_phone.replace(/\D/g, '') + '@c.us'
+    const url = `https://api.green-api.com/waInstance${cfg.greenapi_instance_id}/sendMessage/${cfg.greenapi_token}`
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: `✅ Finest IT — اختبار ناجح!\nمرحباً ${rows[0].full_name || rows[0].email}، ستصلك إشعارات التيكتات والحضور والإجازات هنا.` }), signal: AbortSignal.timeout(10000) })
+    if (!r.ok) throw new Error(`Green API error ${r.status}`)
+    res.json({ ok: true, message: 'تم إرسال رسالة اختبار! تحقق من واتساب.' })
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'فشل إرسال رسالة الاختبار' })
+  }
+})
+
+app.post('/api/users/bulk-reset-leave', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { leave_balance, sick_leave_balance, emergency_leave_balance, user_ids } = req.body
+    let q = 'UPDATE profiles SET'
+    const sets = [], vals = []
+    if (leave_balance !== undefined) { sets.push(` leave_balance=$${vals.length + 1}`); vals.push(Number(leave_balance)) }
+    if (sick_leave_balance !== undefined) { sets.push(` sick_leave_balance=$${vals.length + 1}`); vals.push(Number(sick_leave_balance)) }
+    if (emergency_leave_balance !== undefined) { sets.push(` emergency_leave_balance=$${vals.length + 1}`); vals.push(Number(emergency_leave_balance)) }
+    if (!sets.length) return res.status(400).json({ error: 'No fields to update' })
+    q += sets.join(',')
+    if (user_ids?.length) {
+      const ph = user_ids.map((_, i) => `$${vals.length + i + 1}`).join(',')
+      q += ` WHERE id IN (${ph})`
+      vals.push(...user_ids)
+    }
+    await getPool().query(q, vals)
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to reset leave balances' })
+  }
+})
+
+// ── APP SETTINGS HELPER ────────────────────────────────────────────────────────
+async function getAppSetting(key) {
+  try {
+    const { rows } = await getPool().query('SELECT value FROM app_settings WHERE key=$1', [key])
+    return rows[0]?.value || {}
+  } catch { return {} }
+}
+async function setAppSetting(key, value) {
+  await getPool().query(
+    'INSERT INTO app_settings (key, value, updated_at) VALUES ($1,$2,NOW()) ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=NOW()',
+    [key, JSON.stringify(value)]
+  )
+  return value
+}
+
+// ── WHATSAPP SETTINGS ─────────────────────────────────────────────────────────
+app.get('/api/settings/whatsapp', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const cfg = await getAppSetting('whatsapp')
+    res.json({ enabled: cfg.enabled || false, greenapi_instance_id: cfg.greenapi_instance_id || '', greenapi_token: cfg.greenapi_token ? '••••••••' : '', phone: cfg.phone || '' })
+  } catch (err) { res.status(500).json({ error: 'Failed to load WhatsApp settings' }) }
+})
+
+app.post('/api/settings/whatsapp', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const existing = await getAppSetting('whatsapp')
+    const { enabled, greenapi_instance_id, greenapi_token, phone } = req.body
+    const updated = { ...existing }
+    if (enabled !== undefined) updated.enabled = Boolean(enabled)
+    if (greenapi_instance_id !== undefined) updated.greenapi_instance_id = String(greenapi_instance_id).trim()
+    if (greenapi_token !== undefined && greenapi_token !== '••••••••') updated.greenapi_token = String(greenapi_token).trim()
+    if (phone !== undefined) updated.phone = String(phone).trim().replace(/\s/g, '')
+    await setAppSetting('whatsapp', updated)
+    res.json({ enabled: updated.enabled || false, greenapi_instance_id: updated.greenapi_instance_id || '', greenapi_token: updated.greenapi_token ? '••••••••' : '', phone: updated.phone || '' })
+  } catch (err) { res.status(500).json({ error: 'Failed to save WhatsApp settings' }) }
+})
+
+app.post('/api/settings/whatsapp/test', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const cfg = await getAppSetting('whatsapp')
+    if (!cfg.greenapi_instance_id || !cfg.greenapi_token) return res.status(400).json({ error: 'يرجى إدخال Instance ID و API Token أولاً' })
+    if (!cfg.phone) return res.status(400).json({ error: 'يرجى إدخال رقم واتساب للاختبار' })
+    const chatId = cfg.phone.replace(/\D/g, '') + '@c.us'
+    const url = `https://api.green-api.com/waInstance${cfg.greenapi_instance_id}/sendMessage/${cfg.greenapi_token}`
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId, message: '✅ Finest IT — اختبار ناجح! ستصلك إشعارات التيكتات والحضور والإجازات هنا.' }), signal: AbortSignal.timeout(10000) })
+    if (!r.ok) { const t = await r.text().catch(() => ''); throw new Error(`Green API error ${r.status}: ${t}`) }
+    res.json({ ok: true, message: 'تم إرسال رسالة اختبار! تحقق من واتساب.' })
+  } catch (err) { res.status(400).json({ error: err?.message || 'فشل إرسال رسالة الاختبار' }) }
+})
+
+// ── SMTP SETTINGS ─────────────────────────────────────────────────────────────
+app.get('/api/settings/smtp', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const cfg = await getAppSetting('smtp')
+    res.json({ host: cfg.host || '', port: cfg.port || 587, secure: cfg.secure || false, user: cfg.user || '', password: cfg.password ? '••••••••' : '', from_name: cfg.from_name || '', from_email: cfg.from_email || '', enabled: cfg.enabled || false })
+  } catch (err) { res.status(500).json({ error: 'Failed to load SMTP settings' }) }
+})
+
+app.post('/api/settings/smtp', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const existing = await getAppSetting('smtp')
+    const { host, port, secure, user, password, from_name, from_email, enabled } = req.body
+    const updated = { ...existing }
+    if (host !== undefined) updated.host = String(host).trim()
+    if (port !== undefined) updated.port = Number(port) || 587
+    if (secure !== undefined) updated.secure = Boolean(secure)
+    if (user !== undefined) updated.user = String(user).trim()
+    if (password !== undefined && password !== '••••••••') updated.password = String(password)
+    if (from_name !== undefined) updated.from_name = String(from_name).trim()
+    if (from_email !== undefined) updated.from_email = String(from_email).trim()
+    if (enabled !== undefined) updated.enabled = Boolean(enabled)
+    await setAppSetting('smtp', updated)
+    res.json({ ...updated, password: updated.password ? '••••••••' : '' })
+  } catch (err) { res.status(500).json({ error: 'Failed to save SMTP settings' }) }
+})
+
+app.post('/api/settings/smtp/test', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    res.status(400).json({ error: 'SMTP test not available in this environment' })
+  } catch (err) { res.status(500).json({ error: 'Failed' }) }
+})
+
+// ── GITHUB SYNC SETTINGS ──────────────────────────────────────────────────────
+app.get('/api/settings/github-sync', requireAuth, async (req, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+    const cfg = await getAppSetting('github_sync')
+    res.json({ repo_url: cfg.repo_url || '', branch: cfg.branch || 'main', has_token: Boolean(cfg.token) })
+  } catch (err) { res.status(500).json({ error: 'Failed to load GitHub sync settings' }) }
+})
+
+app.post('/api/settings/github-sync', requireAuth, async (req, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+    const { repo_url, branch, token } = req.body
+    if (!repo_url || !branch) return res.status(400).json({ error: 'repo_url and branch are required' })
+    const existing = await getAppSetting('github_sync')
+    const updated = { repo_url: String(repo_url).trim(), branch: String(branch).trim(), token: token !== undefined ? String(token) : existing.token }
+    await setAppSetting('github_sync', updated)
+    res.json({ ok: true, repo_url: updated.repo_url, branch: updated.branch, has_token: Boolean(updated.token) })
+  } catch (err) { res.status(500).json({ error: 'Failed to save GitHub sync settings' }) }
+})
+
+app.post('/api/settings/github-sync/test', requireAuth, async (req, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+    res.json({ ok: true, message: 'GitHub sync test not available in this environment' })
+  } catch (err) { res.status(500).json({ error: 'Failed' }) }
+})
+
+// ── AUTO-ASSIGN RULES ─────────────────────────────────────────────────────────
+app.get('/api/settings/auto-assign', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { rows } = await getPool().query('SELECT * FROM auto_assign_rules ORDER BY created_at')
+    res.json({ rules: rows.map(r => ({ category: r.category, user_id: r.user_id, user_name: r.user_name || '' })) })
+  } catch (err) { res.status(500).json({ error: 'Failed to load auto-assign rules' }) }
+})
+
+app.post('/api/settings/auto-assign', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { rules } = req.body
+    if (!Array.isArray(rules)) return res.status(400).json({ error: 'rules must be an array' })
+    await getPool().query('DELETE FROM auto_assign_rules')
+    const cleaned = rules.filter(r => r.category?.trim() && r.user_id?.trim())
+    for (const r of cleaned) {
+      await getPool().query('INSERT INTO auto_assign_rules (category, user_id, user_name) VALUES ($1,$2,$3) ON CONFLICT (category) DO UPDATE SET user_id=$2, user_name=$3', [r.category.trim(), r.user_id.trim(), r.user_name || ''])
+    }
+    const { rows } = await getPool().query('SELECT * FROM auto_assign_rules ORDER BY created_at')
+    res.json({ rules: rows.map(r => ({ category: r.category, user_id: r.user_id, user_name: r.user_name || '' })) })
+  } catch (err) { res.status(500).json({ error: 'Failed to save auto-assign rules' }) }
+})
+
+// ── GITHUB SYNC STATUS ────────────────────────────────────────────────────────
+app.get('/api/github-sync-status', requireAuth, async (req, res) => {
+  try {
+    res.json({ synced: false, last_sync: null, status: 'not_configured' })
+  } catch (err) { res.status(500).json({ error: 'Failed' }) }
+})
+
+// ── ASSETS ────────────────────────────────────────────────────────────────────
+app.get('/api/assets', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { rows } = await getPool().query('SELECT * FROM assets ORDER BY created_at DESC')
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: 'Failed to get assets' }) }
+})
+
+app.get('/api/assets/stats', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { rows } = await getPool().query('SELECT status, COUNT(*) as count FROM assets GROUP BY status')
+    const stats = { total: 0, active: 0, inactive: 0, maintenance: 0, retired: 0 }
+    rows.forEach(r => { stats[r.status] = parseInt(r.count); stats.total += parseInt(r.count) })
+    res.json(stats)
+  } catch (err) { res.status(500).json({ error: 'Failed to get asset stats' }) }
+})
+
+app.get('/api/assets/:id', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { rows } = await getPool().query('SELECT * FROM assets WHERE id=$1', [req.params.id])
+    if (!rows[0]) return res.status(404).json({ error: 'Asset not found' })
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: 'Failed to get asset' }) }
+})
+
+app.post('/api/assets', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { name, type, serial_number, brand, model, status, condition, purchase_date, warranty_expires, purchase_price, location, notes, image_url, assigned_to } = req.body
+    if (!name) return res.status(400).json({ error: 'Name is required' })
+    const { rows } = await getPool().query(
+      `INSERT INTO assets (name,type,serial_number,brand,model,status,condition,purchase_date,warranty_expires,purchase_price,location,notes,image_url,assigned_to,created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+      [name, type||'other', serial_number||null, brand||null, model||null, status||'active', condition||'good', purchase_date||null, warranty_expires||null, purchase_price?Number(purchase_price):null, location||null, notes||null, image_url||null, assigned_to||null, req.user.id]
+    )
+    await getPool().query('INSERT INTO asset_history (asset_id,changed_by,changed_by_name,action,description) VALUES ($1,$2,$3,$4,$5)', [rows[0].id, req.user.id, req.profile.full_name||req.profile.email, 'created', `Asset "${name}" created`])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message || 'Failed to create asset' }) }
+})
+
+app.patch('/api/assets/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const fields = ['name','type','serial_number','brand','model','status','condition','purchase_date','warranty_expires','purchase_price','location','notes','image_url','assigned_to']
+    const sets = [], vals = [req.params.id]
+    fields.forEach(f => { if (req.body[f] !== undefined) { sets.push(`${f}=$${vals.length+1}`); vals.push(req.body[f] === '' ? null : req.body[f]) } })
+    sets.push(`updated_at=$${vals.length+1}`); vals.push(new Date())
+    if (sets.length === 1) return res.status(400).json({ error: 'Nothing to update' })
+    const { rows } = await getPool().query(`UPDATE assets SET ${sets.join(',')} WHERE id=$1 RETURNING *`, vals)
+    if (!rows[0]) return res.status(404).json({ error: 'Asset not found' })
+    await getPool().query('INSERT INTO asset_history (asset_id,changed_by,changed_by_name,action,description) VALUES ($1,$2,$3,$4,$5)', [req.params.id, req.user.id, req.profile.full_name||req.profile.email, 'updated', `Asset updated`])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message || 'Failed to update asset' }) }
+})
+
+app.delete('/api/assets/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await getPool().query('DELETE FROM assets WHERE id=$1', [req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: 'Failed to delete asset' }) }
+})
+
+app.get('/api/assets/:id/history', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { rows } = await getPool().query('SELECT * FROM asset_history WHERE asset_id=$1 ORDER BY created_at DESC', [req.params.id])
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: 'Failed to get asset history' }) }
+})
+
+app.get('/api/assets/:id/tickets', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { rows } = await getPool().query('SELECT * FROM tickets WHERE asset_id=$1 ORDER BY created_at DESC', [req.params.id]).catch(() => ({ rows: [] }))
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: 'Failed to get asset tickets' }) }
+})
+
+// ── PENALTIES ─────────────────────────────────────────────────────────────────
+app.get('/api/penalties', requireAuth, async (req, res) => {
+  try {
+    const isAdmin = isAdminRole(req.profile.role)
+    const { rows } = isAdmin
+      ? await getPool().query('SELECT * FROM penalties ORDER BY created_at DESC')
+      : await getPool().query('SELECT * FROM penalties WHERE user_id=$1 ORDER BY created_at DESC', [req.user.id])
+    const { rows: profs } = await getPool().query('SELECT id,full_name,email,role FROM profiles')
+    const pm = new Map(profs.map(p => [p.id, p]))
+    res.json(rows.map(r => ({ ...r, user: pm.get(r.user_id)||null, issued_by_user: r.issued_by ? pm.get(r.issued_by)||null : null })))
+  } catch (err) { res.status(500).json({ error: 'Failed to get penalties' }) }
+})
+
+app.post('/api/penalties', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { user_id, type, reason, amount, notes } = req.body
+    if (!user_id || !reason) return res.status(400).json({ error: 'user_id and reason are required' })
+    const { rows } = await getPool().query(
+      'INSERT INTO penalties (user_id,type,reason,amount,notes,issued_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [user_id, type||'warning', reason, amount?Number(amount):null, notes||null, req.user.id]
+    )
+    await getPool().query('INSERT INTO notifications (user_id,message) VALUES ($1,$2)', [user_id, `⚠️ ${type||'warning'}: ${reason}`])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: 'Failed to create penalty' }) }
+})
+
+app.patch('/api/penalties/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { type, reason, amount, notes } = req.body
+    const sets = [], vals = [req.params.id]
+    if (type) { sets.push(`type=$${vals.length+1}`); vals.push(type) }
+    if (reason) { sets.push(`reason=$${vals.length+1}`); vals.push(reason) }
+    if (amount !== undefined) { sets.push(`amount=$${vals.length+1}`); vals.push(Number(amount)) }
+    if (notes !== undefined) { sets.push(`notes=$${vals.length+1}`); vals.push(notes) }
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' })
+    const { rows } = await getPool().query(`UPDATE penalties SET ${sets.join(',')} WHERE id=$1 RETURNING *`, vals)
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: 'Failed to update penalty' }) }
+})
+
+app.delete('/api/penalties/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await getPool().query('DELETE FROM penalties WHERE id=$1', [req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: 'Failed to delete penalty' }) }
+})
+
+// ── COMPLAINTS ────────────────────────────────────────────────────────────────
+app.get('/api/complaints', requireAuth, async (req, res) => {
+  try {
+    const isAdmin = isAdminRole(req.profile.role)
+    const { rows } = isAdmin
+      ? await getPool().query('SELECT * FROM complaints ORDER BY created_at DESC')
+      : await getPool().query('SELECT * FROM complaints WHERE complainant_id=$1 OR against_user_id=$1 ORDER BY created_at DESC', [req.user.id])
+    const { rows: profs } = await getPool().query('SELECT id,full_name,email,role FROM profiles')
+    const pm = new Map(profs.map(p => [p.id, p]))
+    res.json(rows.map(r => ({ ...r, complainant: r.is_anonymous ? null : (r.complainant_id ? pm.get(r.complainant_id)||null : null), against_user: r.against_user_id ? pm.get(r.against_user_id)||null : null, resolved_by_user: r.resolved_by ? pm.get(r.resolved_by)||null : null })))
+  } catch (err) { res.status(500).json({ error: 'Failed to get complaints' }) }
+})
+
+app.post('/api/complaints', requireAuth, async (req, res) => {
+  try {
+    const { against_user_id, subject, description, is_anonymous } = req.body
+    if (!subject || !description) return res.status(400).json({ error: 'Subject and description are required' })
+    const { rows } = await getPool().query(
+      'INSERT INTO complaints (complainant_id,against_user_id,subject,description,is_anonymous,status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [is_anonymous ? null : req.user.id, against_user_id||null, subject, description, !!is_anonymous, 'pending']
+    )
+    const { rows: admins } = await getPool().query("SELECT id FROM profiles WHERE role IN ('admin','super_admin')")
+    const name = is_anonymous ? 'مجهول' : (req.profile.full_name || req.profile.email)
+    for (const a of admins) await getPool().query('INSERT INTO notifications (user_id,message) VALUES ($1,$2)', [a.id, `📣 شكوى جديدة من ${name}: ${subject}`])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: 'Failed to create complaint' }) }
+})
+
+app.patch('/api/complaints/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { status, admin_response } = req.body
+    const sets = [], vals = [req.params.id]
+    if (status) { sets.push(`status=$${vals.length+1}`); vals.push(status) }
+    if (admin_response !== undefined) { sets.push(`admin_response=$${vals.length+1}`); vals.push(admin_response) }
+    if (status === 'resolved' || status === 'rejected') { sets.push(`resolved_by=$${vals.length+1}`); vals.push(req.user.id); sets.push(`resolved_at=$${vals.length+1}`); vals.push(new Date()) }
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' })
+    const { rows } = await getPool().query(`UPDATE complaints SET ${sets.join(',')} WHERE id=$1 RETURNING *`, vals)
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: 'Failed to update complaint' }) }
+})
+
+app.delete('/api/complaints/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await getPool().query('DELETE FROM complaints WHERE id=$1', [req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: 'Failed to delete complaint' }) }
+})
+
+// ── TICKET RATE ───────────────────────────────────────────────────────────────
+app.post('/api/tickets/:id/rate', requireAuth, async (req, res) => {
+  try {
+    const { rating, rating_comment } = req.body
+    if (!rating || rating < 1 || rating > 5) return res.status(400).json({ error: 'Rating must be 1-5' })
+    const { rows } = await getPool().query('UPDATE tickets SET rating=$1, rating_comment=$2 WHERE id=$3 AND created_by=$4 RETURNING *', [rating, rating_comment||null, req.params.id, req.user.id])
+    if (!rows[0]) return res.status(404).json({ error: 'Ticket not found or not authorized' })
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: 'Failed to rate ticket' }) }
+})
+
+// ── ATTENDANCE EXTRA ROUTES ───────────────────────────────────────────────────
+app.get('/api/attendance/live', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role) && !req.profile.can_view_attendance) return res.status(403).json({ error: 'Admin only' })
+    const today = new Date().toISOString().slice(0, 10)
+    const { rows } = await getPool().query('SELECT lt.*, p.full_name, p.email, p.profile_picture_url FROM login_times lt JOIN profiles p ON p.id=lt.user_id WHERE lt.date=$1 ORDER BY lt.login_time DESC', [today])
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: 'Failed to get live attendance' }) }
+})
+
+app.get('/api/attendance/monthly-report', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const now = new Date()
+    const year = parseInt(req.query.year) || now.getFullYear()
+    const month = parseInt(req.query.month) || (now.getMonth() + 1)
+    const firstDay = `${year}-${String(month).padStart(2, '0')}-01`
+    const lastDay = new Date(year, month, 0)
+    const lastDayStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
+    const { rows } = await getPool().query('SELECT * FROM login_times WHERE date >= $1 AND date <= $2', [firstDay, lastDayStr])
+    const { rows: profs } = await getPool().query("SELECT * FROM profiles WHERE role NOT IN ('admin','super_admin')")
+    const statsMap = new Map()
+    profs.forEach(p => statsMap.set(p.id, { profile: p, days: [], totalMinutes: 0, overtimeMinutes: 0, lateCount: 0, lateTotalMinutes: 0 }))
+    rows.forEach(r => {
+      if (!statsMap.has(r.user_id)) return
+      const e = statsMap.get(r.user_id)
+      if (!e.days.includes(r.date)) e.days.push(r.date)
+      if (r.login_time && r.logout_time) {
+        const mins = (new Date(r.logout_time) - new Date(r.login_time)) / 60000
+        if (mins > 0) { e.totalMinutes += mins; e.overtimeMinutes += Math.max(0, mins - 480) }
+      }
+      if (r.login_time) {
+        const d = new Date(r.login_time)
+        const h = d.getHours(), m = d.getMinutes()
+        const ws = statsMap.get(r.user_id)?.profile?.work_start_hour || 9
+        const late = Math.max(0, (h - ws) * 60 + m)
+        if (late > 5) { e.lateCount++; e.lateTotalMinutes += late }
+      }
+    })
+    const workingDays = lastDay.getDate()
+    const report = Array.from(statsMap.values()).map(({ profile, days, totalMinutes, overtimeMinutes, lateCount, lateTotalMinutes }) => ({ id: profile.id, full_name: profile.full_name, email: profile.email, role: profile.role, days_present: days.length, days_absent: Math.max(0, workingDays - days.length), working_days: workingDays, attendance_rate: workingDays > 0 ? Math.round((days.length / workingDays) * 100) : 0, total_minutes: Math.round(totalMinutes), avg_minutes_per_day: days.length > 0 ? Math.round(totalMinutes / days.length) : 0, overtime_minutes: Math.round(overtimeMinutes), late_count: lateCount, late_total_minutes: Math.round(lateTotalMinutes) }))
+    report.sort((a, b) => b.attendance_rate - a.attendance_rate)
+    res.json({ year, month, working_days: workingDays, employees: report })
+  } catch (err) { res.status(500).json({ error: 'Failed to generate report' }) }
+})
+
+app.get('/api/attendance/late-overtime-detail', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const now = new Date()
+    const year = parseInt(req.query.year) || now.getFullYear()
+    const month = parseInt(req.query.month) || (now.getMonth() + 1)
+    const userId = req.query.user_id
+    const firstDay = `${year}-${String(month).padStart(2, '0')}-01`
+    const lastDay = new Date(year, month, 0)
+    const lastDayStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
+    const qParams = [firstDay, lastDayStr]
+    let q = 'SELECT * FROM login_times WHERE date >= $1 AND date <= $2'
+    if (userId) { q += ' AND user_id=$3'; qParams.push(userId) }
+    const { rows } = await getPool().query(q, qParams)
+    const { rows: profs } = await getPool().query('SELECT * FROM profiles')
+    const pm = new Map(profs.map(p => [p.id, p]))
+    const empMap = new Map()
+    rows.forEach(r => {
+      const prof = pm.get(r.user_id)
+      if (!prof || (!userId && (prof.role === 'admin' || prof.role === 'super_admin'))) return
+      if (!empMap.has(r.user_id)) empMap.set(r.user_id, { profile: prof, days: [] })
+      const ws = prof.work_start_hour || 9
+      let lateMin = 0, workedMin = 0, otMin = 0
+      if (r.login_time) { const d = new Date(r.login_time); lateMin = Math.max(0, (d.getHours() - ws) * 60 + d.getMinutes()) }
+      if (r.login_time && r.logout_time) { workedMin = Math.round((new Date(r.logout_time) - new Date(r.login_time)) / 60000); otMin = Math.max(0, workedMin - 480) }
+      empMap.get(r.user_id).days.push({ date: r.date, login_time: r.login_time, logout_time: r.logout_time, late_minutes: lateMin, worked_minutes: workedMin, overtime_minutes: otMin })
+    })
+    const result = Array.from(empMap.values()).map(({ profile, days }) => {
+      const lateDays = days.filter(d => d.late_minutes > 5)
+      const otDays = days.filter(d => d.overtime_minutes > 0)
+      return { id: profile.id, full_name: profile.full_name, email: profile.email, work_start_hour: profile.work_start_hour || 9, days_present: days.length, late_days: lateDays.length, late_total_minutes: lateDays.reduce((s, d) => s + d.late_minutes, 0), overtime_days: otDays.length, overtime_total_minutes: otDays.reduce((s, d) => s + d.overtime_minutes, 0), day_records: days.sort((a, b) => a.date.localeCompare(b.date)) }
+    })
+    result.sort((a, b) => b.late_total_minutes - a.late_total_minutes)
+    res.json({ year, month, employees: result })
+  } catch (err) { res.status(500).json({ error: 'Failed to generate report' }) }
+})
+
+app.get('/api/attendance/corrections', requireAuth, async (req, res) => {
+  try {
+    const isAdmin = isAdminRole(req.profile.role)
+    const { rows } = isAdmin
+      ? await getPool().query('SELECT * FROM attendance_corrections ORDER BY created_at DESC')
+      : await getPool().query('SELECT * FROM attendance_corrections WHERE user_id=$1 ORDER BY created_at DESC', [req.user.id])
+    const { rows: profs } = await getPool().query('SELECT id,full_name,email FROM profiles')
+    const pm = new Map(profs.map(p => [p.id, p]))
+    res.json(rows.map(r => ({ ...r, user: pm.get(r.user_id)||null, reviewed_by_user: r.reviewed_by ? pm.get(r.reviewed_by)||null : null })))
+  } catch (err) { res.status(500).json({ error: 'Failed to get corrections' }) }
+})
+
+app.post('/api/attendance/corrections', requireAuth, async (req, res) => {
+  try {
+    const { date, requested_login, requested_logout, reason } = req.body
+    if (!date || !reason) return res.status(400).json({ error: 'Date and reason are required' })
+    const { rows } = await getPool().query('INSERT INTO attendance_corrections (user_id,date,requested_login,requested_logout,reason,status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *', [req.user.id, date, requested_login||null, requested_logout||null, reason, 'pending'])
+    const { rows: admins } = await getPool().query("SELECT id FROM profiles WHERE role IN ('admin','super_admin')")
+    const name = req.profile.full_name || req.profile.email
+    for (const a of admins) await getPool().query('INSERT INTO notifications (user_id,message) VALUES ($1,$2)', [a.id, `🔧 طلب تصحيح حضور من ${name} بتاريخ ${date}`])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: 'Failed to create correction' }) }
+})
+
+app.patch('/api/attendance/corrections/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { status, admin_note } = req.body
+    const { rows } = await getPool().query('UPDATE attendance_corrections SET status=$1, admin_note=$2, reviewed_by=$3, reviewed_at=$4 WHERE id=$5 RETURNING *', [status, admin_note||null, req.user.id, new Date(), req.params.id])
+    if (rows[0] && status === 'approved' && (rows[0].requested_login || rows[0].requested_logout)) {
+      const sets = [], vals = [rows[0].user_id, rows[0].date]
+      if (rows[0].requested_login) { sets.push(`login_time=$${vals.length+1}`); vals.push(new Date(`${rows[0].date}T${rows[0].requested_login}:00`)) }
+      if (rows[0].requested_logout) { sets.push(`logout_time=$${vals.length+1}`); vals.push(new Date(`${rows[0].date}T${rows[0].requested_logout}:00`)) }
+      if (sets.length) await getPool().query(`UPDATE login_times SET ${sets.join(',')} WHERE user_id=$1 AND date=$2`, vals)
+    }
+    if (rows[0]?.user_id) await getPool().query('INSERT INTO notifications (user_id,message) VALUES ($1,$2)', [rows[0].user_id, `${status==='approved'?'✅ تم قبول':'❌ تم رفض'} طلب تصحيح الحضور بتاريخ ${rows[0].date}`])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: 'Failed to update correction' }) }
+})
+
+// ── LEAVE EXTRA ROUTES ────────────────────────────────────────────────────────
+app.get('/api/leaves/calendar', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await getPool().query("SELECT lr.*, p.full_name, p.email FROM leave_requests lr JOIN profiles p ON p.id=lr.user_id WHERE lr.status='approved' ORDER BY lr.start_date")
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: 'Failed to get leave calendar' }) }
+})
+
+app.get('/api/leaves/balance', requireAuth, async (req, res) => {
+  try {
+    const userId = req.query.user_id || req.user.id
+    const { rows } = await getPool().query('SELECT leave_balance, sick_leave_balance, emergency_leave_balance FROM profiles WHERE id=$1', [userId])
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' })
+    res.json({ annual: rows[0].leave_balance, sick: rows[0].sick_leave_balance, emergency: rows[0].emergency_leave_balance })
+  } catch (err) { res.status(500).json({ error: 'Failed to get leave balance' }) }
+})
+
+app.get('/api/leaves/monthly-report', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const now = new Date()
+    const year = parseInt(req.query.year) || now.getFullYear()
+    const month = parseInt(req.query.month) || (now.getMonth() + 1)
+    const firstDay = `${year}-${String(month).padStart(2, '0')}-01`
+    const lastDay = `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`
+    const { rows } = await getPool().query("SELECT lr.*, p.full_name, p.email FROM leave_requests lr JOIN profiles p ON p.id=lr.user_id WHERE lr.start_date >= $1 AND lr.start_date <= $2 ORDER BY lr.start_date", [firstDay, lastDay])
+    res.json({ year, month, leaves: rows })
+  } catch (err) { res.status(500).json({ error: 'Failed to get leave report' }) }
 })
 
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
