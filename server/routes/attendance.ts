@@ -5,6 +5,7 @@ import { eq, and, gte, lte, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { getOfficeConfig } from '../officeConfig'
+import { sendWhatsAppToUser } from '../whatsappConfig'
 
 const router = Router()
 
@@ -220,6 +221,9 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
       }
     }
 
+    const loginTimeStr = new Date(record.login_time).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Cairo' })
+    const lateNote = lateMinutes > 5 ? ` (متأخر ${lateMinutes} دقيقة)` : ''
+    sendWhatsAppToUser(req.user.id, `✅ تم تسجيل حضورك\nالوقت: ${loginTimeStr}${lateNote}\nالتاريخ: ${today}`).catch(() => {})
     broadcastAll('attendance_update', { action: 'login', user_id: req.user.id, date: today })
     res.json({ ...record, late_minutes: lateMinutes })
   } catch (err: any) {
@@ -257,6 +261,9 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
     const totalMinutes = (new Date(record.logout_time!).getTime() - new Date(record.login_time).getTime()) / 60000
     const overtimeMinutes = Math.max(0, Math.round(totalMinutes - 8 * 60))
 
+    const logoutTimeStr = new Date(record.logout_time!).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Cairo' })
+    const overtimeNote = overtimeMinutes > 0 ? ` (إضافي: ${overtimeMinutes} دقيقة)` : ''
+    sendWhatsAppToUser(req.user.id, `🏁 تم تسجيل انصرافك\nالوقت: ${logoutTimeStr}${overtimeNote}\nالتاريخ: ${today}`).catch(() => {})
     broadcastAll('attendance_update', { action: 'logout', user_id: req.user.id, date: today })
     res.json({ ...record, overtime_minutes: overtimeMinutes })
   } catch (err: any) {

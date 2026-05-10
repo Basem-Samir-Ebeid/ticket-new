@@ -35,7 +35,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [showCreateUser, setShowCreateUser] = useState(false)
   const [showCreateTicket, setShowCreateTicket] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
-  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '' })
+  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '', whatsapp_apikey: '' })
   const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
   const [ticketAssets, setTicketAssets] = useState([])
   const [msg, setMsg] = useState('')
@@ -683,6 +683,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         employee_code: userForm.employee_code,
         direct_manager: userForm.direct_manager,
         notes: userForm.notes,
+        whatsapp_phone: userForm.whatsapp_phone,
+        whatsapp_apikey: userForm.whatsapp_apikey,
       })
       setMsg('✓ User updated!'); setEditingUser(null); setProfilePicFile(null); fetchUsers()
     } catch (e) { setMsg('Error: ' + e.message) }
@@ -729,7 +731,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       }
       await api.createUser({ ...userForm, profile_picture_url })
       setMsg('✓ User created!')
-      setUserForm({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '' })
+      setUserForm({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '', whatsapp_apikey: '' })
       setProfilePicFile(null)
       setShowCreateUser(false)
       fetchUsers()
@@ -1969,6 +1971,14 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">ملاحظات</label>
                     <textarea value={userForm.notes} onChange={e=>setUserForm(f=>({...f,notes:e.target.value}))} rows={2} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/40 placeholder-slate-600 transition-all resize-none" placeholder="أي ملاحظات إضافية..." />
                   </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">📱 رقم واتساب (CallMeBot)</label>
+                    <input value={userForm.whatsapp_phone} onChange={e=>setUserForm(f=>({...f,whatsapp_phone:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="+201023588751" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">🔑 CallMeBot API Key</label>
+                    <input value={userForm.whatsapp_apikey} onChange={e=>setUserForm(f=>({...f,whatsapp_apikey:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="أدخل الـ API key الخاص بالمستخدم" dir="ltr" />
+                  </div>
                 </div>
 
                 <div className="flex gap-2 pt-1">
@@ -2112,6 +2122,14 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">ملاحظات</label>
                     <textarea value={userForm.notes} onChange={e=>setUserForm(f=>({...f,notes:e.target.value}))} rows={2} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/40 placeholder-slate-600 transition-all resize-none" placeholder="أي ملاحظات إضافية..." />
                   </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">📱 رقم واتساب (CallMeBot)</label>
+                    <input value={userForm.whatsapp_phone} onChange={e=>setUserForm(f=>({...f,whatsapp_phone:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="+201023588751" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">🔑 CallMeBot API Key</label>
+                    <input value={userForm.whatsapp_apikey} onChange={e=>setUserForm(f=>({...f,whatsapp_apikey:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="أدخل الـ API key الخاص بالمستخدم" dir="ltr" />
+                  </div>
                 </div>
 
                 <div className="flex gap-2 pt-1">
@@ -2199,7 +2217,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button onClick={()=>setEmployeeProfileId(u.id)} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">ملف</button>
-                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7,work_start_hour:u.work_start_hour??9,department:u.department||'',job_title:u.job_title||'',phone:u.phone||'',national_id:u.national_id||'',hire_date:u.hire_date||'',birth_date:u.birth_date||'',gender:u.gender||'',address:u.address||'',employment_type:u.employment_type||'full_time',employee_code:u.employee_code||'',direct_manager:u.direct_manager||'',notes:u.notes||''})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
+                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7,work_start_hour:u.work_start_hour??9,department:u.department||'',job_title:u.job_title||'',phone:u.phone||'',national_id:u.national_id||'',hire_date:u.hire_date||'',birth_date:u.birth_date||'',gender:u.gender||'',address:u.address||'',employment_type:u.employment_type||'full_time',employee_code:u.employee_code||'',direct_manager:u.direct_manager||'',notes:u.notes||'',whatsapp_phone:u.whatsapp_phone||'',whatsapp_apikey:u.whatsapp_apikey||''})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
                           <button onClick={()=>openResetPwd(u)} disabled={resettingUserId===u.id} className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 transition-colors">{resettingUserId===u.id ? '...' : 'Reset Pwd'}</button>
                           <button onClick={()=>deleteUser(u.id)} disabled={loading} className="text-xs text-red-400/70 hover:text-red-400 disabled:opacity-50 transition-colors">Delete</button>
                         </div>

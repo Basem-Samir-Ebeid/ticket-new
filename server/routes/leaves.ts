@@ -4,6 +4,7 @@ import { leaveRequests, profiles, notifications } from '../../shared/schema'
 import { eq, desc, or, and, gte, lte } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
+import { sendWhatsAppToUser } from '../whatsappConfig'
 
 const router = Router()
 
@@ -268,6 +269,7 @@ router.patch('/:id/approve', requireAuth as any, async (req: any, res) => {
         message: `✅ تمت الموافقة على إجازتك ${typeLabel[ltype] || ltype} (${leave.start_date} → ${leave.end_date} | ${days} أيام)`,
       }).returning()
       broadcast(leave.user_id, 'notification', notif)
+      sendWhatsAppToUser(leave.user_id, `✅ تمت الموافقة على إجازتك\nالنوع: ${typeLabel[ltype] || ltype}\nمن ${leave.start_date} إلى ${leave.end_date} (${days} أيام)`).catch(() => {})
       broadcastAll('leave_update', { action: 'approved', leave_id: leave.id })
     }
 
@@ -315,6 +317,7 @@ router.patch('/:id/reject', requireAuth as any, async (req: any, res) => {
         message: `❌ تم رفض طلب إجازتك (${leave.start_date} → ${leave.end_date})${note ? ' — ' + note : ''}`,
       }).returning()
       broadcast(leave.user_id, 'notification', notif)
+      sendWhatsAppToUser(leave.user_id, `❌ تم رفض طلب إجازتك\nمن ${leave.start_date} إلى ${leave.end_date}${note ? '\nالسبب: ' + note : ''}`).catch(() => {})
       broadcastAll('leave_update', { action: 'rejected', leave_id: leave.id })
     }
 

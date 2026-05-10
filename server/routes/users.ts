@@ -78,6 +78,7 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
       leave_balance, sick_leave_balance, emergency_leave_balance, work_start_hour,
       department, job_title, phone, national_id, hire_date, birth_date,
       gender, address, employment_type, employee_code, direct_manager, notes,
+      whatsapp_phone, whatsapp_apikey,
     } = req.body
 
     const updateData: Record<string, any> = { full_name, role, can_view_attendance, profile_picture_url }
@@ -91,6 +92,10 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
     for (const [k, v] of Object.entries(hrFields)) {
       if (v !== undefined) updateData[k] = v || null
     }
+
+    // WhatsApp fields
+    if (whatsapp_phone !== undefined) updateData.whatsapp_phone = whatsapp_phone?.trim() || null
+    if (whatsapp_apikey !== undefined) updateData.whatsapp_apikey = whatsapp_apikey?.trim() || null
 
     const [user] = await db.update(profiles)
       .set(updateData)

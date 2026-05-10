@@ -5,7 +5,7 @@ import { eq, and, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { sendPushToAdmins } from './push'
-import { sendWhatsAppNotification } from '../whatsappConfig'
+import { sendWhatsAppNotification, sendWhatsAppToUser } from '../whatsappConfig'
 import { findAutoAssignUser } from '../autoAssignConfig'
 import {
   notifyAdminsNewTicket,
@@ -301,12 +301,14 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
           message: notifMessage,
         }).returning()
         broadcast(userId, 'notification', notif)
+        sendWhatsAppToUser(userId, `${statusLabel}\nالتيكت: "${ticket.title}"\nتم التغيير بواسطة: ${changerName}`).catch(() => {})
       }
       notifyStatusChanged(ticket, status, changerName, [...notifyIds]).catch(() => {})
     }
 
     if (assigned_to !== undefined && assigned_to && assigned_to !== req.user.id) {
       notifyAssigned(ticket, assigned_to, changerName).catch(() => {})
+      sendWhatsAppToUser(assigned_to, `🎫 تم تعيين تيكت جديد لك\nالعنوان: "${ticket.title}"\nمن قِبل: ${changerName}`).catch(() => {})
     }
 
     broadcastAll('ticket_update', { action: 'updated', ticket_id: ticket.id, status: ticket.status })
@@ -385,6 +387,7 @@ router.post('/:id/accept', requireAuth as any, async (req: any, res) => {
         message: `✅ Your ticket request "${ticket.title}" has been accepted and assigned.`,
       }).returning()
       broadcast(ticket.created_by, 'notification', notif)
+      sendWhatsAppToUser(ticket.created_by, `✅ تم قبول طلبك\nالتيكت: "${ticket.title}"\nتم قبوله وإسناده`).catch(() => {})
     }
 
     notifyTicketAccepted(ticket).catch(() => {})
@@ -409,6 +412,7 @@ router.post('/:id/refuse', requireAuth as any, async (req: any, res) => {
         message: `❌ Your ticket request "${ticket.title}" has been refused by the admin.`,
       }).returning()
       broadcast(ticket.created_by, 'notification', notif)
+      sendWhatsAppToUser(ticket.created_by, `❌ تم رفض طلبك\nالتيكت: "${ticket.title}"\nتم رفضه من قِبل الأدمن`).catch(() => {})
     }
 
     notifyTicketRefused(ticket).catch(() => {})

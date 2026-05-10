@@ -28,6 +28,8 @@ export const profiles = pgTable('profiles', {
   employee_code: text('employee_code'),
   direct_manager: text('direct_manager'),
   notes: text('notes'),
+  whatsapp_phone: text('whatsapp_phone'),
+  whatsapp_apikey: text('whatsapp_apikey'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
