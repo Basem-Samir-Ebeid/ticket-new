@@ -1,0 +1,127 @@
+Please fix the following 3 config files that are still being saved to the filesystem. On Replit, the filesystem resets between restarts, so all settings saved in JSON files are lost silently. All configs must be saved to the database only.
+
+---
+
+## FIX 1 — `server/officeConfig.ts` — Still writes to `office-config.json`
+
+`saveOfficeConfig()` currently saves to BOTH the database AND `server/office-config.json`. The file-based fallback and writes are no longer needed since the DB is now the source of truth.
+
+**Fix:**
+1. In `saveOfficeConfig()`, remove the `fs.writeFileSync(CONFIG_FILE, ...)` call at the end.
+2. Delete the entire `saveOfficeConfigToFile()` function.
+3. Delete the entire `readFileConfig()` function.
+4. In `getOfficeConfig()`, remove the `const fileCfg = readFileConfig()` fallback — if DB read fails or returns nothing, just return `{ ...DEFAULT_CONFIG }` directly.
+5. Remove the `import fs from 'fs'`, `import path from 'path'`, and `const CONFIG_FILE = ...` lines since they are no longer used.
+6. Delete the file `server/office-config.json` from the project.
+
+Final clean `officeConfig.ts` should only use the database — no fs imports, no CONFIG_FILE, no file reads or writes.
+
+---
+
+## FIX 2 — `server/smtpConfig.ts` — Saves SMTP settings to `smtp-config.json` only
+
+SMTP config (host, port, user, password, from) is saved to `server/smtp-config.json` via `fs.writeFileSync`. This file is lost on Replit restart, causing email notifications to stop working.
+
+**Fix:** Migrate SMTP config to the database using the existing `systemSettings` table (same table used by `whatsappConfig.ts`).
+
+Replace the file-based `getSmtpConfig()` and `saveSmtpConfig()` with DB-backed versions:
+
+```ts
+import { db } from './db'
+import { systemSettings } from '../shared/schema'
+import { eq } from 'drizzle-orm'
+
+const SMTP_KEY = 'smtp_config'
+
+export interface SmtpConfig {
+  host: string
+  port: number
+  user: string
+  password: string
+  from: string
+  enabled: boolean
+}
+
+const DEFAULT_SMTP: SmtpConfig = {
+  host: '',
+  port: 587,
+  user: '',
+  password: '',
+  from: '',
+  enabled: false,
+}
+
+export async function getSmtpConfig(): Promise<SmtpConfig> {
+  try {
+    const [row] = await db.select({ value: systemSettings.value })
+      .from(systemSettings)
+      .where(eq(systemSettings.key, SMTP_KEY))
+      .limit(1)
+    if (row?.value) return { ...DEFAULT_SMTP, ...JSON.parse(row.value) }
+  } catch {}
+  return { ...DEFAULT_SMTP }
+}
+
+export async function saveSmtpConfig(config: Partial<SmtpConfig>): Promise<SmtpConfig> {
+  const existing = await getSmtpConfig()
+  const merged: SmtpConfig = { ...existing, ...config }
+  await db.insert(systemSettings)
+    .values({ key: SMTP_KEY, value: JSON.stringify(merged) })
+    .onConflictDoUpdate({ target: systemSettings.key, set: { value: JSON.stringify(merged), updated_at: new Date() } })
+  return merged
+}
+```
+
+After migrating, delete the file `server/smtp-config.json` from the project.
+
+**Important:** All callers of `getSmtpConfig()` and `saveSmtpConfig()` must be updated to `await` them since they are now async. Check `server/mailer.ts` and any settings routes that call these functions and add `await` where missing.
+
+---
+
+## FIX 3 — `server/githubSyncConfig.ts` — Saves to `github-sync-config.json` only
+
+GitHub sync config is saved to `server/github-sync-config.json` via `fs.writeFileSync`. Lost on restart.
+
+**Fix:** Migrate to the database using the same `systemSettings` table:
+
+```ts
+import { db } from './db'
+import { systemSettings } from '../shared/schema'
+import { eq } from 'drizzle-orm'
+
+const GITHUB_KEY = 'github_sync_config'
+
+export async function getGithubSyncConfig(): Promise<GithubSyncConfig> {
+  try {
+    const [row] = await db.select({ value: systemSettings.value })
+      .from(systemSettings)
+      .where(eq(systemSettings.key, GITHUB_KEY))
+      .limit(1)
+    if (row?.value) return { ...DEFAULT_GITHUB_CONFIG, ...JSON.parse(row.value) }
+  } catch {}
+  return { ...DEFAULT_GITHUB_CONFIG }
+}
+
+export async function saveGithubSyncConfig(config: Partial<GithubSyncConfig>): Promise<GithubSyncConfig> {
+  const existing = await getGithubSyncConfig()
+  const merged = { ...existing, ...config }
+  await db.insert(systemSettings)
+    .values({ key: GITHUB_KEY, value: JSON.stringify(merged) })
+    .onConflictDoUpdate({ target: systemSettings.key, set: { value: JSON.stringify(merged), updated_at: new Date() } })
+  return merged
+}
+```
+
+Keep the existing interface/type definitions. Just replace the `fs`-based read/write with the DB versions above.
+After migrating, delete `server/github-sync-config.json` from the project and remove `import fs` and `import path` from the file.
+
+**Important:** Update all callers of `getGithubSyncConfig()` and `saveGithubSyncConfig()` to `await` them.
+
+---
+
+## Summary
+- All 3 config files must be 100% database-backed with no filesystem fallback writes
+- Delete the 3 JSON files: `office-config.json`, `smtp-config.json`, `github-sync-config.json`
+- Use the existing `systemSettings` table for smtp and github configs (same as whatsapp config)
+- The `officeSettings` table is already used for office config — just remove the file fallback
+- Make sure all callers `await` the async functions after the migration
