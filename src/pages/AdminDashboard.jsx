@@ -470,7 +470,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       setWaForm({
         enabled: data.enabled || false,
         greenapi_instance_id: data.greenapi_instance_id || '',
-        greenapi_token: '',
+        greenapi_token: data.greenapi_token || '',
         phone: data.phone || '',
       })
     } catch {}
@@ -481,9 +481,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     e.preventDefault()
     setSavingWa(true); setWaMsg(''); setWaTestResult(null)
     try {
-      await api.saveWhatsAppSettings(waForm)
+      const saved = await api.saveWhatsAppSettings(waForm)
       setWaMsg('✓ تم حفظ إعدادات واتساب!')
-      setWaForm(f => ({ ...f, greenapi_token: '' }))
+      setWaForm(f => ({ ...f, greenapi_token: saved.greenapi_token || '' }))
     } catch (err) { setWaMsg('Error: ' + err.message) }
     setSavingWa(false)
   }
