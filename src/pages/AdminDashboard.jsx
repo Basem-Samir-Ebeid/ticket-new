@@ -106,6 +106,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [testingWa, setTestingWa] = useState(false)
   const [waTestResult, setWaTestResult] = useState(null)
   const [waLoaded, setWaLoaded] = useState(false)
+  const [waUserEdits, setWaUserEdits] = useState({})
+  const [waUserSaving, setWaUserSaving] = useState({})
+  const [waUserTestResults, setWaUserTestResults] = useState({})
+  const [waUserTestingId, setWaUserTestingId] = useState(null)
+  const [waUserSearch, setWaUserSearch] = useState('')
   const [monthlyReport, setMonthlyReport] = useState(null)
   const [monthlyReportYear, setMonthlyReportYear] = useState(new Date().getFullYear())
   const [monthlyReportMonth, setMonthlyReportMonth] = useState(new Date().getMonth() + 1)
@@ -480,6 +485,33 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       setWaTestResult({ ok: true, message: data.message })
     } catch (err) { setWaTestResult({ ok: false, message: err.message }) }
     setTestingWa(false)
+  }
+
+  async function saveUserWhatsApp(userId) {
+    const edits = waUserEdits[userId] || {}
+    setWaUserSaving(s => ({ ...s, [userId]: true }))
+    try {
+      await api.updateUser(userId, { whatsapp_phone: edits.whatsapp_phone ?? '', whatsapp_apikey: edits.whatsapp_apikey ?? '' })
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, whatsapp_phone: edits.whatsapp_phone ?? u.whatsapp_phone, whatsapp_apikey: edits.whatsapp_apikey ?? u.whatsapp_apikey } : u))
+      setWaUserEdits(e => { const n = { ...e }; delete n[userId]; return n })
+      setWaUserTestResults(r => ({ ...r, [userId]: { ok: true, message: '✓ تم الحفظ' } }))
+      setTimeout(() => setWaUserTestResults(r => { const n = { ...r }; delete n[userId]; return n }), 2500)
+    } catch (err) {
+      setWaUserTestResults(r => ({ ...r, [userId]: { ok: false, message: err.message } }))
+    }
+    setWaUserSaving(s => ({ ...s, [userId]: false }))
+  }
+
+  async function testUserWhatsAppMsg(userId) {
+    setWaUserTestingId(userId)
+    setWaUserTestResults(r => ({ ...r, [userId]: null }))
+    try {
+      const data = await api.testUserWhatsApp(userId)
+      setWaUserTestResults(r => ({ ...r, [userId]: { ok: true, message: data.message || '✓ تم الإرسال' } }))
+    } catch (err) {
+      setWaUserTestResults(r => ({ ...r, [userId]: { ok: false, message: err.message } }))
+    }
+    setWaUserTestingId(null)
   }
 
   async function fetchMonthlyReport() {
@@ -957,6 +989,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     { key: 'penalties',   label: 'Penalties',   icon: 'performance' },
     { key: 'complaints',  label: 'Complaints',  icon: 'requests' },
     { key: 'users',       label: 'Users',       icon: 'users' },
+    { key: 'whatsapp',    label: 'WhatsApp',    icon: 'whatsapp' },
     { key: 'attendance',  label: 'Attendance',  icon: 'attendance' },
     { key: 'performance', label: 'Performance', icon: 'performance' },
     { key: 'settings',    label: 'Settings',    icon: 'settings' },
@@ -964,6 +997,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   function handleAdminTabChange(t) {
     setTab(t); setSelectedTicket(null)
     if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings(); fetchSmtpSettings(); fetchWhatsAppSettings(); fetchAutoAssignRules() }
+    if (t === 'whatsapp') { fetchWhatsAppSettings(); fetchUsers() }
     if (t === 'attendance') { fetchLiveAttendance(); fetchAttendanceCorrections() }
     if (t === 'leave') { fetchLeaveCalendar(); fetchLeaveReport() }
   }
@@ -1743,6 +1777,197 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Complaints Tab */}
         {tab === 'complaints' && (
           <ComplaintsPage isSuperAdmin={isSuperAdmin} />
+        )}
+
+        {/* WhatsApp Tab */}
+        {tab === 'whatsapp' && (
+          <div className="space-y-5">
+
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:'rgba(37,211,102,0.15)', border:'1px solid rgba(37,211,102,0.3)'}}>
+                <svg className="w-5 h-5" style={{color:'#25d366'}} fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-white font-bold text-base">إشعارات واتساب</h2>
+                <p className="text-slate-500 text-xs">إعدادات الـ API وأرقام الموظفين في مكان واحد</p>
+              </div>
+              <div className="ml-auto">
+                <span className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${waForm.enabled ? 'text-emerald-400 bg-emerald-900/20 border-emerald-500/25' : 'text-slate-500 bg-white/5 border-white/10'}`}>
+                  {waForm.enabled ? '🟢 مفعّل' : '⚪ معطّل'}
+                </span>
+              </div>
+            </div>
+
+            {/* ── Card 1: Green API Settings ── */}
+            <div className="glass-card rounded-2xl p-5 animate-fadeIn" style={{border:'1px solid rgba(37,211,102,0.18)'}}>
+              <h3 className="text-white font-semibold text-sm mb-4 flex items-center gap-2">⚙️ إعدادات Green API</h3>
+
+              <div className="mb-4 p-3 rounded-xl text-xs space-y-1.5" style={{background:'rgba(37,211,102,0.06)', border:'1px solid rgba(37,211,102,0.14)'}}>
+                <p className="text-emerald-400 font-semibold">خطوات التفعيل (مجاناً — 3000 رسالة/شهر):</p>
+                <p className="text-slate-400">١. سجّل في <a href="https://green-api.com" target="_blank" rel="noreferrer" className="text-emerald-400 underline">green-api.com</a> وأنشئ Instance جديد</p>
+                <p className="text-slate-400">٢. امسح الـ QR Code بواتساب رقم الشركة</p>
+                <p className="text-slate-400">٣. انسخ <span className="text-white font-mono">idInstance</span> و <span className="text-white font-mono">apiTokenInstance</span> في الحقول أدناه</p>
+              </div>
+
+              <form onSubmit={handleSaveWhatsApp} className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="wa-enabled" checked={waForm.enabled} onChange={e=>setWaForm(f=>({...f,enabled:e.target.checked}))} className="w-4 h-4 rounded" style={{accentColor:'#25d366'}} />
+                  <label htmlFor="wa-enabled" className="text-slate-300 text-sm cursor-pointer">تفعيل إشعارات واتساب</label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Instance ID</label>
+                    <input value={waForm.greenapi_instance_id} onChange={e=>setWaForm(f=>({...f,greenapi_instance_id:e.target.value}))} placeholder="مثال: 1101234567" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">API Token Instance</label>
+                    <input value={waForm.greenapi_token} onChange={e=>setWaForm(f=>({...f,greenapi_token:e.target.value}))} placeholder="الصق الـ token هنا" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">رقم الاختبار</label>
+                  <input value={waForm.phone} onChange={e=>setWaForm(f=>({...f,phone:e.target.value}))} placeholder="+201012345678" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
+                </div>
+                {waMsg && <p className={`text-sm rounded-xl px-3 py-2 ${waMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{waMsg}</p>}
+                {waTestResult && <p className={`text-sm rounded-xl px-3 py-2 ${waTestResult.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>{waTestResult.ok ? '✓ ' : '✗ '}{waTestResult.message}</p>}
+                <div className="flex gap-2 flex-wrap">
+                  <button type="submit" disabled={savingWa} className="text-sm px-4 py-2 rounded-xl font-medium text-white disabled:opacity-50 transition-all" style={{background:'rgba(37,211,102,0.2)', border:'1px solid rgba(37,211,102,0.3)'}}>
+                    {savingWa ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+                  </button>
+                  <button type="button" onClick={handleTestWhatsApp} disabled={testingWa||!waForm.greenapi_instance_id} className="btn-ghost disabled:opacity-50 text-sm px-4 py-2">
+                    {testingWa ? 'جاري الإرسال...' : '📱 إرسال رسالة تجريبية للرقم أعلاه'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* ── Card 2: Per-User Numbers ── */}
+            <div className="glass-card rounded-2xl p-5 animate-fadeIn" style={{border:'1px solid rgba(37,211,102,0.12)'}}>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <h3 className="text-white font-semibold text-sm flex items-center gap-2">👥 أرقام الموظفين</h3>
+                <div className="relative">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+                  <input value={waUserSearch} onChange={e=>setWaUserSearch(e.target.value)} placeholder="ابحث عن موظف..." className="bg-white/5 border border-white/8 rounded-xl pl-9 pr-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/30 placeholder-slate-600 w-52 transition-all" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {users
+                  .filter(u => !waUserSearch || (u.full_name||u.email||'').toLowerCase().includes(waUserSearch.toLowerCase()) || (u.email||'').toLowerCase().includes(waUserSearch.toLowerCase()))
+                  .map(u => {
+                    const isEditing = u.id in waUserEdits
+                    const editVal = waUserEdits[u.id] || { whatsapp_phone: u.whatsapp_phone || '', whatsapp_apikey: u.whatsapp_apikey || '' }
+                    const isSaving = waUserSaving[u.id]
+                    const isTesting = waUserTestingId === u.id
+                    const testResult = waUserTestResults[u.id]
+                    const hasPhone = !!(isEditing ? editVal.whatsapp_phone : u.whatsapp_phone)
+
+                    return (
+                      <div key={u.id} className="rounded-xl p-3 transition-colors" style={{background: isEditing ? 'rgba(37,211,102,0.05)' : 'rgba(255,255,255,0.02)', border: isEditing ? '1px solid rgba(37,211,102,0.2)' : '1px solid rgba(255,255,255,0.06)'}}>
+                        {/* Row: User info + controls */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {/* Avatar */}
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
+                            style={{background: u.role==='super_admin' ? 'linear-gradient(135deg,#d97706,#92400e)' : u.role==='admin' ? 'linear-gradient(135deg,#7c3aed,#4f46e5)' : 'linear-gradient(135deg,#0e7490,#0891b2)'}}>
+                            {(u.full_name||u.email||'?')[0].toUpperCase()}
+                          </div>
+
+                          {/* Name + email */}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-white text-sm font-medium leading-tight truncate">{u.full_name || u.email}</p>
+                            <p className="text-slate-500 text-xs truncate">{u.email}</p>
+                          </div>
+
+                          {/* Role badge */}
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 hidden sm:block ${u.role==='super_admin' ? 'text-amber-400 bg-amber-900/20 border-amber-500/20' : u.role==='admin' ? 'text-purple-400 bg-purple-900/20 border-purple-500/20' : u.role==='employee' ? 'text-blue-400 bg-blue-900/20 border-blue-500/20' : 'text-slate-400 bg-slate-800/40 border-slate-600/20'}`}>
+                            {u.role==='super_admin' ? '👑 Super Admin' : u.role}
+                          </span>
+
+                          {/* WhatsApp phone input */}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs" style={{color:'#25d366'}}>
+                                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                              </span>
+                              <input
+                                dir="ltr"
+                                value={isEditing ? editVal.whatsapp_phone : (u.whatsapp_phone || '')}
+                                onChange={e => setWaUserEdits(ed => ({ ...ed, [u.id]: { ...editVal, whatsapp_phone: e.target.value } }))}
+                                onFocus={() => { if (!isEditing) setWaUserEdits(ed => ({ ...ed, [u.id]: { whatsapp_phone: u.whatsapp_phone || '', whatsapp_apikey: u.whatsapp_apikey || '' } })) }}
+                                placeholder="+201xxxxxxxxx"
+                                className="bg-white/5 border rounded-xl pl-8 pr-3 py-1.5 text-white text-sm focus:outline-none placeholder-slate-600 transition-all w-40"
+                                style={{borderColor: isEditing ? 'rgba(37,211,102,0.4)' : 'rgba(255,255,255,0.08)', direction:'ltr'}}
+                              />
+                            </div>
+
+                            {/* Save / Cancel */}
+                            {isEditing && (
+                              <>
+                                <button onClick={() => saveUserWhatsApp(u.id)} disabled={isSaving} className="text-xs text-white px-2.5 py-1.5 rounded-lg font-medium disabled:opacity-50 transition-all" style={{background:'rgba(37,211,102,0.25)', border:'1px solid rgba(37,211,102,0.35)'}}>
+                                  {isSaving ? '...' : 'حفظ'}
+                                </button>
+                                <button onClick={() => setWaUserEdits(e => { const n={...e}; delete n[u.id]; return n })} className="text-xs text-slate-400 hover:text-white px-2 py-1.5 rounded-lg transition-colors">
+                                  إلغاء
+                                </button>
+                              </>
+                            )}
+
+                            {/* Test button */}
+                            <button
+                              onClick={() => testUserWhatsAppMsg(u.id)}
+                              disabled={!hasPhone || isTesting || isSaving}
+                              title={!hasPhone ? 'أضف رقم واتساب أولاً' : 'إرسال رسالة تجريبية'}
+                              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                              style={{
+                                background: hasPhone ? 'rgba(37,211,102,0.1)' : 'rgba(255,255,255,0.03)',
+                                borderColor: hasPhone ? 'rgba(37,211,102,0.25)' : 'rgba(255,255,255,0.06)',
+                                color: hasPhone ? '#4ade80' : '#475569'
+                              }}
+                            >
+                              {isTesting ? (
+                                <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                              ) : (
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                              )}
+                              {isTesting ? 'إرسال...' : 'اختبار'}
+                            </button>
+
+                            {/* Status indicator */}
+                            {!isEditing && (
+                              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${hasPhone ? 'bg-emerald-400' : 'bg-slate-600'}`}
+                                style={hasPhone ? {boxShadow:'0 0 6px rgba(52,211,153,0.7)'} : {}}
+                                title={hasPhone ? 'رقم محفوظ' : 'لا يوجد رقم'}
+                              />
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Test result */}
+                        {testResult && (
+                          <div className={`mt-2 text-xs px-3 py-1.5 rounded-lg ${testResult.ok ? 'bg-emerald-900/20 text-emerald-400 border border-emerald-500/20' : 'bg-red-900/20 text-red-400 border border-red-500/20'}`}>
+                            {testResult.message}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                {users.filter(u => !waUserSearch || (u.full_name||u.email||'').toLowerCase().includes(waUserSearch.toLowerCase()) || (u.email||'').toLowerCase().includes(waUserSearch.toLowerCase())).length === 0 && (
+                  <p className="text-slate-500 text-sm text-center py-6">لا توجد نتائج</p>
+                )}
+              </div>
+
+              {/* Summary */}
+              <div className="mt-4 pt-4 border-t border-white/6 flex items-center gap-4 text-xs text-slate-500">
+                <span>إجمالي الموظفين: <span className="text-white font-medium">{users.length}</span></span>
+                <span>لديهم رقم واتساب: <span className="text-emerald-400 font-medium">{users.filter(u=>u.whatsapp_phone).length}</span></span>
+                <span>بدون رقم: <span className="text-slate-400 font-medium">{users.filter(u=>!u.whatsapp_phone).length}</span></span>
+              </div>
+            </div>
+
+          </div>
         )}
 
         {/* Users Tab */}
@@ -3189,55 +3414,20 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </form>
             </div>
 
-            {/* WhatsApp Notifications — Green API */}
-            <div className="glass-card rounded-2xl p-6 animate-fadeIn" style={{border:'1px solid rgba(37,211,102,0.15)'}}>
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(37,211,102,0.15)', border:'1px solid rgba(37,211,102,0.25)'}}>
-                  <svg className="w-5 h-5" style={{color:'#25d366'}} fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="text-white font-semibold text-lg">WhatsApp Notifications</h2>
-                  <p className="text-slate-400 text-xs">أرسل إشعارات واتساب للموظفين تلقائياً — بدون أي خطوة من الموظف</p>
-                </div>
+            {/* WhatsApp — redirect to dedicated tab */}
+            <div className="glass-card rounded-2xl p-5 animate-fadeIn flex items-center gap-4" style={{border:'1px solid rgba(37,211,102,0.18)'}}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:'rgba(37,211,102,0.15)', border:'1px solid rgba(37,211,102,0.3)'}}>
+                <svg className="w-5 h-5" style={{color:'#25d366'}} fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
               </div>
-
-              {/* Setup instructions */}
-              <div className="mb-5 p-4 rounded-xl text-xs space-y-2" style={{background:'rgba(37,211,102,0.06)', border:'1px solid rgba(37,211,102,0.15)'}}>
-                <p className="text-emerald-400 font-semibold mb-2">🟢 خطوات التفعيل عبر Green API (مجاني — 3000 رسالة/شهر):</p>
-                <p className="text-slate-400">١. سجّل في <a href="https://green-api.com" target="_blank" rel="noreferrer" className="text-emerald-400 underline">green-api.com</a> وأنشئ Instance جديد</p>
-                <p className="text-slate-400">٢. افتح الـ Instance وامسح الـ QR Code بواتساب أي رقم (رقم الشركة مثلاً)</p>
-                <p className="text-slate-400">٣. انسخ <span className="text-white font-mono">idInstance</span> و <span className="text-white font-mono">apiTokenInstance</span> وحطهم في الحقول أدناه</p>
-                <p className="text-slate-400">٤. أضف أرقام واتساب الموظفين في إعدادات كل مستخدم — وهيوصلهم كل حاجة تلقائياً</p>
+              <div className="flex-1">
+                <p className="text-white font-semibold text-sm">إشعارات واتساب</p>
+                <p className="text-slate-400 text-xs mt-0.5">تم نقل إعدادات واتساب لتاب مستقل يشمل إعدادات الـ API وأرقام جميع الموظفين</p>
               </div>
-
-              <form onSubmit={handleSaveWhatsApp} className="space-y-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <input type="checkbox" checked={waForm.enabled} onChange={e=>setWaForm(f=>({...f,enabled:e.target.checked}))} className="w-4 h-4 rounded" style={{accentColor:'#25d366'}} />
-                  <span className="text-slate-300 text-sm">تفعيل إشعارات واتساب</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Instance ID</label>
-                    <input value={waForm.greenapi_instance_id} onChange={e=>setWaForm(f=>({...f,greenapi_instance_id:e.target.value}))} placeholder="مثال: 1101234567" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">API Token Instance</label>
-                    <input value={waForm.greenapi_token} onChange={e=>setWaForm(f=>({...f,greenapi_token:e.target.value}))} placeholder={waForm.greenapi_token ? '••••••••' : 'الصق الـ token هنا'} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">رقم الاختبار (لتجربة الإرسال)</label>
-                  <input value={waForm.phone} onChange={e=>setWaForm(f=>({...f,phone:e.target.value}))} placeholder="+201012345678" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
-                </div>
-                {waMsg && <p className={`text-sm rounded-xl px-3 py-2 ${waMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{waMsg}</p>}
-                {waTestResult && <p className={`text-sm rounded-xl px-3 py-2 ${waTestResult.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>{waTestResult.ok ? '✓ ' : '✗ '}{waTestResult.message}</p>}
-                <div className="flex gap-2 flex-wrap">
-                  <button type="submit" disabled={savingWa} className="text-sm px-4 py-2 rounded-xl font-medium text-white disabled:opacity-50 transition-all" style={{background:'rgba(37,211,102,0.2)', border:'1px solid rgba(37,211,102,0.3)'}}>{savingWa ? 'جاري الحفظ...' : 'حفظ الإعدادات'}</button>
-                  <button type="button" onClick={handleTestWhatsApp} disabled={testingWa||!waForm.greenapi_instance_id} className="btn-ghost disabled:opacity-50 text-sm px-4 py-2">{testingWa ? 'جاري الإرسال...' : '📱 إرسال رسالة تجريبية'}</button>
-                </div>
-              </form>
+              <button onClick={() => handleAdminTabChange('whatsapp')} className="text-sm px-4 py-2 rounded-xl font-medium text-white transition-all flex-shrink-0" style={{background:'rgba(37,211,102,0.2)', border:'1px solid rgba(37,211,102,0.3)'}}>
+                فتح تاب واتساب ←
+              </button>
             </div>
 
             {/* GitHub Sync Settings — super admin only */}
