@@ -230,6 +230,17 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       broadcast(admin.id, 'notification', notif)
     }
 
+    try {
+      for (const admin of admins) {
+        sendWhatsAppToUser(
+          admin.id,
+          `🏖️ *طلب إجازة جديد*\n\nالموظف: ${senderName}\nمن: ${start_date}\nإلى: ${end_date}\nالنوع: ${typeLabel[ltype] || ltype}\nعدد الأيام: ${days}${conflictNote}`
+        ).catch(() => {})
+      }
+    } catch (waErr) {
+      console.error('WhatsApp leave notification error:', waErr)
+    }
+
     broadcastAll('leave_update', { action: 'created', leave_id: leave.id })
     res.json({ ...leave, conflict_count: conflicting.length })
   } catch (err: any) {
@@ -271,6 +282,20 @@ router.patch('/:id/approve', requireAuth as any, async (req: any, res) => {
       broadcast(leave.user_id, 'notification', notif)
       const waMsg = `✅ تمت الموافقة على إجازتك\n\nنوع الإجازة: ${typeLabel[ltype] || ltype}\nمن: ${leave.start_date}\nإلى: ${leave.end_date}\nعدد الأيام: ${days}\n\nنتمنى لك إجازة سعيدة! 🌴`
       sendWhatsAppToUser(leave.user_id, waMsg).catch(() => {})
+
+      try {
+        const approveAdmins = await db.select({ id: profiles.id }).from(profiles)
+          .where(or(eq(profiles.role, 'admin'), eq(profiles.role, 'super_admin')))
+        for (const admin of approveAdmins) {
+          sendWhatsAppToUser(
+            admin.id,
+            `📋 *تحديث طلب إجازة*\n\nالحالة: موافق عليها ✅\nنوع الإجازة: ${typeLabel[ltype] || ltype}\nمن: ${leave.start_date}\nإلى: ${leave.end_date}\nعدد الأيام: ${days}`
+          ).catch(() => {})
+        }
+      } catch (waErr) {
+        console.error('WhatsApp admin leave approval notification error:', waErr)
+      }
+
       broadcastAll('leave_update', { action: 'approved', leave_id: leave.id })
     }
 
@@ -319,6 +344,20 @@ router.patch('/:id/reject', requireAuth as any, async (req: any, res) => {
       }).returning()
       broadcast(leave.user_id, 'notification', notif)
       sendWhatsAppToUser(leave.user_id, `❌ تم رفض طلب إجازتك\nمن ${leave.start_date} إلى ${leave.end_date}${note ? '\nالسبب: ' + note : ''}`).catch(() => {})
+
+      try {
+        const rejectAdmins = await db.select({ id: profiles.id }).from(profiles)
+          .where(or(eq(profiles.role, 'admin'), eq(profiles.role, 'super_admin')))
+        for (const admin of rejectAdmins) {
+          sendWhatsAppToUser(
+            admin.id,
+            `📋 *تحديث طلب إجازة*\n\nالحالة: مرفوضة ❌\nمن: ${leave.start_date}\nإلى: ${leave.end_date}${note ? '\nالسبب: ' + note : ''}`
+          ).catch(() => {})
+        }
+      } catch (waErr) {
+        console.error('WhatsApp admin leave rejection notification error:', waErr)
+      }
+
       broadcastAll('leave_update', { action: 'rejected', leave_id: leave.id })
     }
 

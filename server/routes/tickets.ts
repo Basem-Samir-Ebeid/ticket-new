@@ -200,6 +200,17 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       sendWhatsAppToUser(assigned_to, waMsg).catch(() => {})
     }
 
+    try {
+      for (const admin of adminTargets) {
+        sendWhatsAppToUser(
+          admin.id,
+          `🎫 *تيكيت جديد في النظام*\n\nالعنوان: ${ticket.title}\nمن: ${creatorName}\nالأولوية: ${ticket.priority}${is_request ? '\nنوع: طلب جديد يحتاج مراجعة' : ''}`
+        ).catch(() => {})
+      }
+    } catch (waErr) {
+      console.error('WhatsApp admin ticket notification error:', waErr)
+    }
+
     broadcastAll('ticket_update', { action: 'created', ticket_id: ticket.id, is_request: ticket.is_request })
     res.json(ticket)
   } catch (err: any) {

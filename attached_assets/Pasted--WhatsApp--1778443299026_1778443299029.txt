@@ -1,0 +1,126 @@
+عندي مشكلة في المشروع: رسائل WhatsApp بتوصل عند اختبار الإعدادات بس مش بتتبعت تلقائياً عند إنشاء تيكيت أو طلب إجازة أو الموافقة عليها.
+
+المشروع:
+- React + Express + Drizzle ORM + Neon PostgreSQL
+- WhatsApp API عن طريق UltraMsg
+- ملف الإرسال موجود في server/whatsappConfig.ts وفيه دالة sendWhatsAppToUser(userId, message)
+- ملف الإعدادات يجيب config من قاعدة البيانات عن طريق getWhatsAppConfig()
+
+المطلوب: أضف WhatsApp notifications في الملفات التالية بدون ما تحذف أو تكسر أي كود موجود:
+
+━━━━━━━━━━━━━━━━━━━━━━
+📁 ملف: server/routes/tickets.ts
+━━━━━━━━━━━━━━━━━━━━━━
+
+[1] بعد أي INSERT لتيكيت جديد، أضف:
+
+try {
+  const { getWhatsAppConfig, sendWhatsAppToUser } = await import('../whatsappConfig');
+  const waConfig = await getWhatsAppConfig();
+  if (waConfig?.instanceId && waConfig?.apiToken) {
+    if (newTicket.assigned_to) {
+      await sendWhatsAppToUser(
+        newTicket.assigned_to,
+        `🎫 *تيكيت جديد موجه إليك*\n\nالعنوان: ${newTicket.title}\nالأولوية: ${newTicket.priority}\nمن: ${req.profile.full_name}\nالتاريخ: ${new Date().toLocaleDateString('ar-EG')}`
+      );
+    }
+    const admins = await db.select().from(profiles)
+      .where(or(eq(profiles.role, 'admin'), eq(profiles.role, 'super_admin')));
+    for (const admin of admins) {
+      await sendWhatsAppToUser(
+        admin.id,
+        `🎫 *تيكيت جديد في النظام*\n\nالعنوان: ${newTicket.title}\nمن: ${req.profile.full_name}\nالأولوية: ${newTicket.priority}`
+      );
+    }
+  }
+} catch (waErr) {
+  console.error('WhatsApp ticket notification error:', waErr);
+}
+
+[2] بعد أي UPDATE لستاتس التيكيت، أضف:
+
+try {
+  const { getWhatsAppConfig, sendWhatsAppToUser } = await import('../whatsappConfig');
+  const waConfig = await getWhatsAppConfig();
+  if (waConfig?.instanceId && waConfig?.apiToken) {
+    const statusMap: Record<string, string> = {
+      approved: '✅ تمت الموافقة على تيكيتك',
+      refused: '❌ تم رفض تيكيتك',
+      in_progress: '🔄 تيكيتك قيد التنفيذ',
+      resolved: '✔️ تم حل تيكيتك',
+      pending: '⏳ تيكيتك قيد المراجعة',
+    };
+    const msg = statusMap[newStatus] || `📋 تم تحديث حالة تيكيتك إلى: ${newStatus}`;
+    await sendWhatsAppToUser(
+      ticket.created_by,
+      `${msg}\n\nالعنوان: ${ticket.title}`
+    );
+    if (ticket.assigned_to && ticket.assigned_to !== ticket.created_by) {
+      await sendWhatsAppToUser(
+        ticket.assigned_to,
+        `${msg}\n\nالعنوان: ${ticket.title}`
+      );
+    }
+  }
+} catch (waErr) {
+  console.error('WhatsApp status notification error:', waErr);
+}
+
+━━━━━━━━━━━━━━━━━━━━━━
+📁 ملف: server/routes/leaves.ts
+━━━━━━━━━━━━━━━━━━━━━━
+
+[1] بعد INSERT لطلب إجازة جديد، أضف:
+
+try {
+  const { getWhatsAppConfig, sendWhatsAppToUser } = await import('../whatsappConfig');
+  const waConfig = await getWhatsAppConfig();
+  if (waConfig?.instanceId && waConfig?.apiToken) {
+    const admins = await db.select().from(profiles)
+      .where(or(eq(profiles.role, 'admin'), eq(profiles.role, 'super_admin')));
+    for (const admin of admins) {
+      await sendWhatsAppToUser(
+        admin.id,
+        `🏖️ *طلب إجازة جديد*\n\nالموظف: ${req.profile.full_name}\nمن: ${leaveData.start_date}\nإلى: ${leaveData.end_date}\nالنوع: ${leaveData.leave_type}\nالسبب: ${leaveData.reason}`
+      );
+    }
+  }
+} catch (waErr) {
+  console.error('WhatsApp leave notification error:', waErr);
+}
+
+[2] بعد UPDATE لستاتس الإجازة (approved/rejected)، أضف:
+
+try {
+  const { getWhatsAppConfig, sendWhatsAppToUser } = await import('../whatsappConfig');
+  const waConfig = await getWhatsAppConfig();
+  if (waConfig?.instanceId && waConfig?.apiToken) {
+    const statusText = newStatus === 'approved'
+      ? '✅ تمت الموافقة على طلب إجازتك'
+      : '❌ تم رفض طلب إجازتك';
+    await sendWhatsAppToUser(
+      leave.user_id,
+      `${statusText}\n\nمن: ${leave.start_date}\nإلى: ${leave.end_date}\nالنوع: ${leave.leave_type}`
+    );
+    const admins = await db.select().from(profiles)
+      .where(or(eq(profiles.role, 'admin'), eq(profiles.role, 'super_admin')));
+    for (const admin of admins) {
+      await sendWhatsAppToUser(
+        admin.id,
+        `📋 *تحديث طلب إجازة*\n\nالموظف: اسم الموظف\nالحالة: ${newStatus === 'approved' ? 'موافق عليها ✅' : 'مرفوضة ❌'}\nمن: ${leave.start_date}\nإلى: ${leave.end_date}`
+      );
+    }
+  }
+} catch (waErr) {
+  console.error('WhatsApp leave status error:', waErr);
+}
+
+━━━━━━━━━━━━━━━━━━━━━━
+ملاحظات مهمة:
+━━━━━━━━━━━━━━━━━━━━━━
+1. لا تحذف أي كود موجود نهائياً
+2. الـ try/catch إجباري في كل مكان عشان لو WhatsApp مش مضبوط متكسرش باقي الـ API
+3. استخدم نفس أسماء المتغيرات والأعمدة الموجودة فعلاً في كل ملف
+4. لو اسم المتغير للتيكيت الجديد مختلف (مثلاً ticket أو result أو created) استخدمه بنفس الاسم الموجود
+5. نفس الكلام للإجازة - استخدم اسم المتغير الموجود في الكود
+6. بعد ما تخلص، اعمل npm run build وتأكد مفيش errors
