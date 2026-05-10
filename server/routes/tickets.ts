@@ -126,7 +126,7 @@ router.post('/', requireAuth as any, async (req: any, res) => {
 
     // Auto-assign: if no assignee and category has a rule, use it
     if (!assigned_to && category) {
-      const autoUser = findAutoAssignUser(category)
+      const autoUser = await findAutoAssignUser(category)
       if (autoUser) assigned_to = autoUser
     }
 

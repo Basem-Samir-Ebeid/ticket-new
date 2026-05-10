@@ -5,9 +5,8 @@ import * as schema from '../shared/schema'
 const connectionString = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL
 
 if (!connectionString) {
-  throw new Error(
-    '[DB] No database URL found. Please set NEON_DATABASE_URL or DATABASE_URL in your Replit Secrets.'
-  )
+  console.error('[DB] FATAL: No database URL found. Please set NEON_DATABASE_URL or DATABASE_URL in your Replit Secrets.')
+  process.exit(1)
 }
 
 const isNeon = connectionString.includes('neon.tech')

@@ -184,13 +184,23 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       emergency: prof?.emergency_leave_balance || 0,
       unpaid: 999,
     }
-    const available = balanceMap[ltype] ?? 0
+
+    const pendingLeaves = await db.select().from(leaveRequests)
+      .where(and(
+        eq(leaveRequests.user_id, req.user.id),
+        eq(leaveRequests.leave_type, ltype),
+        eq(leaveRequests.status, 'pending')
+      ))
+    const pendingDays = pendingLeaves.reduce((sum, l) => sum + (l.days_count || 1), 0)
+    const available = (balanceMap[ltype] ?? 0) - pendingDays
+
     if (ltype !== 'unpaid' && days > available) {
       return res.status(400).json({ error: `رصيد الإجازة غير كافٍ. المتاح: ${available} يوم، المطلوب: ${days} يوم.` })
     }
 
     const conflicting = await db.select().from(leaveRequests)
       .where(and(
+        eq(leaveRequests.user_id, req.user.id),
         eq(leaveRequests.status, 'approved'),
         lte(leaveRequests.start_date, end_date),
         gte(leaveRequests.end_date, start_date)

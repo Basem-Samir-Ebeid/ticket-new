@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import path from 'path'
+import { initVapid } from './routes/push'
 
 import authRoutes from './routes/auth'
 import userRoutes from './routes/users'
@@ -19,6 +20,8 @@ import penaltyRoutes from './routes/penalties'
 import complaintRoutes from './routes/complaints'
 
 const app = express()
+
+initVapid()
 
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json({ limit: '10mb' }))

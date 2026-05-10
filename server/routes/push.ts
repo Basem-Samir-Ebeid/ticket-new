@@ -7,7 +7,10 @@ import { requireAuth } from '../auth'
 
 const router = Router()
 
-function initVapid() {
+let _vapidInitialized = false
+
+export function initVapid() {
+  if (_vapidInitialized) return true
   if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return false
   try {
     webpush.setVapidDetails(
@@ -15,6 +18,7 @@ function initVapid() {
       process.env.VAPID_PUBLIC_KEY,
       process.env.VAPID_PRIVATE_KEY
     )
+    _vapidInitialized = true
     return true
   } catch (e) {
     console.error('VAPID init failed:', e)
@@ -59,7 +63,7 @@ router.get('/vapid-public-key', (_req, res) => {
 })
 
 export async function sendPushToAdmins(title: string, body: string, url = '/') {
-  if (!initVapid()) return
+  if (!_vapidInitialized) return
   try {
     const adminProfiles = await db.select({ id: profiles.id, role: profiles.role }).from(profiles)
     const adminIds = adminProfiles.filter(p => p.role === 'admin' || p.role === 'super_admin').map(p => p.id)

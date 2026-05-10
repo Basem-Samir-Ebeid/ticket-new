@@ -1,0 +1,116 @@
+Please fix the following bugs found in this project:
+
+---
+
+## 🔴 BUG 1 — Attendance Correction Approval Does NOT Update Actual Attendance Record
+**File:** `server/routes/attendance.ts` — `PATCH /corrections/:id`
+
+When an admin approves an attendance correction request, the code only updates the `attendanceCorrections` table (status → approved), but **never updates the actual `loginTimes` record** with the corrected login/logout times.
+
+**Fix:** After setting `status = 'approved'`, check if `correction.requested_login` or `correction.requested_logout` exist, then update the corresponding `loginTimes` row for that `user_id` and `date`:
+```ts
+if (status === 'approved' && (correction.requested_login || correction.requested_logout)) {
+  const timeUpdates: any = {}
+  if (correction.requested_login) {
+    // Parse 'HH:MM' and combine with correction.date to build a full timestamp
+    timeUpdates.login_time = new Date(`${correction.date}T${correction.requested_login}:00`)
+  }
+  if (correction.requested_logout) {
+    timeUpdates.logout_time = new Date(`${correction.date}T${correction.requested_logout}:00`)
+  }
+  await db.update(loginTimes).set(timeUpdates)
+    .where(and(eq(loginTimes.user_id, correction.user_id), eq(loginTimes.date, correction.date)))
+}
+```
+
+---
+
+## 🔴 BUG 2 — Conflicting Leave Check Missing `user_id` Filter
+**File:** `server/routes/leaves.ts` — `POST /` (create leave request)
+
+The conflicting leave query checks for date overlaps across **all users**, not just the requesting user. This means `conflicting.length` will often be non-zero even when the current user has no conflicts, producing false conflict warnings in admin notifications.
+
+**Fix:** Add `eq(leaveRequests.user_id, req.user.id)` to the where clause:
+```ts
+const conflicting = await db.select().from(leaveRequests)
+  .where(and(
+    eq(leaveRequests.user_id, req.user.id),  // ← ADD THIS
+    eq(leaveRequests.status, 'approved'),
+    lte(leaveRequests.start_date, end_date),
+    gte(leaveRequests.end_date, start_date)
+  ))
+```
+
+---
+
+## 🔴 BUG 3 — Leave Balance Check Uses Raw Profile Balance (Possible Double-Check Inconsistency)
+**File:** `server/routes/leaves.ts` — `POST /`
+
+At submission time, the balance check reads `prof.leave_balance` from the `profiles` table. This value is only deducted when a leave is **approved** (not at submission). This is correct in theory, but it means a user can submit multiple pending leave requests that would exceed their balance — each one passes the check individually because the balance hasn't been deducted yet.
+
+**Fix:** Before checking the balance, sum up all `pending` leave days for the same user and type and subtract them:
+```ts
+const pendingLeaves = await db.select().from(leaveRequests)
+  .where(and(
+    eq(leaveRequests.user_id, req.user.id),
+    eq(leaveRequests.leave_type, ltype),
+    eq(leaveRequests.status, 'pending')
+  ))
+const pendingDays = pendingLeaves.reduce((sum, l) => sum + (l.days_count || 1), 0)
+const available = (balanceMap[ltype] ?? 0) - pendingDays
+```
+
+---
+
+## 🟡 BUG 4 — `api/index.js` is Dead Code / Conflicts With TypeScript Server
+**File:** `api/index.js`
+
+This file is a standalone Express app with its own DB connection, auth, and all routes duplicated. It's intended for Vercel serverless deployment. However, the project runs `server/index.ts` (TypeScript) via `npm run dev` and `npm run start`. The `api/index.js` is never imported and serves no purpose in the Replit environment. It also uses `@neondatabase/serverless` (Neon HTTP client) which is different from the `pg` pool used by the TypeScript server — this can cause confusion.
+
+**Fix:** Either:
+- Delete `api/index.js` if Vercel deployment is not needed, OR
+- Add a clear comment at the top of `api/index.js` that it is only for Vercel and is not used in Replit.
+
+---
+
+## 🟡 BUG 5 — Missing `NEON_DATABASE_URL` or `DATABASE_URL` Secret Causes Hard Crash on Start
+**File:** `server/db.ts`
+
+If neither env var is set, the server throws immediately with an unhandled error before any routes load. The `.replit` file does not set a default for these secrets.
+
+**Fix:** Make sure `NEON_DATABASE_URL` is set in Replit Secrets. Also, wrap the pool creation in a try/catch and log a helpful error instead of crashing:
+```ts
+if (!connectionString) {
+  console.error('[DB] FATAL: Set NEON_DATABASE_URL or DATABASE_URL in Replit Secrets')
+  process.exit(1)  // graceful exit with message instead of uncaught throw
+}
+```
+
+---
+
+## 🟡 BUG 6 — Push Notifications `initVapid()` Called On Every Request
+**File:** `server/routes/push.ts` — `sendPushToAdmins()`
+
+`initVapid()` calls `webpush.setVapidDetails(...)` on every single push notification send. This is wasteful and could cause issues. VAPID should be initialized once at server startup.
+
+**Fix:** Call `initVapid()` once when the server starts (in `server/index.ts` or `server/app.ts`) and cache the result. Remove the per-call `initVapid()` check inside `sendPushToAdmins`.
+
+---
+
+## 🟡 BUG 7 — `autoAssignConfig.ts` Uses File System for Config (Breaks on Replit Restarts)
+**File:** `server/autoAssignConfig.ts`
+
+Auto-assign rules are saved to `server/auto-assign-config.json`. On Replit, the filesystem can reset between deployments/restarts, causing all auto-assign rules to be lost silently.
+
+**Fix:** Move auto-assign config to the database, similar to how `officeSettings` is stored in the `office_settings` table. Create a new `auto_assign_rules` table in `shared/schema.ts` and migrate the read/write logic to use Drizzle ORM.
+
+---
+
+## 🟢 MINOR — `vercel.json` Present but Vercel Deployment Is Not Fully Configured
+**File:** `vercel.json`
+
+The `vercel.json` routes all requests to `api/index.js`, but the build config in `.replit` runs the TypeScript server. If Vercel deployment is desired, the TypeScript server needs to be adapted for serverless, or `api/index.js` needs to be kept in sync with all route changes.
+
+---
+
+Please fix bugs #1 through #4 as a priority — they directly affect core functionality (attendance corrections, leave management, and server startup). Bugs #5–#7 should be fixed next for stability.

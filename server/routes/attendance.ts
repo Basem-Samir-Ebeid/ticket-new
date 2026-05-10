@@ -506,6 +506,18 @@ router.patch('/corrections/:id', requireAuth as any, async (req: any, res) => {
       reviewed_at: new Date(),
     }).where(eq(attendanceCorrections.id, req.params.id)).returning()
 
+    if (correction && status === 'approved' && (correction.requested_login || correction.requested_logout)) {
+      const timeUpdates: any = {}
+      if (correction.requested_login) {
+        timeUpdates.login_time = new Date(`${correction.date}T${correction.requested_login}:00`)
+      }
+      if (correction.requested_logout) {
+        timeUpdates.logout_time = new Date(`${correction.date}T${correction.requested_logout}:00`)
+      }
+      await db.update(loginTimes).set(timeUpdates)
+        .where(and(eq(loginTimes.user_id, correction.user_id), eq(loginTimes.date, correction.date)))
+    }
+
     if (correction && correction.user_id) {
       const label = status === 'approved' ? '✅ تم قبول' : '❌ تم رفض'
       const [notif] = await db.insert(notifications).values({

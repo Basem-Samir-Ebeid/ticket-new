@@ -225,6 +225,14 @@ export const complaints = pgTable('complaints', {
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+export const autoAssignRules = pgTable('auto_assign_rules', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  category: text('category').notNull().unique(),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  user_name: text('user_name'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const attendanceCorrections = pgTable('attendance_corrections', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),

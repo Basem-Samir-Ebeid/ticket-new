@@ -1,3 +1,9 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// VERCEL SERVERLESS ONLY — This file is NOT used in Replit.
+// The Replit environment runs `server/index.ts` (TypeScript) via `npm run dev`.
+// This file exists solely for Vercel deployment and should not be modified
+// as part of normal development on Replit.
+// ─────────────────────────────────────────────────────────────────────────────
 import express from 'express'
 import cors from 'cors'
 import bcrypt from 'bcryptjs'

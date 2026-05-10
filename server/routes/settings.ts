@@ -302,7 +302,7 @@ router.post('/github-sync/test', requireAuth as any, async (req: any, res) => {
 router.get('/auto-assign', requireAuth as any, async (req: any, res) => {
   try {
     if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
-    res.json(getAutoAssignConfig())
+    res.json(await getAutoAssignConfig())
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to load auto-assign rules' })
   }
@@ -316,7 +316,7 @@ router.post('/auto-assign', requireAuth as any, async (req: any, res) => {
     const cleaned = rules
       .filter((r: any) => r.category?.trim() && r.user_id?.trim())
       .map((r: any) => ({ category: r.category.trim(), user_id: r.user_id.trim(), user_name: r.user_name || '' }))
-    const config = saveAutoAssignConfig({ rules: cleaned })
+    const config = await saveAutoAssignConfig({ rules: cleaned })
     res.json(config)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to save auto-assign rules' })
