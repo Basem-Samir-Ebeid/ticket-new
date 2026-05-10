@@ -169,6 +169,7 @@ export const api = {
   getWhatsAppSettings: () => request('GET', '/settings/whatsapp'),
   saveWhatsAppSettings: (data) => request('POST', '/settings/whatsapp', data),
   testWhatsAppSettings: (data) => request('POST', '/settings/whatsapp/test', data),
+  testUserWhatsApp: (userId) => request('POST', `/users/${userId}/test-whatsapp`),
 
   // GitHub sync status
   getGithubSyncStatus: () => request('GET', '/github-sync-status'),

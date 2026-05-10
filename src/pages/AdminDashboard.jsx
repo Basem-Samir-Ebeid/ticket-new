@@ -2129,11 +2129,20 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">🔑 CallMeBot API Key</label>
                     <input value={userForm.whatsapp_apikey} onChange={e=>setUserForm(f=>({...f,whatsapp_apikey:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="أدخل الـ API key الخاص بالمستخدم" dir="ltr" />
+                    <p className="text-[10px] text-slate-600 mt-1">للحصول على الـ API Key: ابعت <span className="text-emerald-500 font-mono">I allow callmebot to send me messages</span> على واتساب للرقم <span className="text-emerald-500 font-mono">+34 644 58 66 60</span></p>
                   </div>
                 </div>
 
-                <div className="flex gap-2 pt-1">
+                <div className="flex gap-2 pt-1 flex-wrap">
                   <button type="submit" disabled={loading || uploadingPic} className="btn-primary disabled:opacity-50 text-sm px-5 py-2">{uploadingPic ? 'جاري الرفع...' : loading ? 'جاري الحفظ...' : 'حفظ التغييرات'}</button>
+                  <button type="button" onClick={async()=>{
+                    if(!editingUser?.id){return}
+                    try{
+                      setMsg('جاري الإرسال...')
+                      const r=await api.testUserWhatsApp(editingUser.id)
+                      setMsg('✅ '+r.message)
+                    }catch(e){setMsg('❌ '+e.message)}
+                  }} className="text-sm px-4 py-2 rounded-xl border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 transition-all">📱 اختبار واتساب</button>
                   <button type="button" onClick={()=>{setEditingUser(null);setProfilePicFile(null)}} className="btn-ghost text-sm px-4 py-2">إلغاء</button>
                 </div>
               </form>

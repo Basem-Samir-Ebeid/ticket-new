@@ -5,6 +5,7 @@ import { profiles, sessionRevocations, tickets, loginTimes, leaveRequests, asset
 import { eq, desc, and, gte } from 'drizzle-orm'
 import { requireAuth, requireAdmin } from '../auth'
 import { broadcast } from '../ws'
+import { sendWhatsAppToPhone } from '../whatsappConfig'
 
 const router = Router()
 
@@ -152,6 +153,33 @@ router.post('/:id/reset-password', requireAuth as any, requireAdmin as any, asyn
   } catch (err: any) {
     console.error('POST /users/:id/reset-password error:', err)
     res.status(500).json({ error: err?.message || 'Failed to reset password' })
+  }
+})
+
+router.post('/:id/test-whatsapp', requireAuth as any, requireAdmin as any, async (req: any, res) => {
+  try {
+    const [user] = await db.select({
+      whatsapp_phone: profiles.whatsapp_phone,
+      whatsapp_apikey: profiles.whatsapp_apikey,
+      full_name: profiles.full_name,
+      email: profiles.email,
+    }).from(profiles).where(eq(profiles.id, req.params.id)).limit(1)
+
+    if (!user) return res.status(404).json({ error: 'User not found' })
+    if (!user.whatsapp_phone || !user.whatsapp_apikey) {
+      return res.status(400).json({ error: 'هذا المستخدم لا يملك رقم واتساب أو API key محفوظ' })
+    }
+
+    const name = user.full_name || user.email
+    await sendWhatsAppToPhone(
+      user.whatsapp_phone,
+      user.whatsapp_apikey,
+      `✅ Finest IT — اختبار ناجح!\nمرحباً ${name}، ستصلك إشعارات التيكتات والحضور والإجازات هنا.`
+    )
+    res.json({ ok: true, message: 'تم إرسال رسالة اختبار! تحقق من واتساب.' })
+  } catch (err: any) {
+    console.error('POST /users/:id/test-whatsapp error:', err)
+    res.status(500).json({ error: err?.message || 'فشل إرسال رسالة الاختبار' })
   }
 })
 
