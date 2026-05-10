@@ -66,6 +66,9 @@ export function AuthProvider({ children }) {
       setProfile(prof)
       connectWS(token, handleWsEvent)
       requestNotificationPermission()
+      if (prof.role === 'admin' || prof.role === 'super_admin') {
+        registerPushSubscription()
+      }
     } catch {
       localStorage.removeItem('auth_token')
     }

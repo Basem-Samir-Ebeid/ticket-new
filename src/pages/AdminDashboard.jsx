@@ -100,6 +100,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [testingSmtp, setTestingSmtp] = useState(false)
   const [smtpTestResult, setSmtpTestResult] = useState(null)
   const [smtpLoaded, setSmtpLoaded] = useState(false)
+  const [waForm, setWaForm] = useState({ phone: '', apikey: '', enabled: false })
+  const [waMsg, setWaMsg] = useState('')
+  const [savingWa, setSavingWa] = useState(false)
+  const [testingWa, setTestingWa] = useState(false)
+  const [waTestResult, setWaTestResult] = useState(null)
+  const [waLoaded, setWaLoaded] = useState(false)
   const [monthlyReport, setMonthlyReport] = useState(null)
   const [monthlyReportYear, setMonthlyReportYear] = useState(new Date().getFullYear())
   const [monthlyReportMonth, setMonthlyReportMonth] = useState(new Date().getMonth() + 1)
@@ -441,6 +447,34 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       setSmtpTestResult({ ok: true, message: data.message })
     } catch (err) { setSmtpTestResult({ ok: false, message: err.message }) }
     setTestingSmtp(false)
+  }
+
+  async function fetchWhatsAppSettings() {
+    try {
+      const data = await api.getWhatsAppSettings()
+      setWaForm({ phone: data.phone || '', apikey: '', enabled: data.enabled || false })
+    } catch {}
+    setWaLoaded(true)
+  }
+
+  async function handleSaveWhatsApp(e) {
+    e.preventDefault()
+    setSavingWa(true); setWaMsg(''); setWaTestResult(null)
+    try {
+      await api.saveWhatsAppSettings(waForm)
+      setWaMsg('✓ تم حفظ إعدادات واتساب!')
+      setWaForm(f => ({ ...f, apikey: '' }))
+    } catch (err) { setWaMsg('Error: ' + err.message) }
+    setSavingWa(false)
+  }
+
+  async function handleTestWhatsApp() {
+    setTestingWa(true); setWaTestResult(null); setWaMsg('')
+    try {
+      const data = await api.testWhatsAppSettings({})
+      setWaTestResult({ ok: true, message: data.message })
+    } catch (err) { setWaTestResult({ ok: false, message: err.message }) }
+    setTestingWa(false)
   }
 
   async function fetchMonthlyReport() {
@@ -922,7 +956,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   ]
   function handleAdminTabChange(t) {
     setTab(t); setSelectedTicket(null)
-    if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings(); fetchSmtpSettings(); fetchAutoAssignRules() }
+    if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings(); fetchSmtpSettings(); fetchWhatsAppSettings(); fetchAutoAssignRules() }
     if (t === 'attendance') { fetchLiveAttendance(); fetchAttendanceCorrections() }
     if (t === 'leave') { fetchLeaveCalendar(); fetchLeaveReport() }
   }
@@ -3126,6 +3160,52 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 <div className="flex gap-2 flex-wrap">
                   <button type="submit" disabled={savingSmtp} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{savingSmtp ? 'Saving...' : 'Save Settings'}</button>
                   <button type="button" onClick={handleTestSmtp} disabled={testingSmtp||!smtpForm.host} className="btn-ghost disabled:opacity-50 text-sm px-4 py-2">{testingSmtp ? 'Testing...' : 'Test Connection'}</button>
+                </div>
+              </form>
+            </div>
+
+            {/* WhatsApp Notifications */}
+            <div className="glass-card rounded-2xl p-6 animate-fadeIn" style={{border:'1px solid rgba(37,211,102,0.15)'}}>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(37,211,102,0.15)', border:'1px solid rgba(37,211,102,0.25)'}}>
+                  <svg className="w-5 h-5" style={{color:'#25d366'}} fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold text-lg">WhatsApp Notifications</h2>
+                  <p className="text-slate-400 text-xs">استقبل رسائل واتساب فورية عند وصول تكيت جديد</p>
+                </div>
+              </div>
+
+              {/* Setup instructions */}
+              <div className="mb-5 p-4 rounded-xl text-xs space-y-1.5" style={{background:'rgba(37,211,102,0.06)', border:'1px solid rgba(37,211,102,0.15)'}}>
+                <p className="text-emerald-400 font-semibold mb-2">خطوات التفعيل (مجاني عبر CallMeBot):</p>
+                <p className="text-slate-400">١. أضف الرقم <span className="text-white font-mono">+34 644 58 66 60</span> في جهات اتصالك</p>
+                <p className="text-slate-400">٢. ابعت لهذا الرقم على واتساب: <span className="text-white font-mono">I allow callmebot to send me messages</span></p>
+                <p className="text-slate-400">٣. هيوصلك رد برقم الـ API key — اكتبه في الحقل أدناه</p>
+              </div>
+
+              <form onSubmit={handleSaveWhatsApp} className="space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <input type="checkbox" checked={waForm.enabled} onChange={e=>setWaForm(f=>({...f,enabled:e.target.checked}))} className="w-4 h-4 rounded" style={{accentColor:'#25d366'}} />
+                  <span className="text-slate-300 text-sm">تفعيل إشعارات واتساب</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">رقم الواتساب (مع كود الدولة)</label>
+                    <input value={waForm.phone} onChange={e=>setWaForm(f=>({...f,phone:e.target.value}))} placeholder="+201012345678" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">API Key (من CallMeBot)</label>
+                    <input value={waForm.apikey} onChange={e=>setWaForm(f=>({...f,apikey:e.target.value}))} placeholder="مثال: 1234567" className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none placeholder-slate-600 transition-all" style={{direction:'ltr'}} />
+                  </div>
+                </div>
+                {waMsg && <p className={`text-sm rounded-xl px-3 py-2 ${waMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{waMsg}</p>}
+                {waTestResult && <p className={`text-sm rounded-xl px-3 py-2 ${waTestResult.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>{waTestResult.ok ? '✓ ' : '✗ '}{waTestResult.message}</p>}
+                <div className="flex gap-2 flex-wrap">
+                  <button type="submit" disabled={savingWa} className="text-sm px-4 py-2 rounded-xl font-medium text-white disabled:opacity-50 transition-all" style={{background:'rgba(37,211,102,0.2)', border:'1px solid rgba(37,211,102,0.3)'}}>{savingWa ? 'جاري الحفظ...' : 'حفظ الإعدادات'}</button>
+                  <button type="button" onClick={handleTestWhatsApp} disabled={testingWa||!waForm.phone} className="btn-ghost disabled:opacity-50 text-sm px-4 py-2">{testingWa ? 'جاري الإرسال...' : 'إرسال رسالة تجريبية'}</button>
                 </div>
               </form>
             </div>

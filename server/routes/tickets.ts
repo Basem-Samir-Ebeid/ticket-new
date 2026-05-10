@@ -5,6 +5,7 @@ import { eq, and, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { sendPushToAdmins } from './push'
+import { sendWhatsAppNotification } from '../whatsappConfig'
 import { findAutoAssignUser } from '../autoAssignConfig'
 import {
   notifyAdminsNewTicket,
@@ -174,6 +175,7 @@ router.post('/', requireAuth as any, async (req: any, res) => {
         `${linkedAsset.name}: ${title}`,
         '/'
       )
+      sendWhatsAppNotification(`🔧 تذكرة عاجلة — جهاز تحت الصيانة\nالجهاز: ${linkedAsset.name}\nالعنوان: ${title}\nأنشأها: ${creatorName}`).catch(() => {})
     } else if (is_request) {
       for (const admin of adminTargets) {
         const [notif] = await db.insert(notifications).values({
@@ -184,8 +186,10 @@ router.post('/', requireAuth as any, async (req: any, res) => {
         broadcast(admin.id, 'notification', notif)
       }
       sendPushToAdmins('📝 New Ticket Request', title, '/')
+      sendWhatsAppNotification(`📝 طلب جديد على Finest IT\nالعنوان: ${title}\nأنشأه: ${creatorName}`).catch(() => {})
     } else {
       sendPushToAdmins('🎫 New Ticket', title, '/')
+      sendWhatsAppNotification(`🎫 تكيت جديد على Finest IT\nالعنوان: ${title}\nأنشأه: ${creatorName}`).catch(() => {})
     }
 
     notifyAdminsNewTicket(ticket, creatorName).catch(() => {})

@@ -3,6 +3,7 @@ import { requireAuth } from '../auth'
 import { getOfficeConfig, saveOfficeConfig } from '../officeConfig'
 import { getGitHubSyncConfig, saveGitHubSyncConfig } from '../githubSyncConfig'
 import { getSmtpConfig, saveSmtpConfig } from '../smtpConfig'
+import { getWhatsAppConfig, saveWhatsAppConfig, sendWhatsAppNotification } from '../whatsappConfig'
 import { getAutoAssignConfig, saveAutoAssignConfig } from '../autoAssignConfig'
 import { db } from '../db'
 import { settingsLog } from '../../shared/schema'
@@ -294,6 +295,49 @@ router.post('/github-sync/test', requireAuth as any, async (req: any, res) => {
   } catch (err: any) {
     console.error('POST /github-sync/test error:', err)
     res.status(500).json({ error: err?.message || 'Test connection failed' })
+  }
+})
+
+// ─── WhatsApp Settings ────────────────────────────────────────────────────────
+
+router.get('/whatsapp', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const config = getWhatsAppConfig()
+    res.json({ phone: config.phone, apikey: config.apikey ? '••••••••' : '', enabled: config.enabled })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to load WhatsApp settings' })
+  }
+})
+
+router.post('/whatsapp', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { phone, apikey, enabled } = req.body
+    const existing = getWhatsAppConfig()
+    const updates: any = {}
+    if (phone !== undefined) updates.phone = String(phone).trim().replace(/\s/g, '')
+    if (apikey !== undefined && apikey !== '••••••••') updates.apikey = String(apikey).trim()
+    else updates.apikey = existing.apikey
+    if (enabled !== undefined) updates.enabled = Boolean(enabled)
+    const saved = saveWhatsAppConfig(updates)
+    res.json({ phone: saved.phone, apikey: saved.apikey ? '••••••••' : '', enabled: saved.enabled })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to save WhatsApp settings' })
+  }
+})
+
+router.post('/whatsapp/test', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const config = getWhatsAppConfig()
+    if (!config.phone || !config.apikey) {
+      return res.status(400).json({ error: 'Phone number and API key are required' })
+    }
+    await sendWhatsAppNotification('✅ Finest IT — اختبار ناجح! ستصلك إشعارات التكيتات الجديدة هنا.')
+    res.json({ ok: true, message: 'Test message sent! Check your WhatsApp.' })
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to send test message' })
   }
 })
 

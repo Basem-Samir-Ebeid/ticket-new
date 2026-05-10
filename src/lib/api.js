@@ -165,6 +165,11 @@ export const api = {
   saveSmtpSettings: (data) => request('POST', '/settings/smtp', data),
   testSmtpSettings: (data) => request('POST', '/settings/smtp/test', data),
 
+  // WhatsApp Settings
+  getWhatsAppSettings: () => request('GET', '/settings/whatsapp'),
+  saveWhatsAppSettings: (data) => request('POST', '/settings/whatsapp', data),
+  testWhatsAppSettings: (data) => request('POST', '/settings/whatsapp/test', data),
+
   // GitHub sync status
   getGithubSyncStatus: () => request('GET', '/github-sync-status'),
 
