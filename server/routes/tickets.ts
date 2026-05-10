@@ -5,7 +5,8 @@ import { eq, and, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { sendPushToAdmins } from './push'
-import { sendWhatsAppNotification, sendWhatsAppToUser } from '../whatsappConfig'
+import { sendWhatsAppNotification } from '../whatsappConfig'
+import { sendWhatsAppToUser } from '../whatsapp'
 import { findAutoAssignUser } from '../autoAssignConfig'
 import {
   notifyAdminsNewTicket,
@@ -195,6 +196,9 @@ router.post('/', requireAuth as any, async (req: any, res) => {
     notifyAdminsNewTicket(ticket, creatorName).catch(() => {})
     if (assigned_to) {
       notifyAssigned(ticket, assigned_to, creatorName).catch(() => {})
+      const priorityLabel: Record<string, string> = { low: 'منخفضة', medium: 'متوسطة', high: 'عالية', urgent: 'عاجلة' }
+      const waMsg = `🎫 تم تعيين تذكرة لك\n\nالعنوان: ${ticket.title}\nالأولوية: ${priorityLabel[ticket.priority] || ticket.priority}\nبواسطة: ${creatorName}\n\nيرجى متابعة التذكرة في النظام.`
+      sendWhatsAppToUser(assigned_to, waMsg).catch(() => {})
     }
 
     broadcastAll('ticket_update', { action: 'created', ticket_id: ticket.id, is_request: ticket.is_request })
@@ -308,7 +312,9 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
 
     if (assigned_to !== undefined && assigned_to && assigned_to !== req.user.id) {
       notifyAssigned(ticket, assigned_to, changerName).catch(() => {})
-      sendWhatsAppToUser(assigned_to, `🎫 تم تعيين تيكت جديد لك\nالعنوان: "${ticket.title}"\nمن قِبل: ${changerName}`).catch(() => {})
+      const priorityLabel: Record<string, string> = { low: 'منخفضة', medium: 'متوسطة', high: 'عالية', urgent: 'عاجلة' }
+      const waMsg = `🎫 تم تعيين تذكرة لك\n\nالعنوان: ${ticket.title}\nالأولوية: ${priorityLabel[ticket.priority] || ticket.priority}\nبواسطة: ${changerName}\n\nيرجى متابعة التذكرة في النظام.`
+      sendWhatsAppToUser(assigned_to, waMsg).catch(() => {})
     }
 
     broadcastAll('ticket_update', { action: 'updated', ticket_id: ticket.id, status: ticket.status })

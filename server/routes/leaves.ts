@@ -4,7 +4,7 @@ import { leaveRequests, profiles, notifications } from '../../shared/schema'
 import { eq, desc, or, and, gte, lte } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
-import { sendWhatsAppToUser } from '../whatsappConfig'
+import { sendWhatsAppToUser } from '../whatsapp'
 
 const router = Router()
 
@@ -269,7 +269,8 @@ router.patch('/:id/approve', requireAuth as any, async (req: any, res) => {
         message: `✅ تمت الموافقة على إجازتك ${typeLabel[ltype] || ltype} (${leave.start_date} → ${leave.end_date} | ${days} أيام)`,
       }).returning()
       broadcast(leave.user_id, 'notification', notif)
-      sendWhatsAppToUser(leave.user_id, `✅ تمت الموافقة على إجازتك\nالنوع: ${typeLabel[ltype] || ltype}\nمن ${leave.start_date} إلى ${leave.end_date} (${days} أيام)`).catch(() => {})
+      const waMsg = `✅ تمت الموافقة على إجازتك\n\nنوع الإجازة: ${typeLabel[ltype] || ltype}\nمن: ${leave.start_date}\nإلى: ${leave.end_date}\nعدد الأيام: ${days}\n\nنتمنى لك إجازة سعيدة! 🌴`
+      sendWhatsAppToUser(leave.user_id, waMsg).catch(() => {})
       broadcastAll('leave_update', { action: 'approved', leave_id: leave.id })
     }
 
