@@ -2593,7 +2593,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                                       <span className="text-slate-500 text-xs">متوسط الأوفر/يوم: <span className={`font-semibold ${otColor(otAvg)}`}>{fmtMin(otAvg)}</span></span>
                                     </div>
                                     <div className="space-y-1 max-h-64 overflow-y-auto">
-                                      {emp.day_records.map(day => (
+                                      {(emp.day_records || []).map(day => (
                                         <div key={day.date} className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-white/3 transition-colors">
                                           <span className="text-slate-400 text-xs w-24 flex-shrink-0">{new Date(day.date + 'T12:00:00').toLocaleDateString('ar-EG', {weekday:'short', day:'numeric', month:'short'})}</span>
                                           <span className="text-slate-300 text-xs w-14 flex-shrink-0">{day.login_time ? new Date(day.login_time).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : '—'}</span>

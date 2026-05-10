@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import 'leaflet/dist/leaflet.css'
 
 const DEFAULT_LAT = 30.0803897
 const DEFAULT_LNG = 31.3524335
