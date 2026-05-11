@@ -860,6 +860,15 @@ app.post('/api/tickets', requireAuth, async (req, res) => {
       sendPushToAdmins('🎫 New Ticket', title, '/').catch(() => {})
       sendWhatsAppToAdmins(`🎫 تيكت جديد من ${creatorName}: "${title}"`).catch(() => {})
     }
+
+    // Notify assigned user
+    if (assigned_to) {
+      const priorityLabel = { low: 'منخفضة', medium: 'متوسطة', high: 'عالية', urgent: 'عاجلة' }
+      await db.query('INSERT INTO notifications (user_id, ticket_id, message) VALUES ($1,$2,$3)',
+        [assigned_to, ticket.id, `🎫 تم تعيين تذكرة لك: "${title}"`])
+      sendWhatsAppToUserId(assigned_to, `🎫 تم تعيين تذكرة لك\nالعنوان: "${title}"\nالأولوية: ${priorityLabel[priority] || priority}\nبواسطة: ${creatorName}`).catch(() => {})
+    }
+
     res.json(ticket)
   } catch (err) {
     console.error('[POST /tickets] Error:', err.message)
