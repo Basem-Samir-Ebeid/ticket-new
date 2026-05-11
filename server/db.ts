@@ -11,10 +11,11 @@ if (!connectionString) {
 
 const isNeon = connectionString.includes('neon.tech')
 const requiresSsl = isNeon || connectionString.includes('sslmode=require')
+const isLocal = connectionString.includes('helium') || connectionString.includes('localhost') || connectionString.includes('127.0.0.1')
 
 export const pool = new Pool({
   connectionString,
-  ssl: requiresSsl ? { rejectUnauthorized: false } : false,
+  ssl: requiresSsl && !isLocal ? { rejectUnauthorized: false } : false,
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
