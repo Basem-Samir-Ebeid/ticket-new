@@ -891,6 +891,16 @@ app.patch('/api/tickets/:id', requireAuth, async (req, res) => {
     values.push(req.params.id)
     const { rows } = await getPool().query(`UPDATE tickets SET ${fields.join(',')} WHERE id=$${idx} RETURNING *`, values)
     if (!rows[0]) return res.status(404).json({ error: 'Ticket not found' })
+    if (status !== undefined && rows[0]) {
+      const ticket = rows[0]
+      const statusLabel = status === 'solved' ? '✅ تم الحل' : status === 'pending' ? '🟡 معلق' : '🔵 مفتوح'
+      if (ticket.created_by && ticket.created_by !== req.user.id)
+        sendWhatsAppToUserId(ticket.created_by, `${statusLabel}\nالتيكت: "${ticket.title}"`).catch(() => {})
+      if (ticket.assigned_to && ticket.assigned_to !== req.user.id)
+        sendWhatsAppToUserId(ticket.assigned_to, `${statusLabel}\nالتيكت: "${ticket.title}"`).catch(() => {})
+    }
+    if (assigned_to !== undefined && assigned_to && assigned_to !== req.user.id)
+      sendWhatsAppToUserId(assigned_to, `🎫 تم تعيين تذكرة لك\nالعنوان: "${rows[0].title}"`).catch(() => {})
     res.json(rows[0])
   } catch (err) {
     console.error('[PATCH /tickets/:id] Error:', err.message)
@@ -919,6 +929,7 @@ app.post('/api/tickets/:id/accept', requireAuth, async (req, res) => {
     if (ticket?.created_by) {
       await db.query('INSERT INTO notifications (user_id, ticket_id, message) VALUES ($1,$2,$3)',
         [ticket.created_by, ticket.id, `✅ Your ticket request "${ticket.title}" has been accepted and assigned.`])
+      sendWhatsAppToUserId(ticket.created_by, `✅ تم قبول طلبك\nالتيكت: "${ticket.title}"`).catch(() => {})
     }
     res.json(ticket)
   } catch (err) {
@@ -934,6 +945,7 @@ app.post('/api/tickets/:id/refuse', requireAuth, async (req, res) => {
     if (ticket?.created_by) {
       await db.query('INSERT INTO notifications (user_id, ticket_id, message) VALUES ($1,$2,$3)',
         [ticket.created_by, ticket.id, `❌ Your ticket request "${ticket.title}" has been refused by the admin.`])
+      sendWhatsAppToUserId(ticket.created_by, `❌ تم رفض طلبك\nالتيكت: "${ticket.title}"`).catch(() => {})
     }
     res.json(ticket)
   } catch (err) {
@@ -967,10 +979,12 @@ app.post('/api/tickets/:id/replies', requireAuth, async (req, res) => {
     if (ticket?.created_by && ticket.created_by !== req.user.id) {
       await db.query('INSERT INTO notifications (user_id, ticket_id, message) VALUES ($1,$2,$3)',
         [ticket.created_by, ticket.id, `New reply on ticket: ${ticket.title}`])
+      sendWhatsAppToUserId(ticket.created_by, `💬 رد جديد على تيكتك: "${ticket.title}"`).catch(() => {})
     }
     if (ticket?.assigned_to && ticket.assigned_to !== req.user.id) {
       await db.query('INSERT INTO notifications (user_id, ticket_id, message) VALUES ($1,$2,$3)',
         [ticket.assigned_to, ticket.id, `New reply on ticket: ${ticket.title}`])
+      sendWhatsAppToUserId(ticket.assigned_to, `💬 رد جديد على التيكت: "${ticket.title}"`).catch(() => {})
     }
     res.json(reply)
   } catch (err) {

@@ -1,0 +1,38 @@
+Please fix the WhatsApp notifications in `api/index.js` (the Vercel entry point). Several notification triggers exist in `server/routes/tickets.ts` but are missing from `api/index.js`. Add the following:
+
+1. **PATCH /api/tickets/:id** — After updating the ticket, if `status` changed, send WhatsApp to the ticket creator and assigned user (excluding the person who made the change):
+```js
+if (status !== undefined && rows[0]) {
+  const ticket = rows[0]
+  const statusLabel = status === 'solved' ? '✅ تم الحل' : status === 'pending' ? '🟡 معلق' : '🔵 مفتوح'
+  if (ticket.created_by && ticket.created_by !== req.user.id)
+    sendWhatsAppToUserId(ticket.created_by, `${statusLabel}\nالتيكت: "${ticket.title}"`).catch(() => {})
+  if (ticket.assigned_to && ticket.assigned_to !== req.user.id)
+    sendWhatsAppToUserId(ticket.assigned_to, `${statusLabel}\nالتيكت: "${ticket.title}"`).catch(() => {})
+}
+```
+Also, if `assigned_to` changed, send WhatsApp to the newly assigned user:
+```js
+if (assigned_to !== undefined && assigned_to && assigned_to !== req.user.id)
+  sendWhatsAppToUserId(assigned_to, `🎫 تم تعيين تذكرة لك\nالعنوان: "${rows[0].title}"`).catch(() => {})
+```
+
+2. **POST /api/tickets/:id/accept** — After accepting, send WhatsApp to the ticket creator:
+```js
+sendWhatsAppToUserId(ticket.created_by, `✅ تم قبول طلبك\nالتيكت: "${ticket.title}"`).catch(() => {})
+```
+
+3. **POST /api/tickets/:id/refuse** — After refusing, send WhatsApp to the ticket creator:
+```js
+sendWhatsAppToUserId(ticket.created_by, `❌ تم رفض طلبك\nالتيكت: "${ticket.title}"`).catch(() => {})
+```
+
+4. **POST /api/tickets/:id/replies** — After inserting the reply, send WhatsApp to the ticket creator and assigned user (excluding the replier):
+```js
+if (ticket?.created_by && ticket.created_by !== req.user.id)
+  sendWhatsAppToUserId(ticket.created_by, `💬 رد جديد على تيكتك: "${ticket.title}"`).catch(() => {})
+if (ticket?.assigned_to && ticket.assigned_to !== req.user.id)
+  sendWhatsAppToUserId(ticket.assigned_to, `💬 رد جديد على التيكت: "${ticket.title}"`).catch(() => {})
+```
+
+The helper functions `sendWhatsAppToUserId` and `sendWhatsAppToAdmins` already exist in `api/index.js` — just call them in the right places. Do not change any other logic.
