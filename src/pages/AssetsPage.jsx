@@ -101,6 +101,7 @@ const EMPTY_FORM = {
 export default function AssetsPage({ isSuperAdmin = false }) {
   const { profile } = useAuth()
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin'
+  const canManageAssets = isAdmin || profile?.can_view_assets
   const accent = isSuperAdmin ? '#f59e0b' : '#6366f1'
   const accentBg = isSuperAdmin ? 'rgba(245,158,11,0.12)' : 'rgba(99,102,241,0.12)'
   const accentBorder = isSuperAdmin ? 'rgba(245,158,11,0.25)' : 'rgba(99,102,241,0.25)'
@@ -312,7 +313,7 @@ export default function AssetsPage({ isSuperAdmin = false }) {
             </svg>
             Export CSV
           </button>
-          {isAdmin && (
+          {canManageAssets && (
             <button onClick={openCreate}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all ${btnPrimary}`}>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -395,9 +396,9 @@ export default function AssetsPage({ isSuperAdmin = false }) {
               <p className="text-slate-600 text-sm">
                 {search || filterType !== 'all' || filterStatus !== 'all' || filterAssigned !== 'all'
                   ? 'Try adjusting your filters'
-                  : isAdmin ? 'Add your first asset to get started' : 'No assets have been added yet'}
+                  : canManageAssets ? 'Add your first asset to get started' : 'No assets have been added yet'}
               </p>
-              {isAdmin && !search && filterType === 'all' && filterStatus === 'all' && (
+              {canManageAssets && !search && filterType === 'all' && filterStatus === 'all' && (
                 <button onClick={openCreate}
                   className={`mt-1 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${btnPrimary}`}>
                   Add First Asset
@@ -501,7 +502,7 @@ export default function AssetsPage({ isSuperAdmin = false }) {
                       {/* Warranty */}
                       <WarrantyBadge date={asset.warranty_expires} />
                       {/* Actions */}
-                      {isAdmin && (
+                      {canManageAssets && (
                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                           <button onClick={() => openEdit(asset)}
                             className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-all">
@@ -509,12 +510,14 @@ export default function AssetsPage({ isSuperAdmin = false }) {
                               <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
                             </svg>
                           </button>
-                          <button onClick={() => setConfirmDelete(asset)}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all">
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                            </svg>
-                          </button>
+                          {isAdmin && (
+                            <button onClick={() => setConfirmDelete(asset)}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all">
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -555,7 +558,7 @@ export default function AssetsPage({ isSuperAdmin = false }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  {isAdmin && (
+                  {canManageAssets && (
                     <>
                       <button onClick={() => openEdit(selectedAsset)}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 transition-all">

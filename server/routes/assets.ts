@@ -104,8 +104,16 @@ router.get('/:id', requireAuth as any, async (req: any, res) => {
   }
 })
 
-// POST /api/assets — create asset (admin only)
-router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) => {
+// Middleware: allow admins OR users with can_view_assets permission
+function requireAdminOrCanViewAssets(req: any, res: any, next: any) {
+  const p = req.profile
+  if (!p) return res.status(401).json({ error: 'Unauthorized' })
+  if (p.role === 'admin' || p.role === 'super_admin' || p.can_view_assets) return next()
+  return res.status(403).json({ error: 'Access denied' })
+}
+
+// POST /api/assets — create asset (admin or user with can_view_assets)
+router.post('/', requireAuth as any, requireAdminOrCanViewAssets, async (req: any, res) => {
   try {
     const {
       name, type, serial_number, brand, model, status, condition,
@@ -156,8 +164,8 @@ router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) 
   }
 })
 
-// PATCH /api/assets/:id — update asset (admin only)
-router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, res) => {
+// PATCH /api/assets/:id — update asset (admin or user with can_view_assets)
+router.patch('/:id', requireAuth as any, requireAdminOrCanViewAssets, async (req: any, res) => {
   try {
     const [existing] = await db.select().from(assets).where(eq(assets.id, req.params.id))
     if (!existing) return res.status(404).json({ error: 'Asset not found' })
