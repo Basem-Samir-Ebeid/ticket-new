@@ -100,6 +100,7 @@ async function ensureSchema() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS can_view_assets BOOLEAN NOT NULL DEFAULT false;
       ALTER TABLE profiles ADD COLUMN IF NOT EXISTS leave_balance INTEGER NOT NULL DEFAULT 14;
       ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sick_leave_balance INTEGER NOT NULL DEFAULT 7;
       ALTER TABLE profiles ADD COLUMN IF NOT EXISTS emergency_leave_balance INTEGER NOT NULL DEFAULT 3;
@@ -650,7 +651,7 @@ app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
 app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
   try {
     const {
-      email, password, full_name, role, can_view_attendance, profile_picture_url,
+      email, password, full_name, role, can_view_attendance, can_view_assets, profile_picture_url,
       department, job_title, phone, national_id, hire_date, birth_date,
       gender, address, employment_type, employee_code, direct_manager, notes, whatsapp_phone,
     } = req.body
@@ -662,14 +663,14 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
     const password_hash = await bcrypt.hash(password, 10)
     const { rows } = await db.query(
       `INSERT INTO profiles (
-        email, password_hash, plain_password, full_name, role, can_view_attendance, profile_picture_url,
+        email, password_hash, plain_password, full_name, role, can_view_attendance, can_view_assets, profile_picture_url,
         must_change_password, department, job_title, phone, national_id, hire_date, birth_date,
         gender, address, employment_type, employee_code, direct_manager, notes, whatsapp_phone
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
       RETURNING *`,
       [
         email.toLowerCase(), password_hash, password, full_name || null, role || 'employee',
-        can_view_attendance || false, profile_picture_url || null,
+        can_view_attendance || false, can_view_assets || false, profile_picture_url || null,
         department || null, job_title || null, phone || null, national_id || null,
         hire_date || null, birth_date || null, gender || null, address || null,
         employment_type || 'full_time', employee_code || null, direct_manager || null,
@@ -687,7 +688,7 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
 app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     const {
-      full_name, role, can_view_attendance, profile_picture_url, leave_balance,
+      full_name, role, can_view_attendance, can_view_assets, profile_picture_url, leave_balance,
       sick_leave_balance, emergency_leave_balance, work_start_hour, department,
       job_title, phone, national_id, hire_date, birth_date, gender, address,
       employment_type, employee_code, direct_manager, notes, whatsapp_phone,
@@ -697,6 +698,7 @@ app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
     if (full_name !== undefined) { fields.push(`full_name=$${idx++}`); values.push(full_name) }
     if (role !== undefined) { fields.push(`role=$${idx++}`); values.push(role) }
     if (can_view_attendance !== undefined) { fields.push(`can_view_attendance=$${idx++}`); values.push(can_view_attendance) }
+    if (can_view_assets !== undefined) { fields.push(`can_view_assets=$${idx++}`); values.push(can_view_assets) }
     if (profile_picture_url !== undefined) { fields.push(`profile_picture_url=$${idx++}`); values.push(profile_picture_url) }
     if (leave_balance !== undefined) { fields.push(`leave_balance=$${idx++}`); values.push(leave_balance) }
     if (sick_leave_balance !== undefined) { fields.push(`sick_leave_balance=$${idx++}`); values.push(sick_leave_balance) }
@@ -718,7 +720,7 @@ app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
     if (!fields.length) return res.status(400).json({ error: 'No fields to update' })
     values.push(req.params.id)
     const { rows } = await getPool().query(
-      `UPDATE profiles SET ${fields.join(',')} WHERE id=$${idx} RETURNING id, email, full_name, role, can_view_attendance, profile_picture_url, must_change_password, leave_balance, created_at`,
+      `UPDATE profiles SET ${fields.join(',')} WHERE id=$${idx} RETURNING id, email, full_name, role, can_view_attendance, can_view_assets, profile_picture_url, must_change_password, leave_balance, created_at`,
       values
     )
     if (!rows[0]) return res.status(404).json({ error: 'User not found' })

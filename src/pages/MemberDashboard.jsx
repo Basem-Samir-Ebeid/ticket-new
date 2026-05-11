@@ -6,6 +6,7 @@ import Sidebar from '../components/Sidebar'
 import StatusBadge from '../components/StatusBadge'
 import AttendanceButton from '../components/AttendanceButton'
 import FileAttachment from '../components/FileAttachment'
+import AssetsPage from './AssetsPage'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -360,6 +361,7 @@ export default function MemberDashboard() {
     { key: 'requests',    label: 'Requests',    icon: 'requests' },
     { key: 'leave',       label: 'Leave',       icon: 'leave' },
     ...(profile?.can_view_attendance ? [{ key: 'attendance', label: 'Attendance', icon: 'attendance' }] : []),
+    ...(profile?.can_view_assets ? [{ key: 'assets', label: 'Assets', icon: 'assets' }] : []),
   ]
 
   if (selectedTicket) {
@@ -930,6 +932,10 @@ export default function MemberDashboard() {
               ))}
             </div>
           </>
+        )}
+
+        {activeTab === 'assets' && profile?.can_view_assets && (
+          <AssetsPage />
         )}
 
         {activeTab === 'attendance' && profile?.can_view_attendance && (

@@ -10,6 +10,7 @@ export const profiles = pgTable('profiles', {
   profile_picture_url: text('profile_picture_url'),
   role: text('role').notNull().default('employee'),
   can_view_attendance: boolean('can_view_attendance').notNull().default(false),
+  can_view_assets: boolean('can_view_assets').notNull().default(false),
   must_change_password: boolean('must_change_password').notNull().default(true),
   leave_balance: integer('leave_balance').notNull().default(14),
   sick_leave_balance: integer('sick_leave_balance').notNull().default(7),

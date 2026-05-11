@@ -8,6 +8,7 @@ import AttendanceButton from '../components/AttendanceButton'
 import FileAttachment from '../components/FileAttachment'
 import PenaltiesPage from './PenaltiesPage'
 import ComplaintsPage from './ComplaintsPage'
+import AssetsPage from './AssetsPage'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -402,6 +403,7 @@ export default function EmployeeDashboard() {
     { key: 'penalties',   label: 'Penalties',   icon: 'performance' },
     { key: 'complaints',  label: 'Complaints',  icon: 'requests' },
     ...(profile?.can_view_attendance ? [{ key: 'attendance', label: 'Attendance', icon: 'attendance' }] : []),
+    ...(profile?.can_view_assets ? [{ key: 'assets', label: 'Assets', icon: 'assets' }] : []),
     { key: 'profile',     label: 'Profile',     icon: 'profile' },
   ]
 
@@ -1138,6 +1140,10 @@ export default function EmployeeDashboard() {
               </form>
             </div>
           </div>
+        )}
+
+        {activeTab === 'assets' && profile?.can_view_assets && (
+          <AssetsPage />
         )}
 
         {activeTab === 'attendance' && profile?.can_view_attendance && (
