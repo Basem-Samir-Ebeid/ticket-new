@@ -59,6 +59,23 @@ npm run dev
 
 ---
 
+## GitHub Auto-Sync
+
+Code is automatically pushed to GitHub after every Replit checkpoint (commit). No manual `git push` is needed.
+
+**How it works:**
+1. `npm install` (or `npm run dev`) runs `scripts/setup-git-hooks.sh`, which activates the post-commit hook
+2. Every checkpoint commit triggers `scripts/git-hooks/post-commit`
+3. The hook runs `scripts/github-sync.sh` in the background — pushes the current branch to `origin`
+4. Result is logged to `.github-sync-status`; push failures trigger an in-app alert to super-admins
+
+**Required:** `GITHUB_PERSONAL_ACCESS_TOKEN` or `GITHUB_TOKEN` must be set in environment secrets.
+
+**Manual sync:** `npm run sync:github`
+**Check status:** `npm run sync:status`
+
+---
+
 ## Features
 
 **Admin:**
