@@ -1553,7 +1553,8 @@ async function setAppSetting(key, value) {
 async function sendWhatsApp(phone, message) {
   try {
     const cfg = await getAppSetting('whatsapp')
-    if (!cfg.enabled || !cfg.greenapi_instance_id || !cfg.greenapi_token) return
+    const isEnabled = cfg.enabled === true || cfg.enabled === 'true' || cfg.enabled === 1
+    if (!isEnabled || !cfg.greenapi_instance_id || !cfg.greenapi_token) return
     const chatId = phone.replace(/\D/g, '') + '@c.us'
     const url = `https://api.green-api.com/waInstance${cfg.greenapi_instance_id}/sendMessage/${cfg.greenapi_token}`
     const r = await fetch(url, {
