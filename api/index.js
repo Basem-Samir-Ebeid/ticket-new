@@ -1480,7 +1480,7 @@ app.post('/api/users/:id/test-whatsapp', requireAuth, requireAdmin, async (req, 
     const { rows } = await getPool().query('SELECT whatsapp_phone, full_name, email FROM profiles WHERE id=$1', [req.params.id])
     if (!rows[0]) return res.status(404).json({ error: 'User not found' })
     if (!rows[0].whatsapp_phone) return res.status(400).json({ error: 'هذا المستخدم لا يملك رقم واتساب محفوظ — أضف رقمه أولاً' })
-    const cfg = await getAppSetting('whatsapp')
+    const cfg = await getAppSetting('whatsapp_config')
     if (!cfg.greenapi_instance_id || !cfg.greenapi_token) return res.status(400).json({ error: 'Green API غير مُفعَّل — يرجى إدخال Instance ID و Token في الإعدادات' })
     const chatId = rows[0].whatsapp_phone.replace(/\D/g, '') + '@c.us'
     const url = `https://api.green-api.com/waInstance${cfg.greenapi_instance_id}/sendMessage/${cfg.greenapi_token}`
@@ -1549,7 +1549,7 @@ async function setAppSetting(key, value) {
 // ── WHATSAPP HELPERS ───────────────────────────────────────────────────────────
 async function sendWhatsApp(phone, message) {
   try {
-    const cfg = await getAppSetting('whatsapp')
+    const cfg = await getAppSetting('whatsapp_config')
     console.log('[WA-DEBUG] cfg:', JSON.stringify(cfg))
     console.log('[WA-DEBUG] phone:', phone)
     const isEnabled = cfg.enabled === true || cfg.enabled === 'true' || cfg.enabled === 1
@@ -1599,7 +1599,7 @@ async function sendWhatsAppToAdmins(message) {
 app.get('/api/settings/whatsapp', requireAuth, async (req, res) => {
   try {
     if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
-    const cfg = await getAppSetting('whatsapp')
+    const cfg = await getAppSetting('whatsapp_config')
     res.json({ enabled: cfg.enabled || false, greenapi_instance_id: cfg.greenapi_instance_id || '', greenapi_token: cfg.greenapi_token ? '••••••••' : '', phone: cfg.phone || '' })
   } catch (err) { res.status(500).json({ error: 'Failed to load WhatsApp settings' }) }
 })
@@ -1607,14 +1607,14 @@ app.get('/api/settings/whatsapp', requireAuth, async (req, res) => {
 app.post('/api/settings/whatsapp', requireAuth, async (req, res) => {
   try {
     if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
-    const existing = await getAppSetting('whatsapp')
+    const existing = await getAppSetting('whatsapp_config')
     const { enabled, greenapi_instance_id, greenapi_token, phone } = req.body
     const updated = { ...existing }
     if (enabled !== undefined) updated.enabled = Boolean(enabled)
     if (greenapi_instance_id !== undefined) updated.greenapi_instance_id = String(greenapi_instance_id).trim()
     if (greenapi_token !== undefined && greenapi_token !== '••••••••') updated.greenapi_token = String(greenapi_token).trim()
     if (phone !== undefined) updated.phone = String(phone).trim().replace(/\s/g, '')
-    await setAppSetting('whatsapp', updated)
+    await setAppSetting('whatsapp_config', updated)
     res.json({ enabled: updated.enabled || false, greenapi_instance_id: updated.greenapi_instance_id || '', greenapi_token: updated.greenapi_token ? '••••••••' : '', phone: updated.phone || '' })
   } catch (err) { res.status(500).json({ error: 'Failed to save WhatsApp settings' }) }
 })
@@ -1622,7 +1622,7 @@ app.post('/api/settings/whatsapp', requireAuth, async (req, res) => {
 app.post('/api/settings/whatsapp/test', requireAuth, async (req, res) => {
   try {
     if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
-    const cfg = await getAppSetting('whatsapp')
+    const cfg = await getAppSetting('whatsapp_config')
     if (!cfg.greenapi_instance_id || !cfg.greenapi_token) return res.status(400).json({ error: 'يرجى إدخال Instance ID و API Token أولاً' })
     if (!cfg.phone) return res.status(400).json({ error: 'يرجى إدخال رقم واتساب للاختبار' })
     const chatId = cfg.phone.replace(/\D/g, '') + '@c.us'
