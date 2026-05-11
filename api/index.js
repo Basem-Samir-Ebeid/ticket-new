@@ -1556,9 +1556,16 @@ async function setAppSetting(key, value) {
 async function sendWhatsApp(phone, message) {
   try {
     const cfg = await getAppSetting('whatsapp')
+    console.log('[WA-DEBUG] cfg:', JSON.stringify(cfg))
+    console.log('[WA-DEBUG] phone:', phone)
     const isEnabled = cfg.enabled === true || cfg.enabled === 'true' || cfg.enabled === 1
-    if (!isEnabled || !cfg.greenapi_instance_id || !cfg.greenapi_token) return
+    console.log('[WA-DEBUG] isEnabled:', isEnabled, '| instance:', cfg.greenapi_instance_id, '| token exists:', !!cfg.greenapi_token)
+    if (!isEnabled || !cfg.greenapi_instance_id || !cfg.greenapi_token) {
+      console.log('[WA-DEBUG] Skipping — not enabled or missing config')
+      return
+    }
     const chatId = phone.replace(/\D/g, '') + '@c.us'
+    console.log('[WA-DEBUG] Sending to chatId:', chatId)
     const url = `https://api.green-api.com/waInstance${cfg.greenapi_instance_id}/sendMessage/${cfg.greenapi_token}`
     const r = await fetch(url, {
       method: 'POST',
@@ -1566,7 +1573,9 @@ async function sendWhatsApp(phone, message) {
       body: JSON.stringify({ chatId, message }),
       signal: AbortSignal.timeout(10000),
     })
-    if (!r.ok) console.error('[WA] sendWhatsApp error:', r.status)
+    const responseText = await r.text().catch(() => '')
+    console.log('[WA-DEBUG] Response:', r.status, responseText)
+    if (!r.ok) console.error('[WA] sendWhatsApp error:', r.status, responseText)
   } catch (err) {
     console.error('[WA] sendWhatsApp exception:', err.message)
   }
