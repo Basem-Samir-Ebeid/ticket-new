@@ -931,6 +931,11 @@ app.post('/api/tickets/:id/accept', requireAuth, async (req, res) => {
         [ticket.created_by, ticket.id, `✅ Your ticket request "${ticket.title}" has been accepted and assigned.`])
       sendWhatsAppToUserId(ticket.created_by, `✅ تم قبول طلبك\nالتيكت: "${ticket.title}"`).catch(() => {})
     }
+    if (assigned_to && assigned_to !== ticket.created_by) {
+      await db.query('INSERT INTO notifications (user_id, ticket_id, message) VALUES ($1,$2,$3)',
+        [assigned_to, ticket.id, `🎫 تم تعيين تذكرة لك: "${ticket.title}"`])
+      sendWhatsAppToUserId(assigned_to, `🎫 تم تعيين تذكرة لك\nالعنوان: "${ticket.title}"`).catch(() => {})
+    }
     res.json(ticket)
   } catch (err) {
     res.status(500).json({ error: 'Failed to accept ticket' })
