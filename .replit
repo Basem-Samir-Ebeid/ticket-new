@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "python-3.12", "web", "bash", "postgresql-16"]
+modules = ["nodejs-20", "python-3.12", "web", "bash"]
 
 [nix]
 channel = "stable-25_05"
@@ -51,11 +51,11 @@ externalPort = 80
 [userenv]
 
 [userenv.shared]
-JWT_SECRET = "it-ticket-secret-key-replit-2024"
 VAPID_PUBLIC_KEY = "BI4ssJCdC18uYW2SoIdbno-hC3dC0c6LOThFCOmBP7KWNCog0N1HtzS_uvIUip8vK2I8wkArbQP5tsxXvApN878"
 VAPID_EMAIL = "mailto:admin@ticketsystem.com"
-VAPID_PRIVATE_KEY = "k7RW0fZdsTM51ngFYmLKm4GLbIRZXXuTKtQYeQmdcsI"
 NODE_ENV = "development"
+JWT_SECRET = "it-ticket-secret-key-replit-2024"
+VAPID_PRIVATE_KEY = "k7RW0fZdsTM51ngFYmLKm4GLbIRZXXuTKtQYeQmdcsI"
 
 [deployment]
 deploymentTarget = "autoscale"
