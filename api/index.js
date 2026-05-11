@@ -343,12 +343,6 @@ async function ensureSchema() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
-      CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY,
-        value JSONB NOT NULL DEFAULT '{}',
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
       ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS days_count INTEGER NOT NULL DEFAULT 1;
 
       INSERT INTO office_settings (id, latitude, longitude, radius_meters)
@@ -1537,7 +1531,7 @@ app.post('/api/users/bulk-reset-leave', requireAuth, requireAdmin, async (req, r
 // ── APP SETTINGS HELPER ────────────────────────────────────────────────────────
 async function getAppSetting(key) {
   try {
-    const { rows } = await getPool().query('SELECT value FROM app_settings WHERE key=$1', [key])
+    const { rows } = await getPool().query('SELECT value FROM system_settings WHERE key=$1', [key])
     const raw = rows[0]?.value
     if (!raw) return {}
     if (typeof raw === 'object') return raw
@@ -1546,7 +1540,7 @@ async function getAppSetting(key) {
 }
 async function setAppSetting(key, value) {
   await getPool().query(
-    'INSERT INTO app_settings (key, value, updated_at) VALUES ($1,$2,NOW()) ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=NOW()',
+    'INSERT INTO system_settings (key, value, updated_at) VALUES ($1,$2,NOW()) ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=NOW()',
     [key, JSON.stringify(value)]
   )
   return value
