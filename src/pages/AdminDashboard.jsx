@@ -749,6 +749,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         full_name: userForm.full_name,
         role: userForm.role,
         can_view_attendance: userForm.can_view_attendance,
+        can_view_assets: userForm.can_view_assets,
         profile_picture_url,
         leave_balance: Number(userForm.leave_balance),
         sick_leave_balance: Number(userForm.sick_leave_balance),
