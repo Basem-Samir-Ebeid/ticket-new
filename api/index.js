@@ -1538,7 +1538,10 @@ app.post('/api/users/bulk-reset-leave', requireAuth, requireAdmin, async (req, r
 async function getAppSetting(key) {
   try {
     const { rows } = await getPool().query('SELECT value FROM app_settings WHERE key=$1', [key])
-    return rows[0]?.value || {}
+    const raw = rows[0]?.value
+    if (!raw) return {}
+    if (typeof raw === 'object') return raw
+    try { return JSON.parse(raw) } catch { return {} }
   } catch { return {} }
 }
 async function setAppSetting(key, value) {
