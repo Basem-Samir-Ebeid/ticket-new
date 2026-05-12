@@ -151,6 +151,7 @@ router.get('/live', requireAuth as any, async (req: any, res) => {
         logout_time: record?.logout_time || null,
         late_minutes: lateMinutes,
         overtime_minutes: overtimeMinutes,
+        attendance_type: record?.attendance_type || null,
       }
     })
 
@@ -167,15 +168,17 @@ router.get('/live', requireAuth as any, async (req: any, res) => {
 
 router.post('/login', requireAuth as any, async (req: any, res) => {
   try {
-    const { latitude, longitude } = req.body
+    const { latitude, longitude, attendance_type } = req.body
+    const isRemote = attendance_type === 'remote'
 
-    if (latitude == null || longitude == null) {
-      return res.status(400).json({ error: 'يجب إرسال الإحداثيات لتسجيل الحضور.' })
-    }
-
-    const geo = await checkGeofence(latitude, longitude, 'check-in')
-    if (!geo.allowed) {
-      return res.status(403).json({ error: geo.error })
+    if (!isRemote) {
+      if (latitude == null || longitude == null) {
+        return res.status(400).json({ error: 'يجب إرسال الإحداثيات لتسجيل الحضور.' })
+      }
+      const geo = await checkGeofence(latitude, longitude, 'check-in')
+      if (!geo.allowed) {
+        return res.status(403).json({ error: geo.error })
+      }
     }
 
     const today = getLocalDateString()
@@ -187,8 +190,9 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
     const [record] = await db.insert(loginTimes).values({
       user_id: req.user.id,
       date: today,
-      latitude: Number(latitude),
-      longitude: Number(longitude),
+      latitude: isRemote ? null : Number(latitude),
+      longitude: isRemote ? null : Number(longitude),
+      attendance_type: isRemote ? 'remote' : 'office',
     }).returning()
 
     const workStartHour = req.profile.work_start_hour || 9
@@ -223,7 +227,8 @@ router.post('/login', requireAuth as any, async (req: any, res) => {
 
     const loginTimeStr = new Date(record.login_time).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Cairo' })
     const lateNote = lateMinutes > 5 ? ` (متأخر ${lateMinutes} دقيقة)` : ''
-    sendWhatsAppToUser(req.user.id, `✅ تم تسجيل حضورك\nالوقت: ${loginTimeStr}${lateNote}\nالتاريخ: ${today}`).catch(() => {})
+    const typeNote = isRemote ? ' 🏠 عن بُعد' : ''
+    sendWhatsAppToUser(req.user.id, `✅ تم تسجيل حضورك${typeNote}\nالوقت: ${loginTimeStr}${lateNote}\nالتاريخ: ${today}`).catch(() => {})
     broadcastAll('attendance_update', { action: 'login', user_id: req.user.id, date: today })
     res.json({ ...record, late_minutes: lateMinutes })
   } catch (err: any) {
@@ -236,15 +241,6 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
   try {
     const { latitude, longitude } = req.body
 
-    if (latitude == null || longitude == null) {
-      return res.status(400).json({ error: 'يجب إرسال الإحداثيات لتسجيل الانصراف.' })
-    }
-
-    const geo = await checkGeofence(latitude, longitude, 'check-out')
-    if (!geo.allowed) {
-      return res.status(403).json({ error: geo.error })
-    }
-
     const today = getLocalDateString()
     const [existing] = await db.select().from(loginTimes)
       .where(and(eq(loginTimes.user_id, req.user.id), eq(loginTimes.date, today)))
@@ -252,10 +248,22 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
     if (!existing) return res.status(404).json({ error: 'No login record found for today' })
     if (existing.logout_time) return res.status(400).json({ error: 'Already signed off today' })
 
+    const isRemote = existing.attendance_type === 'remote'
+
+    if (!isRemote) {
+      if (latitude == null || longitude == null) {
+        return res.status(400).json({ error: 'يجب إرسال الإحداثيات لتسجيل الانصراف.' })
+      }
+      const geo = await checkGeofence(latitude, longitude, 'check-out')
+      if (!geo.allowed) {
+        return res.status(403).json({ error: geo.error })
+      }
+    }
+
     const [record] = await db.update(loginTimes).set({
       logout_time: new Date(),
-      logout_latitude: Number(latitude),
-      logout_longitude: Number(longitude),
+      logout_latitude: isRemote ? null : Number(latitude),
+      logout_longitude: isRemote ? null : Number(longitude),
     }).where(and(eq(loginTimes.user_id, req.user.id), eq(loginTimes.date, today))).returning()
 
     const totalMinutes = (new Date(record.logout_time!).getTime() - new Date(record.login_time).getTime()) / 60000

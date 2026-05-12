@@ -185,9 +185,22 @@ export default function EmployeeDashboard() {
     return true
   }
 
-  async function registerLogin() {
-    setLoggingIn(true)
+  async function registerLogin(type = 'office') {
+    setLoggingIn(type)
     setAttendanceError('')
+
+    if (type === 'remote') {
+      try {
+        await api.registerLogin(null, null, 'remote')
+        await checkTodayLogin()
+        setAttendanceError('')
+      } catch (e) {
+        setAttendanceError(e.message)
+      }
+      setLoggingIn(false)
+      return
+    }
+
     if (!navigator.geolocation) {
       setAttendanceError('الموقع الجغرافي غير مدعوم في هذا المتصفح.')
       setLoggingIn(false)
@@ -203,7 +216,7 @@ export default function EmployeeDashboard() {
           return
         }
         try {
-          await api.registerLogin(latitude, longitude)
+          await api.registerLogin(latitude, longitude, 'office')
           await checkTodayLogin()
           setAttendanceError('')
         } catch (e) {
@@ -648,10 +661,14 @@ export default function EmployeeDashboard() {
               <p className="text-[11px] text-slate-500 mb-2 uppercase tracking-widest font-semibold">Today's Attendance</p>
               {todayLogin ? (
                 <div className="space-y-1">
-                  <p className="text-white font-medium flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse-slow"></span>
-                    Check-in: {new Date(todayLogin.login_time).toLocaleTimeString()}
-                  </p>
+                    <p className="text-white font-medium">Check-in: {new Date(todayLogin.login_time).toLocaleTimeString()}</p>
+                    {todayLogin.attendance_type === 'remote'
+                      ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-500/20">🏠 عن بُعد</span>
+                      : <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-900/30 text-indigo-400 border border-indigo-500/20">🏢 مكتب</span>
+                    }
+                  </div>
                   <p className="text-slate-300 text-sm">
                     Check-out: {todayLogin.logout_time ? new Date(todayLogin.logout_time).toLocaleTimeString() : <span className="text-amber-400">Pending</span>}
                   </p>

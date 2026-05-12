@@ -103,6 +103,7 @@ export const loginTimes = pgTable('login_times', {
   longitude: doublePrecision('longitude'),
   logout_latitude: doublePrecision('logout_latitude'),
   logout_longitude: doublePrecision('logout_longitude'),
+  attendance_type: text('attendance_type').notNull().default('office'),
 })
 
 export const leaveRequests = pgTable('leave_requests', {

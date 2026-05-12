@@ -668,9 +668,20 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     setSubmittingLeave(false)
   }
 
-  async function registerLogin() {
-    setLoggingIn(true)
+  async function registerLogin(type = 'office') {
+    setLoggingIn(type)
     setMsg('')
+
+    if (type === 'remote') {
+      try {
+        await api.registerLogin(null, null, 'remote')
+        await checkTodayLogin()
+        if (selectedDate === getLocalDateString()) await fetchLoginTimes()
+      } catch (e) { setMsg('Error: ' + e.message) }
+      setLoggingIn(false)
+      return
+    }
+
     if (!navigator.geolocation) {
       setMsg('Error: الموقع الجغرافي غير مدعوم في هذا المتصفح')
       setLoggingIn(false)
@@ -680,7 +691,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       async (pos) => {
         const { latitude, longitude } = pos.coords
         try {
-          await api.registerLogin(latitude, longitude)
+          await api.registerLogin(latitude, longitude, 'office')
           await checkTodayLogin()
           if (selectedDate === getLocalDateString()) await fetchLoginTimes()
         } catch (e) { setMsg('Error: ' + e.message) }
@@ -2584,6 +2595,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <div key={emp.id} className="flex items-center gap-3 p-2.5 rounded-xl" style={{background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)'}}>
                         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${emp.status === 'in' ? 'bg-emerald-400' : emp.status === 'out' ? 'bg-blue-400' : 'bg-red-400'}`} style={emp.status === 'in' ? {boxShadow:'0 0 6px rgba(52,211,153,0.7)'} : {}} />
                         <span className="text-slate-200 text-sm flex-1">{emp.full_name || emp.email}</span>
+                        {emp.attendance_type === 'remote' && emp.status !== 'absent' && (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-500/20">🏠 عن بُعد</span>
+                        )}
                         {emp.status === 'in' && emp.login_time && <span className="text-emerald-400 text-xs">دخل {new Date(emp.login_time).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}</span>}
                         {emp.status === 'out' && emp.logout_time && <span className="text-blue-400 text-xs">خرج {new Date(emp.logout_time).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}</span>}
                         {emp.status === 'absent' && <span className="text-red-400 text-xs">غائب</span>}
@@ -2658,19 +2672,25 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/8">
-                    {['Name','Email','Role','Login Time','Sign Off','Worked','Date','Actions'].map(h => (
+                    {['Name','Email','Role','Type','Login Time','Sign Off','Worked','Date','Actions'].map(h => (
                       <th key={h} className="text-left text-xs text-slate-400 uppercase tracking-wider px-4 py-3 font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {loginTimes.length === 0 && <tr><td colSpan={8} className="text-center text-slate-500 py-8">No attendance recorded for {new Date(selectedDate).toLocaleDateString()}</td></tr>}
+                  {loginTimes.length === 0 && <tr><td colSpan={9} className="text-center text-slate-500 py-8">No attendance recorded for {new Date(selectedDate).toLocaleDateString()}</td></tr>}
                   {loginTimes.map(lt => (
                     <tr key={lt.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                       <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{lt.full_name||'—'}</td>
                       <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{lt.email}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${lt.role==='super_admin' ? 'bg-amber-900/30 text-amber-400' : lt.role==='admin' ? 'bg-purple-900/30 text-purple-400' : lt.role==='employee' ? 'bg-blue-900/30 text-blue-400' : 'bg-slate-900/30 text-slate-400'}`}>{lt.role==='super_admin' ? '👑 Super Admin' : lt.role}</span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {lt.attendance_type === 'remote'
+                          ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-500/20">🏠 عن بُعد</span>
+                          : <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-900/30 text-indigo-400 border border-indigo-500/20">🏢 مكتب</span>
+                        }
                       </td>
                       <td className="px-4 py-3 text-white font-mono whitespace-nowrap">{new Date(lt.login_time).toLocaleTimeString()}</td>
                       <td className="px-4 py-3 text-slate-300 font-mono whitespace-nowrap">{lt.logout_time ? new Date(lt.logout_time).toLocaleTimeString() : 'Still working'}</td>

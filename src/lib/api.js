@@ -110,7 +110,7 @@ export const api = {
   // Attendance
   getAttendance: (date) => request('GET', `/attendance?date=${date}`),
   getTodayAttendance: () => request('GET', '/attendance/today'),
-  registerLogin: (latitude, longitude) => request('POST', '/attendance/login', { latitude, longitude }),
+  registerLogin: (latitude, longitude, attendance_type = 'office') => request('POST', '/attendance/login', { latitude, longitude, attendance_type }),
   registerLogout: (latitude, longitude) => request('POST', '/attendance/logout', { latitude, longitude }),
   deleteAttendance: (id) => request('DELETE', `/attendance/${id}`),
   getMonthlyAttendanceReport: (year, month) => request('GET', `/attendance/monthly-report?year=${year}&month=${month}`),
