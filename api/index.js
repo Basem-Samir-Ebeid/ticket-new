@@ -193,6 +193,8 @@ async function ensureSchema() {
         logout_longitude DOUBLE PRECISION
       );
 
+      ALTER TABLE login_times ADD COLUMN IF NOT EXISTS attendance_type TEXT NOT NULL DEFAULT 'office';
+
       CREATE TABLE IF NOT EXISTS leave_requests (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
