@@ -1,4 +1,4 @@
-export default function AttendanceButton({ todayLogin, loggingIn, loggingOut, onLogin, onLogout }) {
+export default function AttendanceButton({ todayLogin, loggingIn, loggingOut, onLogin, onLogout, pendingRemoteRequest, rejectedRemoteRequest }) {
   const isLoggedIn = !!todayLogin
   const isSignedOff = !!(todayLogin?.logout_time)
   const isRemote = todayLogin?.attendance_type === 'remote'
@@ -20,6 +20,52 @@ export default function AttendanceButton({ todayLogin, loggingIn, loggingOut, on
       <path d="M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
     </svg>
   )
+
+  if (pendingRemoteRequest) {
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <div className="relative w-16 h-16">
+          <div className="absolute inset-0 rounded-full opacity-30"
+            style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.5), transparent)', filter: 'blur(10px)' }} />
+          <div className="relative w-16 h-16 rounded-full flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg,rgba(120,80,0,0.4),rgba(90,60,0,0.25))', border: '2px solid rgba(245,158,11,0.4)' }}>
+            <svg className="w-8 h-8 text-amber-400 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <circle cx="12" cy="12" r="10" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
+            </svg>
+          </div>
+        </div>
+        <span className="text-amber-400 text-[11px] font-semibold tracking-wide text-center">في انتظار الموافقة</span>
+        <span className="text-[10px] text-amber-300/60">🏠 طلب عن بُعد</span>
+      </div>
+    )
+  }
+
+  if (rejectedRemoteRequest) {
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <div className="relative w-16 h-16">
+          <div className="absolute inset-0 rounded-full opacity-30"
+            style={{ background: 'radial-gradient(circle, rgba(239,68,68,0.5), transparent)', filter: 'blur(10px)' }} />
+          <div className="relative w-16 h-16 rounded-full flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg,rgba(120,20,20,0.4),rgba(90,10,10,0.25))', border: '2px solid rgba(239,68,68,0.4)' }}>
+            <svg className="w-7 h-7 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+        </div>
+        <span className="text-red-400 text-[11px] font-semibold tracking-wide text-center">تم الرفض</span>
+        <span className="text-[10px] text-red-300/70 text-center leading-tight">الرجاء التوجه<br/>إلى المكتب</span>
+        <button
+          onClick={() => onLogin('office')}
+          disabled={loggingIn}
+          className="mt-1 text-[10px] text-indigo-300 hover:text-indigo-200 bg-indigo-900/30 px-3 py-1.5 rounded-lg border border-indigo-500/20 transition-all disabled:opacity-50"
+        >
+          تسجيل حضور المكتب
+        </button>
+      </div>
+    )
+  }
 
   if (isSignedOff) {
     return (

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { db } from '../db'
-import { loginTimes, profiles, notifications, attendanceCorrections, penalties } from '../../shared/schema'
+import { loginTimes, profiles, notifications, attendanceCorrections, penalties, remoteAttendanceRequests } from '../../shared/schema'
 import { eq, and, gte, lte, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
@@ -163,6 +163,123 @@ router.get('/live', requireAuth as any, async (req: any, res) => {
   } catch (err: any) {
     console.error('GET /attendance/live error:', err)
     res.status(500).json({ error: err?.message || 'Failed to get live attendance' })
+  }
+})
+
+router.post('/remote-request', requireAuth as any, async (req: any, res) => {
+  try {
+    const today = getLocalDateString()
+
+    const existingLogin = await db.select().from(loginTimes)
+      .where(and(eq(loginTimes.user_id, req.user.id), eq(loginTimes.date, today)))
+    if (existingLogin.length > 0) return res.status(400).json({ error: 'لديك حضور مسجل اليوم بالفعل' })
+
+    const existingReq = await db.select().from(remoteAttendanceRequests)
+      .where(and(eq(remoteAttendanceRequests.user_id, req.user.id), eq(remoteAttendanceRequests.date, today)))
+    if (existingReq.length > 0) return res.status(400).json({ error: 'لديك طلب حضور عن بعد معلق بالفعل' })
+
+    const [request] = await db.insert(remoteAttendanceRequests).values({
+      user_id: req.user.id,
+      date: today,
+    }).returning()
+
+    const superAdmins = await db.select({ id: profiles.id }).from(profiles)
+      .where(eq(profiles.role, 'super_admin'))
+    const empName = req.profile.full_name || req.profile.email
+    for (const admin of superAdmins) {
+      const [notif] = await db.insert(notifications).values({
+        user_id: admin.id,
+        message: `🏠 طلب حضور عن بُعد من ${empName} — بتاريخ ${today}`,
+      }).returning()
+      broadcast(admin.id, 'notification', notif)
+      broadcast(admin.id, 'remote_request_update', { action: 'created', request: { ...request, user: { full_name: empName } } })
+    }
+
+    broadcastAll('remote_request_update', { action: 'created' })
+    res.json(request)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to create remote request' })
+  }
+})
+
+router.get('/remote-requests', requireAuth as any, async (req: any, res) => {
+  try {
+    const isAdmin = req.profile.role === 'admin' || req.profile.role === 'super_admin'
+    let rows
+    if (isAdmin) {
+      rows = await db.select().from(remoteAttendanceRequests).orderBy(desc(remoteAttendanceRequests.created_at))
+    } else {
+      const today = getLocalDateString()
+      rows = await db.select().from(remoteAttendanceRequests)
+        .where(and(eq(remoteAttendanceRequests.user_id, req.user.id), eq(remoteAttendanceRequests.date, today)))
+    }
+    const allProfiles = await db.select({ id: profiles.id, full_name: profiles.full_name, email: profiles.email }).from(profiles)
+    const profileMap = new Map(allProfiles.map(p => [p.id, p]))
+    res.json(rows.map(r => ({ ...r, user: profileMap.get(r.user_id) || null })))
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to get remote requests' })
+  }
+})
+
+router.patch('/remote-requests/:id/approve', requireAuth as any, async (req: any, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+
+    const [request] = await db.update(remoteAttendanceRequests).set({
+      status: 'approved',
+      reviewed_by: req.user.id,
+      reviewed_at: new Date(),
+    }).where(eq(remoteAttendanceRequests.id, req.params.id)).returning()
+
+    if (!request) return res.status(404).json({ error: 'Request not found' })
+
+    const existingLogin = await db.select().from(loginTimes)
+      .where(and(eq(loginTimes.user_id, request.user_id), eq(loginTimes.date, request.date)))
+    if (existingLogin.length === 0) {
+      await db.insert(loginTimes).values({
+        user_id: request.user_id,
+        date: request.date,
+        login_time: request.requested_at,
+        attendance_type: 'remote',
+      })
+    }
+
+    const [notif] = await db.insert(notifications).values({
+      user_id: request.user_id,
+      message: '✅ تمت الموافقة على طلب حضورك عن بُعد',
+    }).returning()
+    broadcast(request.user_id, 'notification', notif)
+    broadcast(request.user_id, 'remote_request_update', { action: 'approved' })
+    broadcastAll('attendance_update', { action: 'login', user_id: request.user_id, date: request.date })
+    broadcastAll('remote_request_update', { action: 'approved' })
+    res.json(request)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to approve request' })
+  }
+})
+
+router.patch('/remote-requests/:id/reject', requireAuth as any, async (req: any, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+
+    const [request] = await db.update(remoteAttendanceRequests).set({
+      status: 'rejected',
+      reviewed_by: req.user.id,
+      reviewed_at: new Date(),
+    }).where(eq(remoteAttendanceRequests.id, req.params.id)).returning()
+
+    if (!request) return res.status(404).json({ error: 'Request not found' })
+
+    const [notif] = await db.insert(notifications).values({
+      user_id: request.user_id,
+      message: '❌ تم رفض طلب حضورك عن بُعد — الرجاء التوجه إلى المكتب',
+    }).returning()
+    broadcast(request.user_id, 'notification', notif)
+    broadcast(request.user_id, 'remote_request_update', { action: 'rejected' })
+    broadcastAll('remote_request_update', { action: 'rejected' })
+    res.json(request)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to reject request' })
   }
 })
 

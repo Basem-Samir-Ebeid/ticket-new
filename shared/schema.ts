@@ -242,6 +242,17 @@ export const autoAssignRules = pgTable('auto_assign_rules', {
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+export const remoteAttendanceRequests = pgTable('remote_attendance_requests', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  date: date('date').notNull(),
+  requested_at: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+  status: text('status').notNull().default('pending'),
+  reviewed_by: uuid('reviewed_by').references(() => profiles.id, { onDelete: 'set null' }),
+  reviewed_at: timestamp('reviewed_at', { withTimezone: true }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const attendanceCorrections = pgTable('attendance_corrections', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),

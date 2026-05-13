@@ -132,6 +132,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [loadingLive, setLoadingLive] = useState(false)
   const [attendanceCorrections, setAttendanceCorrections] = useState([])
   const [loadingCorrections, setLoadingCorrections] = useState(false)
+  const [remoteRequests, setRemoteRequests] = useState([])
+  const [loadingRemoteRequests, setLoadingRemoteRequests] = useState(false)
   const [leaveCalendar, setLeaveCalendar] = useState([])
   const [leaveCalendarMonth, setLeaveCalendarMonth] = useState(new Date().getMonth())
   const [leaveCalendarYear, setLeaveCalendarYear] = useState(new Date().getFullYear())
@@ -194,6 +196,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       checkTodayLogin()
       try { const res = await api.getAttendance(selectedDateRef.current); setLoginTimes(Array.isArray(res) ? res : []) } catch { setLoginTimes([]) }
     }
+    const onRemoteRequestUpdate = () => { fetchRemoteRequests(); fetchLiveAttendance() }
     const onNotification = (e) => {
       const notifMessage = e.detail?.message || ''
       const isGithubSyncFailure = isSuperAdmin && notifMessage.includes('GitHub sync failed')
@@ -217,6 +220,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     window.addEventListener('ws:ticket_reply', onTicketReply)
     window.addEventListener('ws:leave_update', onLeaveUpdate)
     window.addEventListener('ws:attendance_update', onAttendanceUpdate)
+    window.addEventListener('ws:remote_request_update', onRemoteRequestUpdate)
     window.addEventListener('ws:notification', onNotification)
     window.addEventListener('ws:penalty_update', onPenaltyUpdate)
     window.addEventListener('ws:complaint_update', onComplaintUpdate)
@@ -225,6 +229,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       window.removeEventListener('ws:ticket_reply', onTicketReply)
       window.removeEventListener('ws:leave_update', onLeaveUpdate)
       window.removeEventListener('ws:attendance_update', onAttendanceUpdate)
+      window.removeEventListener('ws:remote_request_update', onRemoteRequestUpdate)
       window.removeEventListener('ws:notification', onNotification)
       window.removeEventListener('ws:penalty_update', onPenaltyUpdate)
       window.removeEventListener('ws:complaint_update', onComplaintUpdate)
@@ -902,6 +907,26 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     setLoading(false)
   }
 
+  async function fetchRemoteRequests() {
+    setLoadingRemoteRequests(true)
+    try { setRemoteRequests(await api.getRemoteRequests()) } catch {}
+    setLoadingRemoteRequests(false)
+  }
+
+  async function approveRemoteRequest(id) {
+    try {
+      await api.approveRemoteRequest(id)
+      fetchRemoteRequests(); fetchLiveAttendance()
+    } catch (e) { setMsg('Error: ' + e.message) }
+  }
+
+  async function rejectRemoteRequest(id) {
+    try {
+      await api.rejectRemoteRequest(id)
+      fetchRemoteRequests()
+    } catch (e) { setMsg('Error: ' + e.message) }
+  }
+
   async function deleteAttendance(id) {
     if (!confirm('Delete this attendance record?')) return
     setLoading(true)
@@ -1047,7 +1072,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     { key: 'complaints',  label: 'Complaints',  icon: 'requests' },
     { key: 'users',       label: 'Users',       icon: 'users' },
     { key: 'whatsapp',    label: 'WhatsApp',    icon: 'whatsapp' },
-    { key: 'attendance',  label: 'Attendance',  icon: 'attendance' },
+    { key: 'attendance',  label: 'Attendance',  icon: 'attendance', badge: remoteRequests.filter(r=>r.status==='pending').length || 0 },
     { key: 'performance', label: 'Performance', icon: 'performance' },
     { key: 'settings',    label: 'Settings',    icon: 'settings' },
   ]
@@ -1055,7 +1080,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     setTab(t); setSelectedTicket(null)
     if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings(); fetchSmtpSettings(); fetchWhatsAppSettings(); fetchAutoAssignRules() }
     if (t === 'whatsapp') { fetchWhatsAppSettings(); fetchUsers() }
-    if (t === 'attendance') { fetchLiveAttendance(); fetchAttendanceCorrections() }
+    if (t === 'attendance') { fetchLiveAttendance(); fetchAttendanceCorrections(); fetchRemoteRequests() }
     if (t === 'leave') { fetchLeaveCalendar(); fetchLeaveReport() }
   }
 
@@ -2614,6 +2639,46 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 </div>
               )}
             </div>
+
+            {/* Remote Attendance Requests */}
+            {isSuperAdmin && (
+              <div className="glass-card rounded-2xl p-5 mb-5" style={{border:'1px solid rgba(34,197,94,0.2)'}}>
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                  <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+                    🏠 طلبات الحضور عن بُعد
+                    {remoteRequests.filter(r=>r.status==='pending').length > 0 && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400 border border-amber-500/20">
+                        {remoteRequests.filter(r=>r.status==='pending').length} معلق
+                      </span>
+                    )}
+                  </h3>
+                  <button onClick={fetchRemoteRequests} disabled={loadingRemoteRequests} className="text-xs text-green-400 hover:text-green-300 bg-green-900/20 px-3 py-1.5 rounded-lg border border-green-500/20 transition-all disabled:opacity-50">
+                    {loadingRemoteRequests ? '...' : '↻ تحديث'}
+                  </button>
+                </div>
+                {remoteRequests.filter(r => r.status === 'pending').length === 0 ? (
+                  <p className="text-slate-500 text-sm text-center py-4">لا توجد طلبات حضور عن بُعد معلقة</p>
+                ) : (
+                  <div className="space-y-3">
+                    {remoteRequests.filter(r => r.status === 'pending').map(r => (
+                      <div key={r.id} className="p-4 rounded-xl border border-green-500/20 bg-green-900/10">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div>
+                            <p className="text-white font-medium text-sm">{r.user?.full_name || r.user?.email}</p>
+                            <p className="text-slate-400 text-xs mt-0.5">التاريخ: {r.date}</p>
+                            <p className="text-slate-400 text-xs">وقت الطلب: {new Date(r.requested_at).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</p>
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <button onClick={() => approveRemoteRequest(r.id)} className="text-xs text-emerald-300 bg-emerald-900/30 hover:bg-emerald-800/50 px-3 py-1.5 rounded-lg border border-emerald-600/20 transition-all">✓ موافقة</button>
+                            <button onClick={() => rejectRemoteRequest(r.id)} className="text-xs text-red-300 bg-red-900/30 hover:bg-red-800/50 px-3 py-1.5 rounded-lg border border-red-600/20 transition-all">✕ رفض</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Correction Requests */}
             <div className="glass-card rounded-2xl p-5 mb-5" style={{border:'1px solid rgba(99,102,241,0.15)'}}>

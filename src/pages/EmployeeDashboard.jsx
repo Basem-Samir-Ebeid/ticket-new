@@ -45,6 +45,8 @@ export default function EmployeeDashboard() {
   const [submittingRating, setSubmittingRating] = useState(false)
 
   const [todayLogin, setTodayLogin] = useState(null)
+  const [pendingRemoteRequest, setPendingRemoteRequest] = useState(null)
+  const [rejectedRemoteRequest, setRejectedRemoteRequest] = useState(false)
   const [loggingIn, setLoggingIn] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [attendanceError, setAttendanceError] = useState('')
@@ -134,6 +136,7 @@ export default function EmployeeDashboard() {
       }
     }
     const onAttendanceUpdate = () => checkTodayLogin()
+    const onRemoteRequestUpdate = () => checkTodayLogin()
     const onLeaveUpdate = () => {
       playNotificationSound()
       showBrowserNotification('Finest — إجازة', 'تم تحديث طلب الإجازة')
@@ -144,6 +147,7 @@ export default function EmployeeDashboard() {
     window.addEventListener('ws:ticket_update', onTicketUpdate)
     window.addEventListener('ws:ticket_reply', onTicketReply)
     window.addEventListener('ws:attendance_update', onAttendanceUpdate)
+    window.addEventListener('ws:remote_request_update', onRemoteRequestUpdate)
     window.addEventListener('ws:leave_update', onLeaveUpdate)
     window.addEventListener('ws:penalty_update', onPenaltyUpdate)
     window.addEventListener('ws:complaint_update', onComplaintUpdate)
@@ -151,6 +155,7 @@ export default function EmployeeDashboard() {
       window.removeEventListener('ws:ticket_update', onTicketUpdate)
       window.removeEventListener('ws:ticket_reply', onTicketReply)
       window.removeEventListener('ws:attendance_update', onAttendanceUpdate)
+      window.removeEventListener('ws:remote_request_update', onRemoteRequestUpdate)
       window.removeEventListener('ws:leave_update', onLeaveUpdate)
       window.removeEventListener('ws:penalty_update', onPenaltyUpdate)
       window.removeEventListener('ws:complaint_update', onComplaintUpdate)
@@ -174,6 +179,21 @@ export default function EmployeeDashboard() {
 
   async function checkTodayLogin() {
     try { setTodayLogin(await api.getTodayAttendance()) } catch {}
+    try {
+      const reqs = await api.getRemoteRequests()
+      const today = getLocalDateString()
+      const todayReq = reqs.find(r => r.date === today)
+      if (todayReq?.status === 'pending') {
+        setPendingRemoteRequest(todayReq)
+        setRejectedRemoteRequest(false)
+      } else if (todayReq?.status === 'rejected') {
+        setPendingRemoteRequest(null)
+        setRejectedRemoteRequest(true)
+      } else {
+        setPendingRemoteRequest(null)
+        setRejectedRemoteRequest(false)
+      }
+    } catch {}
   }
 
   function validateCoords(lat, lng) {
@@ -191,7 +211,7 @@ export default function EmployeeDashboard() {
 
     if (type === 'remote') {
       try {
-        await api.registerLogin(null, null, 'remote')
+        await api.createRemoteRequest()
         await checkTodayLogin()
         setAttendanceError('')
       } catch (e) {
@@ -682,6 +702,8 @@ export default function EmployeeDashboard() {
               loggingOut={loggingOut}
               onLogin={registerLogin}
               onLogout={registerLogout}
+              pendingRemoteRequest={!todayLogin && pendingRemoteRequest}
+              rejectedRemoteRequest={!todayLogin && rejectedRemoteRequest}
             />
           </div>
           {attendanceError && (

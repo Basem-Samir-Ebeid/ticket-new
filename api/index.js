@@ -195,6 +195,17 @@ async function ensureSchema() {
 
       ALTER TABLE login_times ADD COLUMN IF NOT EXISTS attendance_type TEXT NOT NULL DEFAULT 'office';
 
+      CREATE TABLE IF NOT EXISTS remote_attendance_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        date DATE NOT NULL,
+        requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        status TEXT NOT NULL DEFAULT 'pending',
+        reviewed_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        reviewed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS leave_requests (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -2047,6 +2058,69 @@ app.patch('/api/attendance/corrections/:id', requireAuth, requireAdmin, async (r
     if (rows[0]?.user_id) await getPool().query('INSERT INTO notifications (user_id,message) VALUES ($1,$2)', [rows[0].user_id, `${status==='approved'?'✅ تم قبول':'❌ تم رفض'} طلب تصحيح الحضور بتاريخ ${rows[0].date}`])
     res.json(rows[0])
   } catch (err) { res.status(500).json({ error: 'Failed to update correction' }) }
+})
+
+// ── REMOTE ATTENDANCE REQUESTS ───────────────────────────────────────────────
+app.post('/api/attendance/remote-request', requireAuth, async (req, res) => {
+  try {
+    const today = getLocalDateString()
+    const db = getPool()
+    const { rows: existingLogin } = await db.query('SELECT id FROM login_times WHERE user_id=$1 AND date=$2', [req.user.id, today])
+    if (existingLogin.length > 0) return res.status(400).json({ error: 'لديك حضور مسجل اليوم بالفعل' })
+    const { rows: existingReq } = await db.query("SELECT id FROM remote_attendance_requests WHERE user_id=$1 AND date=$2 AND status='pending'", [req.user.id, today])
+    if (existingReq.length > 0) return res.status(400).json({ error: 'لديك طلب حضور عن بعد معلق بالفعل' })
+    const { rows } = await db.query('INSERT INTO remote_attendance_requests (user_id,date) VALUES ($1,$2) RETURNING *', [req.user.id, today])
+    const empName = req.profile.full_name || req.profile.email
+    const { rows: superAdmins } = await db.query("SELECT id FROM profiles WHERE role='super_admin'")
+    for (const admin of superAdmins) {
+      await db.query('INSERT INTO notifications (user_id,message) VALUES ($1,$2)', [admin.id, `🏠 طلب حضور عن بُعد من ${empName} — بتاريخ ${today}`])
+    }
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message || 'Failed to create remote request' }) }
+})
+
+app.get('/api/attendance/remote-requests', requireAuth, async (req, res) => {
+  try {
+    const db = getPool()
+    const isAdmin = isAdminRole(req.profile.role)
+    let rows
+    if (isAdmin) {
+      const result = await db.query('SELECT r.*, p.full_name, p.email FROM remote_attendance_requests r LEFT JOIN profiles p ON p.id=r.user_id ORDER BY r.created_at DESC')
+      rows = result.rows.map(r => ({ ...r, user: { full_name: r.full_name, email: r.email } }))
+    } else {
+      const today = getLocalDateString()
+      const result = await db.query('SELECT r.*, p.full_name, p.email FROM remote_attendance_requests r LEFT JOIN profiles p ON p.id=r.user_id WHERE r.user_id=$1 AND r.date=$2', [req.user.id, today])
+      rows = result.rows.map(r => ({ ...r, user: { full_name: r.full_name, email: r.email } }))
+    }
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err?.message || 'Failed to get remote requests' }) }
+})
+
+app.patch('/api/attendance/remote-requests/:id/approve', requireAuth, async (req, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+    const db = getPool()
+    const { rows } = await db.query('UPDATE remote_attendance_requests SET status=$1,reviewed_by=$2,reviewed_at=$3 WHERE id=$4 RETURNING *', ['approved', req.user.id, new Date(), req.params.id])
+    if (!rows[0]) return res.status(404).json({ error: 'Request not found' })
+    const r = rows[0]
+    const { rows: existing } = await db.query('SELECT id FROM login_times WHERE user_id=$1 AND date=$2', [r.user_id, r.date])
+    if (existing.length === 0) {
+      await db.query('INSERT INTO login_times (user_id,date,login_time,attendance_type) VALUES ($1,$2,$3,$4)', [r.user_id, r.date, r.requested_at, 'remote'])
+    }
+    await db.query('INSERT INTO notifications (user_id,message) VALUES ($1,$2)', [r.user_id, '✅ تمت الموافقة على طلب حضورك عن بُعد'])
+    res.json(r)
+  } catch (err) { res.status(500).json({ error: err?.message || 'Failed to approve request' }) }
+})
+
+app.patch('/api/attendance/remote-requests/:id/reject', requireAuth, async (req, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+    const db = getPool()
+    const { rows } = await db.query('UPDATE remote_attendance_requests SET status=$1,reviewed_by=$2,reviewed_at=$3 WHERE id=$4 RETURNING *', ['rejected', req.user.id, new Date(), req.params.id])
+    if (!rows[0]) return res.status(404).json({ error: 'Request not found' })
+    await db.query('INSERT INTO notifications (user_id,message) VALUES ($1,$2)', [rows[0].user_id, '❌ تم رفض طلب حضورك عن بُعد — الرجاء التوجه إلى المكتب'])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message || 'Failed to reject request' }) }
 })
 
 // ── LEAVE EXTRA ROUTES ────────────────────────────────────────────────────────
