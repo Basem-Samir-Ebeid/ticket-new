@@ -134,6 +134,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [loadingCorrections, setLoadingCorrections] = useState(false)
   const [remoteRequests, setRemoteRequests] = useState([])
   const [loadingRemoteRequests, setLoadingRemoteRequests] = useState(false)
+  const [editingAttendance, setEditingAttendance] = useState(null)
+  const [editAttendanceForm, setEditAttendanceForm] = useState({ login_time: '', logout_time: '', attendance_type: 'office' })
+  const [savingAttendanceEdit, setSavingAttendanceEdit] = useState(false)
+  const [editAttendanceMsg, setEditAttendanceMsg] = useState('')
   const [leaveCalendar, setLeaveCalendar] = useState([])
   const [leaveCalendarMonth, setLeaveCalendarMonth] = useState(new Date().getMonth())
   const [leaveCalendarYear, setLeaveCalendarYear] = useState(new Date().getFullYear())
@@ -925,6 +929,40 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       await api.rejectRemoteRequest(id)
       fetchRemoteRequests()
     } catch (e) { setMsg('Error: ' + e.message) }
+  }
+
+  function openEditAttendance(lt) {
+    const toLocalInput = (iso) => {
+      if (!iso) return ''
+      const d = new Date(iso)
+      const pad = n => String(n).padStart(2,'0')
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    }
+    setEditingAttendance(lt)
+    setEditAttendanceForm({
+      login_time: toLocalInput(lt.login_time),
+      logout_time: toLocalInput(lt.logout_time),
+      attendance_type: lt.attendance_type || 'office',
+    })
+    setEditAttendanceMsg('')
+  }
+
+  async function saveAttendanceEdit(e) {
+    e.preventDefault()
+    setSavingAttendanceEdit(true)
+    setEditAttendanceMsg('')
+    try {
+      const payload = {
+        login_time: editAttendanceForm.login_time ? new Date(editAttendanceForm.login_time).toISOString() : null,
+        logout_time: editAttendanceForm.logout_time ? new Date(editAttendanceForm.logout_time).toISOString() : null,
+        attendance_type: editAttendanceForm.attendance_type,
+      }
+      await api.updateAttendance(editingAttendance.id, payload)
+      setEditAttendanceMsg('✓ تم الحفظ')
+      fetchLoginTimes()
+      setTimeout(() => setEditingAttendance(null), 800)
+    } catch (err) { setEditAttendanceMsg('خطأ: ' + err.message) }
+    setSavingAttendanceEdit(false)
   }
 
   async function deleteAttendance(id) {
@@ -2761,7 +2799,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <td className="px-4 py-3 text-slate-300 font-mono whitespace-nowrap">{lt.logout_time ? new Date(lt.logout_time).toLocaleTimeString() : 'Still working'}</td>
                       <td className="px-4 py-3 text-green-400 text-xs font-medium whitespace-nowrap">{lt.logout_time ? calculateDuration(lt.login_time, lt.logout_time) : 'In progress'}</td>
                       <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{new Date(lt.date).toLocaleDateString()}</td>
-                      <td className="px-4 py-3 whitespace-nowrap"><button onClick={()=>deleteAttendance(lt.id)} disabled={loading} className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50">Delete</button></td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <button onClick={()=>openEditAttendance(lt)} className="text-xs text-indigo-400 hover:text-indigo-300 bg-indigo-900/20 px-2.5 py-1 rounded-lg border border-indigo-500/20 transition-all">✏️ تعديل</button>
+                          <button onClick={()=>deleteAttendance(lt.id)} disabled={loading} className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50">Delete</button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -3934,6 +3977,86 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 <button type="button" onClick={() => setResetPwdTarget(null)}
                   className="btn-ghost px-4 py-2.5 text-sm">
                   Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Attendance Modal ────────────────────────────── */}
+      {editingAttendance && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.7)', backdropFilter:'blur(6px)'}}>
+          <div className="relative w-full max-w-md rounded-2xl p-6 shadow-2xl" style={{background:'linear-gradient(135deg,#1e1b2e,#16132a)', border:'1px solid rgba(99,102,241,0.3)'}}>
+            <button onClick={()=>setEditingAttendance(null)} className="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'linear-gradient(135deg,#4f46e5,#7c3aed)'}}>
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-base" dir="rtl">تعديل سجل الحضور</h3>
+                <p className="text-slate-400 text-xs mt-0.5">{editingAttendance.full_name || editingAttendance.email} — {editingAttendance.date}</p>
+              </div>
+            </div>
+
+            <form onSubmit={saveAttendanceEdit} className="space-y-4" dir="rtl">
+              <div>
+                <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">وقت الحضور</label>
+                <input
+                  type="datetime-local"
+                  value={editAttendanceForm.login_time}
+                  onChange={e=>setEditAttendanceForm(f=>({...f, login_time: e.target.value}))}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all"
+                  style={{colorScheme:'dark'}}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">وقت الانصراف</label>
+                <input
+                  type="datetime-local"
+                  value={editAttendanceForm.logout_time}
+                  onChange={e=>setEditAttendanceForm(f=>({...f, logout_time: e.target.value}))}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all"
+                  style={{colorScheme:'dark'}}
+                />
+                <p className="text-slate-600 text-[10px] mt-1">اتركه فارغاً إذا لم ينصرف بعد</p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">نوع الحضور</label>
+                <select
+                  value={editAttendanceForm.attendance_type}
+                  onChange={e=>setEditAttendanceForm(f=>({...f, attendance_type: e.target.value}))}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all"
+                >
+                  <option value="office">🏢 مكتب</option>
+                  <option value="remote">🏠 عن بُعد</option>
+                </select>
+              </div>
+
+              {editAttendanceMsg && (
+                <p className={`text-sm text-center font-medium ${editAttendanceMsg.startsWith('✓') ? 'text-emerald-400' : 'text-red-400'}`}>{editAttendanceMsg}</p>
+              )}
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="submit"
+                  disabled={savingAttendanceEdit}
+                  className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold transition-all disabled:opacity-60"
+                  style={{background:'linear-gradient(135deg,#4f46e5,#7c3aed)'}}
+                >
+                  {savingAttendanceEdit ? 'جارٍ الحفظ...' : 'حفظ التعديلات'}
+                </button>
+                <button
+                  type="button"
+                  onClick={()=>setEditingAttendance(null)}
+                  className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm border border-white/10 hover:border-white/20 transition-all"
+                >
+                  إلغاء
                 </button>
               </div>
             </form>

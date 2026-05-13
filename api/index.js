@@ -1152,6 +1152,20 @@ app.post('/api/attendance/logout', requireAuth, async (req, res) => {
   }
 })
 
+app.patch('/api/attendance/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { login_time, logout_time, attendance_type } = req.body
+    const sets = [], vals = []
+    if (login_time !== undefined)      { sets.push(`login_time=$${vals.length+1}`);      vals.push(login_time ? new Date(login_time) : null) }
+    if (logout_time !== undefined)     { sets.push(`logout_time=$${vals.length+1}`);     vals.push(logout_time ? new Date(logout_time) : null) }
+    if (attendance_type !== undefined) { sets.push(`attendance_type=$${vals.length+1}`); vals.push(attendance_type) }
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' })
+    vals.push(req.params.id)
+    const { rows } = await getPool().query(`UPDATE login_times SET ${sets.join(',')} WHERE id=$${vals.length} RETURNING *`, vals)
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message || 'Failed to update attendance' }) }
+})
+
 app.delete('/api/attendance/:id', requireAuth, async (req, res) => {
   try {
     if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db'
 import { loginTimes, profiles, notifications, attendanceCorrections, penalties, remoteAttendanceRequests } from '../../shared/schema'
-import { eq, and, gte, lte, desc, or } from 'drizzle-orm'
+import { eq, and, gte, lte, desc, or, sql } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { getOfficeConfig } from '../officeConfig'
@@ -663,6 +663,23 @@ router.patch('/corrections/:id', requireAuth as any, async (req: any, res) => {
     res.json(correction)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to update correction' })
+  }
+})
+
+router.patch('/:id', requireAuth as any, async (req: any, res) => {
+  try {
+    if (req.profile.role !== 'admin' && req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Admins only' })
+    const { login_time, logout_time, attendance_type } = req.body
+    const updates: Record<string, any> = {}
+    if (login_time !== undefined)      updates.login_time      = login_time ? new Date(login_time) : null
+    if (logout_time !== undefined)     updates.logout_time     = logout_time ? new Date(logout_time) : null
+    if (attendance_type !== undefined) updates.attendance_type = attendance_type
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'Nothing to update' })
+    const [row] = await db.update(loginTimes).set(updates).where(eq(loginTimes.id, req.params.id)).returning()
+    broadcastAll('attendance_update', { action: 'update' })
+    res.json(row ?? { id: req.params.id })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to update attendance' })
   }
 })
 

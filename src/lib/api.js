@@ -112,6 +112,7 @@ export const api = {
   getTodayAttendance: () => request('GET', '/attendance/today'),
   registerLogin: (latitude, longitude, attendance_type = 'office') => request('POST', '/attendance/login', { latitude, longitude, attendance_type }),
   registerLogout: (latitude, longitude) => request('POST', '/attendance/logout', { latitude, longitude }),
+  updateAttendance: (id, data) => request('PATCH', `/attendance/${id}`, data),
   deleteAttendance: (id) => request('DELETE', `/attendance/${id}`),
   createRemoteRequest: () => request('POST', '/attendance/remote-request', {}),
   getRemoteRequests: () => request('GET', '/attendance/remote-requests'),
