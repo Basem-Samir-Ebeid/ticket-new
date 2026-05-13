@@ -1081,20 +1081,25 @@ app.get('/api/attendance/today', requireAuth, async (req, res) => {
 
 app.post('/api/attendance/login', requireAuth, async (req, res) => {
   try {
-    const { latitude, longitude } = req.body
-    if (latitude == null || longitude == null) return res.status(400).json({ error: 'Location is required to check in' })
-    const office = await getOfficeConfig()
-    const distance = haversineDistance(Number(latitude), Number(longitude), office.latitude, office.longitude)
-    if (distance > office.radius_meters) {
-      return res.status(403).json({ error: `أنت بعيد جداً عن المكتب (${Math.round(distance)}م، الحد الأقصى المسموح: ${office.radius_meters}م)` })
+    const { latitude, longitude, attendance_type } = req.body
+    const isRemote = attendance_type === 'remote'
+
+    if (!isRemote) {
+      if (latitude == null || longitude == null) return res.status(400).json({ error: 'Location is required to check in' })
+      const office = await getOfficeConfig()
+      const distance = haversineDistance(Number(latitude), Number(longitude), office.latitude, office.longitude)
+      if (distance > office.radius_meters) {
+        return res.status(403).json({ error: `أنت بعيد جداً عن المكتب (${Math.round(distance)}م، الحد الأقصى المسموح: ${office.radius_meters}م)` })
+      }
     }
+
     const today = getLocalDateString()
     const db = getPool()
     const { rows: existing } = await db.query('SELECT id FROM login_times WHERE user_id=$1 AND date=$2', [req.user.id, today])
     if (existing.length) return res.status(400).json({ error: 'Already logged in today' })
     const { rows } = await db.query(
-      'INSERT INTO login_times (user_id, date, latitude, longitude) VALUES ($1,$2,$3,$4) RETURNING *',
-      [req.user.id, today, latitude, longitude]
+      'INSERT INTO login_times (user_id, date, latitude, longitude, attendance_type) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      [req.user.id, today, isRemote ? null : latitude, isRemote ? null : longitude, isRemote ? 'remote' : 'office']
     )
     res.json(rows[0])
   } catch (err) {
@@ -1106,20 +1111,26 @@ app.post('/api/attendance/login', requireAuth, async (req, res) => {
 app.post('/api/attendance/logout', requireAuth, async (req, res) => {
   try {
     const { latitude, longitude } = req.body
-    if (latitude == null || longitude == null) return res.status(400).json({ error: 'Location is required to check out' })
-    const office = await getOfficeConfig()
-    const distance = haversineDistance(Number(latitude), Number(longitude), office.latitude, office.longitude)
-    if (distance > office.radius_meters) {
-      return res.status(403).json({ error: `أنت بعيد جداً عن المكتب (${Math.round(distance)}م، الحد الأقصى المسموح: ${office.radius_meters}م)` })
-    }
     const today = getLocalDateString()
     const db = getPool()
     const { rows: existing } = await db.query('SELECT * FROM login_times WHERE user_id=$1 AND date=$2', [req.user.id, today])
     if (!existing[0]) return res.status(404).json({ error: 'No login record found for today' })
     if (existing[0].logout_time) return res.status(400).json({ error: 'Already signed off today' })
+
+    const isRemote = existing[0].attendance_type === 'remote'
+
+    if (!isRemote) {
+      if (latitude == null || longitude == null) return res.status(400).json({ error: 'Location is required to check out' })
+      const office = await getOfficeConfig()
+      const distance = haversineDistance(Number(latitude), Number(longitude), office.latitude, office.longitude)
+      if (distance > office.radius_meters) {
+        return res.status(403).json({ error: `أنت بعيد جداً عن المكتب (${Math.round(distance)}م، الحد الأقصى المسموح: ${office.radius_meters}م)` })
+      }
+    }
+
     const { rows } = await db.query(
       'UPDATE login_times SET logout_time=$1, logout_latitude=$2, logout_longitude=$3 WHERE user_id=$4 AND date=$5 RETURNING *',
-      [new Date(), latitude, longitude, req.user.id, today]
+      [new Date(), isRemote ? null : latitude, isRemote ? null : longitude, req.user.id, today]
     )
     res.json(rows[0])
   } catch (err) {
