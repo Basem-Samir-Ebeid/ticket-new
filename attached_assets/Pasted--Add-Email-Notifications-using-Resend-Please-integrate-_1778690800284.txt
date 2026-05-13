@@ -1,0 +1,176 @@
+## Add Email Notifications using Resend
+
+Please integrate email notifications into the project using the Resend service. I will provide the API key separately as an environment variable `RESEND_API_KEY`.
+
+---
+
+### STEP 1 — Install & Setup
+
+```bash
+npm install resend
+```
+
+Create a new file `server/email.ts`:
+
+```ts
+import { Resend } from 'resend'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
+
+export async function sendEmail(to: string, subject: string, html: string) {
+  if (!process.env.RESEND_API_KEY) return
+  try {
+    await resend.emails.send({
+      from: 'onboarding@resend.dev',
+      to,
+      subject,
+      html,
+    })
+  } catch (err) {
+    console.error('Email send error:', err)
+  }
+}
+```
+
+---
+
+### STEP 2 — Send email when a ticket is CREATED and assigned to an employee
+
+**File:** `server/routes/tickets.ts` — inside the `router.post('/', ...)` handler, after the ticket is inserted and the assignee is known.
+
+Add:
+```ts
+import { sendEmail } from '../email'
+
+// After inserting the ticket, find the assigned user's email and send:
+if (assignedUser?.email) {
+  await sendEmail(
+    assignedUser.email,
+    `📋 تم تعيين تذكرة جديدة لك: ${title}`,
+    `<p>مرحباً ${assignedUser.full_name || ''},</p>
+     <p>تم تعيين تذكرة جديدة لك بعنوان: <strong>${title}</strong></p>
+     <p>الأولوية: ${priority || 'عادي'}</p>
+     <p>يرجى الاطلاع عليها في النظام.</p>`
+  )
+}
+```
+
+---
+
+### STEP 3 — Send email when ticket request_status is approved or refused
+
+**File:** `server/routes/tickets.ts` — inside the `router.patch('/:id', ...)` handler, after `request_status` is updated.
+
+Add:
+```ts
+if (request_status && ticket?.user_id) {
+  const [requester] = await db.select().from(profiles).where(eq(profiles.id, ticket.user_id))
+  if (requester?.email) {
+    const isApproved = request_status === 'approved'
+    await sendEmail(
+      requester.email,
+      isApproved ? `✅ تمت الموافقة على تذكرتك` : `❌ تم رفض تذكرتك`,
+      `<p>مرحباً ${requester.full_name || ''},</p>
+       <p>${isApproved ? 'تمت الموافقة على تذكرتك' : 'تم رفض تذكرتك'}: <strong>${ticket.title}</strong></p>`
+    )
+  }
+}
+```
+
+---
+
+### STEP 4 — Send email when a leave request is APPROVED
+
+**File:** `server/routes/leaves.ts` — inside `router.patch('/:id/approve', ...)`, after the leave is updated in the DB.
+
+Add:
+```ts
+import { sendEmail } from '../email'
+
+const [requester] = await db.select().from(profiles).where(eq(profiles.id, existing.user_id))
+if (requester?.email) {
+  await sendEmail(
+    requester.email,
+    '✅ تمت الموافقة على طلب إجازتك',
+    `<p>مرحباً ${requester.full_name || ''},</p>
+     <p>تمت الموافقة على طلب إجازتك من <strong>${existing.start_date}</strong> إلى <strong>${existing.end_date}</strong>.</p>
+     <p>عدد الأيام: ${existing.days_count} يوم.</p>`
+  )
+}
+```
+
+---
+
+### STEP 5 — Send email when a leave request is REJECTED
+
+**File:** `server/routes/leaves.ts` — inside `router.patch('/:id/reject', ...)`, after the leave is updated.
+
+Add:
+```ts
+const [requester] = await db.select().from(profiles).where(eq(profiles.id, existing.user_id))
+if (requester?.email) {
+  await sendEmail(
+    requester.email,
+    '❌ تم رفض طلب إجازتك',
+    `<p>مرحباً ${requester.full_name || ''},</p>
+     <p>نأسف، تم رفض طلب إجازتك من <strong>${existing.start_date}</strong> إلى <strong>${existing.end_date}</strong>.</p>
+     ${existing.admin_note ? `<p>ملاحظة الإدارة: ${existing.admin_note}</p>` : ''}`
+  )
+}
+```
+
+---
+
+### STEP 6 — Send email when a PENALTY is issued to an employee
+
+**File:** `server/routes/penalties.ts` — inside `router.post('/', ...)`, after the penalty is inserted.
+
+Add:
+```ts
+import { sendEmail } from '../email'
+
+const [employee] = await db.select().from(profiles).where(eq(profiles.id, user_id))
+if (employee?.email) {
+  await sendEmail(
+    employee.email,
+    '⚠️ تم إصدار جزاء بحقك',
+    `<p>مرحباً ${employee.full_name || ''},</p>
+     <p>تم إصدار جزاء بحقك في النظام.</p>
+     <p>السبب: <strong>${reason}</strong></p>
+     ${amount ? `<p>المبلغ: ${amount}</p>` : ''}
+     <p>يرجى مراجعة الإدارة لمزيد من التفاصيل.</p>`
+  )
+}
+```
+
+---
+
+### STEP 7 — Send email when a COMPLAINT is filed against an employee
+
+**File:** `server/routes/complaints.ts` — inside `router.post('/', ...)`, after the complaint is inserted.
+
+Add:
+```ts
+import { sendEmail } from '../email'
+
+if (against_user_id && !is_anonymous) {
+  const [accused] = await db.select().from(profiles).where(eq(profiles.id, against_user_id))
+  if (accused?.email) {
+    await sendEmail(
+      accused.email,
+      '📢 تم تقديم شكوى',
+      `<p>مرحباً ${accused.full_name || ''},</p>
+       <p>تم تقديم شكوى في النظام. سيتم مراجعتها من قِبل الإدارة.</p>
+       <p>الموضوع: <strong>${subject}</strong></p>`
+    )
+  }
+}
+```
+
+---
+
+### IMPORTANT NOTES
+- All `sendEmail` calls must use `await` and be wrapped in try/catch or rely on the existing try/catch in each route.
+- Do NOT block the API response waiting for email — emails should be sent after `res.json(...)` or use `.catch(() => {})` if non-critical, similar to how `sendWhatsAppToUser` is already used in `attendance.ts`.
+- Add `RESEND_API_KEY=` to the `.env` file (leave value empty — I will add my key manually).
+- Do NOT change the schema, frontend files, or any other routes.

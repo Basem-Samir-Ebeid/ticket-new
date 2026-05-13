@@ -4,6 +4,7 @@ import { complaints, profiles, notifications } from '../../shared/schema'
 import { eq, desc, or } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
+import { sendEmail } from '../email'
 
 const router = Router()
 
@@ -66,6 +67,22 @@ router.post('/', requireAuth as any, async (req: any, res) => {
     }
 
     broadcastAll('complaint_update', { action: 'created', complaint_id: complaint.id })
+
+    if (against_user_id && !is_anonymous) {
+      ;(async () => {
+        const [accused] = await db.select({ email: profiles.email, full_name: profiles.full_name }).from(profiles).where(eq(profiles.id, against_user_id))
+        if (accused?.email) {
+          await sendEmail(
+            accused.email,
+            '📢 تم تقديم شكوى',
+            `<p>مرحباً ${accused.full_name || ''},</p>
+             <p>تم تقديم شكوى في النظام. سيتم مراجعتها من قِبل الإدارة.</p>
+             <p>الموضوع: <strong>${subject}</strong></p>`
+          )
+        }
+      })().catch(() => {})
+    }
+
     res.json(complaint)
   } catch (err: any) {
     console.error('POST /complaints error:', err)

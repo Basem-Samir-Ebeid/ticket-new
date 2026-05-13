@@ -6,6 +6,7 @@ import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { sendPushToAdmins } from './push'
 import { sendWhatsAppNotification, sendWhatsAppToUser } from '../whatsappConfig'
+import { sendEmail } from '../email'
 import { findAutoAssignUser } from '../autoAssignConfig'
 import {
   notifyAdminsNewTicket,
@@ -200,6 +201,19 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       const priorityLabel: Record<string, string> = { low: 'منخفضة', medium: 'متوسطة', high: 'عالية', urgent: 'عاجلة' }
       const waMsg = `🎫 تم تعيين تذكرة لك\n\nالعنوان: ${ticket.title}\nالأولوية: ${priorityLabel[ticket.priority] || ticket.priority}\nبواسطة: ${creatorName}\n\nيرجى متابعة التذكرة في النظام.`
       sendWhatsAppToUser(assigned_to, waMsg).catch(() => {})
+      ;(async () => {
+        const [assignedUser] = await db.select({ email: profiles.email, full_name: profiles.full_name }).from(profiles).where(eq(profiles.id, assigned_to))
+        if (assignedUser?.email) {
+          await sendEmail(
+            assignedUser.email,
+            `📋 تم تعيين تذكرة جديدة لك: ${title}`,
+            `<p>مرحباً ${assignedUser.full_name || ''},</p>
+             <p>تم تعيين تذكرة جديدة لك بعنوان: <strong>${title}</strong></p>
+             <p>الأولوية: ${priority || 'عادي'}</p>
+             <p>يرجى الاطلاع عليها في النظام.</p>`
+          )
+        }
+      })().catch(() => {})
     }
 
     try {
@@ -327,6 +341,21 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
       const priorityLabel: Record<string, string> = { low: 'منخفضة', medium: 'متوسطة', high: 'عالية', urgent: 'عاجلة' }
       const waMsg = `🎫 تم تعيين تذكرة لك\n\nالعنوان: ${ticket.title}\nالأولوية: ${priorityLabel[ticket.priority] || ticket.priority}\nبواسطة: ${changerName}\n\nيرجى متابعة التذكرة في النظام.`
       sendWhatsAppToUser(assigned_to, waMsg).catch(() => {})
+    }
+
+    if (request_status !== undefined && ticket?.created_by) {
+      ;(async () => {
+        const [requester] = await db.select({ email: profiles.email, full_name: profiles.full_name }).from(profiles).where(eq(profiles.id, ticket.created_by!))
+        if (requester?.email) {
+          const isApproved = request_status === 'approved'
+          await sendEmail(
+            requester.email,
+            isApproved ? `✅ تمت الموافقة على تذكرتك` : `❌ تم رفض تذكرتك`,
+            `<p>مرحباً ${requester.full_name || ''},</p>
+             <p>${isApproved ? 'تمت الموافقة على تذكرتك' : 'تم رفض تذكرتك'}: <strong>${ticket.title}</strong></p>`
+          )
+        }
+      })().catch(() => {})
     }
 
     broadcastAll('ticket_update', { action: 'updated', ticket_id: ticket.id, status: ticket.status })

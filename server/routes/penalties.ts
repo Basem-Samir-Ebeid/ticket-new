@@ -4,6 +4,7 @@ import { penalties, profiles, notifications } from '../../shared/schema'
 import { eq, desc, and } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
+import { sendEmail } from '../email'
 
 const router = Router()
 
@@ -75,6 +76,21 @@ router.post('/', requireAuth as any, async (req: any, res) => {
     }).returning()
     broadcast(user_id, 'notification', notif)
     broadcastAll('penalty_update', { action: 'created', penalty_id: penalty.id })
+
+    ;(async () => {
+      const [employee] = await db.select({ email: profiles.email, full_name: profiles.full_name }).from(profiles).where(eq(profiles.id, user_id))
+      if (employee?.email) {
+        await sendEmail(
+          employee.email,
+          '⚠️ تم إصدار جزاء بحقك',
+          `<p>مرحباً ${employee.full_name || ''},</p>
+           <p>تم إصدار جزاء بحقك في النظام.</p>
+           <p>السبب: <strong>${reason}</strong></p>
+           ${amount ? `<p>المبلغ: ${amount}</p>` : ''}
+           <p>يرجى مراجعة الإدارة لمزيد من التفاصيل.</p>`
+        )
+      }
+    })().catch(() => {})
 
     res.json(penalty)
   } catch (err: any) {

@@ -5,6 +5,7 @@ import { eq, desc, or, and, gte, lte } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { sendWhatsAppToUser } from '../whatsappConfig'
+import { sendEmail } from '../email'
 
 const router = Router()
 
@@ -282,6 +283,18 @@ router.patch('/:id/approve', requireAuth as any, async (req: any, res) => {
       broadcast(leave.user_id, 'notification', notif)
       const waMsg = `✅ تمت الموافقة على إجازتك\n\nنوع الإجازة: ${typeLabel[ltype] || ltype}\nمن: ${leave.start_date}\nإلى: ${leave.end_date}\nعدد الأيام: ${days}\n\nنتمنى لك إجازة سعيدة! 🌴`
       sendWhatsAppToUser(leave.user_id, waMsg).catch(() => {})
+      ;(async () => {
+        const [requester] = await db.select({ email: profiles.email, full_name: profiles.full_name }).from(profiles).where(eq(profiles.id, existing.user_id))
+        if (requester?.email) {
+          await sendEmail(
+            requester.email,
+            '✅ تمت الموافقة على طلب إجازتك',
+            `<p>مرحباً ${requester.full_name || ''},</p>
+             <p>تمت الموافقة على طلب إجازتك من <strong>${existing.start_date}</strong> إلى <strong>${existing.end_date}</strong>.</p>
+             <p>عدد الأيام: ${existing.days_count} يوم.</p>`
+          )
+        }
+      })().catch(() => {})
 
       try {
         const approveAdmins = await db.select({ id: profiles.id }).from(profiles)
@@ -344,6 +357,18 @@ router.patch('/:id/reject', requireAuth as any, async (req: any, res) => {
       }).returning()
       broadcast(leave.user_id, 'notification', notif)
       sendWhatsAppToUser(leave.user_id, `❌ تم رفض طلب إجازتك\nمن ${leave.start_date} إلى ${leave.end_date}${note ? '\nالسبب: ' + note : ''}`).catch(() => {})
+      ;(async () => {
+        const [requester] = await db.select({ email: profiles.email, full_name: profiles.full_name }).from(profiles).where(eq(profiles.id, existing.user_id))
+        if (requester?.email) {
+          await sendEmail(
+            requester.email,
+            '❌ تم رفض طلب إجازتك',
+            `<p>مرحباً ${requester.full_name || ''},</p>
+             <p>نأسف، تم رفض طلب إجازتك من <strong>${existing.start_date}</strong> إلى <strong>${existing.end_date}</strong>.</p>
+             ${existing.admin_note ? `<p>ملاحظة الإدارة: ${existing.admin_note}</p>` : ''}`
+          )
+        }
+      })().catch(() => {})
 
       try {
         const rejectAdmins = await db.select({ id: profiles.id }).from(profiles)
