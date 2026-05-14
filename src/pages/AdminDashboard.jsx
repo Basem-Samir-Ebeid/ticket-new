@@ -2262,7 +2262,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <input type="checkbox" checked={userForm.can_view_assets} onChange={e=>setUserForm(f=>({...f,can_view_assets:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
                     <span className="text-slate-400 text-sm">يمكنه عرض الأصول (Assets)</span>
                   </label>
-                  {profile?.role === 'super_admin' && (
+                  {isSuperAdmin && (
                     <label className="flex items-center gap-2 cursor-pointer mt-2">
                       <input type="checkbox" checked={userForm.can_view_whatsapp_contacts} onChange={e=>setUserForm(f=>({...f,can_view_whatsapp_contacts:e.target.checked}))} className="w-4 h-4 rounded accent-emerald-500" />
                       <span className="text-slate-400 text-sm">📋 مسؤول جهات واتساب (يرى أصحاب التيكتات)</span>
@@ -2395,7 +2395,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <input type="checkbox" checked={userForm.can_view_assets} onChange={e=>setUserForm(f=>({...f,can_view_assets:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
                     <span className="text-slate-400 text-sm">يمكنه عرض الأصول (Assets)</span>
                   </label>
-                  {profile?.role === 'super_admin' && (
+                  {isSuperAdmin && (
                     <label className="flex items-center gap-2 cursor-pointer mt-2">
                       <input type="checkbox" checked={userForm.can_view_whatsapp_contacts} onChange={e=>setUserForm(f=>({...f,can_view_whatsapp_contacts:e.target.checked}))} className="w-4 h-4 rounded accent-emerald-500" />
                       <span className="text-slate-400 text-sm">📋 مسؤول جهات واتساب (يرى أصحاب التيكتات)</span>
