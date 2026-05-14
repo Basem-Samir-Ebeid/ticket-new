@@ -765,7 +765,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         try { const r = await api.uploadFile(profilePicFile); profile_picture_url = r.url } catch {}
         setUploadingPic(false)
       }
-      await api.updateUser(editingUser.id, {
+      const updatedUser = await api.updateUser(editingUser.id, {
         full_name: userForm.full_name,
         role: userForm.role,
         can_view_attendance: userForm.can_view_attendance,
@@ -790,6 +790,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         notes: userForm.notes,
         whatsapp_phone: userForm.whatsapp_phone,
       })
+      if (updatedUser && updatedUser.id) {
+        setUsers(prev => prev.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
+      }
       setMsg('✓ User updated!'); setEditingUser(null); setProfilePicFile(null); fetchUsers()
     } catch (e) { setMsg('Error: ' + e.message) }
     setLoading(false)

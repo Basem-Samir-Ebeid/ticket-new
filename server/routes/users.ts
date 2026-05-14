@@ -84,12 +84,14 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
       whatsapp_phone,
     } = req.body
 
+    console.log('[PATCH /users/:id] body:', { can_view_whatsapp_contacts, can_view_attendance, can_view_assets, role })
+
     const updateData: Record<string, any> = {}
     if (full_name !== undefined) updateData.full_name = full_name
     if (role !== undefined) updateData.role = role
-    if (can_view_attendance !== undefined) updateData.can_view_attendance = can_view_attendance
-    if (can_view_assets !== undefined) updateData.can_view_assets = can_view_assets
-    if (can_view_whatsapp_contacts !== undefined) updateData.can_view_whatsapp_contacts = can_view_whatsapp_contacts
+    if (can_view_attendance !== undefined) updateData.can_view_attendance = Boolean(can_view_attendance)
+    if (can_view_assets !== undefined) updateData.can_view_assets = Boolean(can_view_assets)
+    if (can_view_whatsapp_contacts !== undefined) updateData.can_view_whatsapp_contacts = Boolean(can_view_whatsapp_contacts)
     if (profile_picture_url !== undefined) updateData.profile_picture_url = profile_picture_url
     if (leave_balance !== undefined) updateData.leave_balance = Number(leave_balance)
     if (sick_leave_balance !== undefined) updateData.sick_leave_balance = Number(sick_leave_balance)
@@ -113,6 +115,7 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
       .returning()
 
     if (!user) return res.status(404).json({ error: 'User not found' })
+    console.log('[PATCH /users/:id] saved can_view_whatsapp_contacts:', user.can_view_whatsapp_contacts)
     const { password_hash, ...safeUser } = user
     res.json(safeUser)
   } catch (err: any) {
