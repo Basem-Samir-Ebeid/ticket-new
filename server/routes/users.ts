@@ -50,7 +50,7 @@ router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) 
       role: role || 'employee',
       can_view_attendance: can_view_attendance || false,
       can_view_assets: can_view_assets || false,
-      can_view_whatsapp_contacts: can_view_whatsapp_contacts || false,
+      can_view_whatsapp_contacts: (can_view_whatsapp_contacts === true || can_view_whatsapp_contacts === 'true'),
       must_change_password: true,
       department: department || null,
       job_title: job_title || null,
@@ -91,7 +91,7 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
     if (role !== undefined) updateData.role = role
     if (can_view_attendance !== undefined) updateData.can_view_attendance = Boolean(can_view_attendance)
     if (can_view_assets !== undefined) updateData.can_view_assets = Boolean(can_view_assets)
-    if (can_view_whatsapp_contacts !== undefined) updateData.can_view_whatsapp_contacts = Boolean(can_view_whatsapp_contacts)
+    if (can_view_whatsapp_contacts !== undefined) updateData.can_view_whatsapp_contacts = (can_view_whatsapp_contacts === true || can_view_whatsapp_contacts === 'true')
     if (profile_picture_url !== undefined) updateData.profile_picture_url = profile_picture_url
     if (leave_balance !== undefined) updateData.leave_balance = Number(leave_balance)
     if (sick_leave_balance !== undefined) updateData.sick_leave_balance = Number(sick_leave_balance)
@@ -108,6 +108,8 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
     if (whatsapp_phone !== undefined) updateData.whatsapp_phone = whatsapp_phone?.trim() || null
 
     if (Object.keys(updateData).length === 0) return res.status(400).json({ error: 'No fields to update' })
+
+    console.log('[PATCH] can_view_whatsapp_contacts final value:', updateData.can_view_whatsapp_contacts, typeof updateData.can_view_whatsapp_contacts)
 
     const [user] = await db.update(profiles)
       .set(updateData)
