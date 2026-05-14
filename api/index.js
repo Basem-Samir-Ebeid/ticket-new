@@ -701,7 +701,7 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
 app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     const {
-      full_name, role, can_view_attendance, can_view_assets, profile_picture_url, leave_balance,
+      full_name, role, can_view_attendance, can_view_assets, can_view_whatsapp_contacts, profile_picture_url, leave_balance,
       sick_leave_balance, emergency_leave_balance, work_start_hour, department,
       job_title, phone, national_id, hire_date, birth_date, gender, address,
       employment_type, employee_code, direct_manager, notes, whatsapp_phone,
@@ -712,6 +712,7 @@ app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
     if (role !== undefined) { fields.push(`role=$${idx++}`); values.push(role) }
     if (can_view_attendance !== undefined) { fields.push(`can_view_attendance=$${idx++}`); values.push(can_view_attendance) }
     if (can_view_assets !== undefined) { fields.push(`can_view_assets=$${idx++}`); values.push(can_view_assets) }
+    if (can_view_whatsapp_contacts !== undefined) { fields.push(`can_view_whatsapp_contacts=$${idx++}`); values.push(can_view_whatsapp_contacts === true || can_view_whatsapp_contacts === 'true') }
     if (profile_picture_url !== undefined) { fields.push(`profile_picture_url=$${idx++}`); values.push(profile_picture_url) }
     if (leave_balance !== undefined) { fields.push(`leave_balance=$${idx++}`); values.push(leave_balance) }
     if (sick_leave_balance !== undefined) { fields.push(`sick_leave_balance=$${idx++}`); values.push(sick_leave_balance) }
@@ -733,7 +734,7 @@ app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
     if (!fields.length) return res.status(400).json({ error: 'No fields to update' })
     values.push(req.params.id)
     const { rows } = await getPool().query(
-      `UPDATE profiles SET ${fields.join(',')} WHERE id=$${idx} RETURNING id, email, full_name, role, can_view_attendance, can_view_assets, profile_picture_url, must_change_password, leave_balance, created_at`,
+      `UPDATE profiles SET ${fields.join(',')} WHERE id=$${idx} RETURNING id, email, full_name, role, can_view_attendance, can_view_assets, can_view_whatsapp_contacts, profile_picture_url, must_change_password, leave_balance, created_at`,
       values
     )
     if (!rows[0]) return res.status(404).json({ error: 'User not found' })
