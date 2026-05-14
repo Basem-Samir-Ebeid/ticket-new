@@ -35,7 +35,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [showCreateUser, setShowCreateUser] = useState(false)
   const [showCreateTicket, setShowCreateTicket] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
-  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, can_view_assets: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '' })
+  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, can_view_assets: false, can_view_whatsapp_contacts: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '' })
   const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
   const [ticketAssets, setTicketAssets] = useState([])
   const [msg, setMsg] = useState('')
@@ -770,6 +770,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         role: userForm.role,
         can_view_attendance: userForm.can_view_attendance,
         can_view_assets: userForm.can_view_assets,
+        can_view_whatsapp_contacts: userForm.can_view_whatsapp_contacts,
         profile_picture_url,
         leave_balance: Number(userForm.leave_balance),
         sick_leave_balance: Number(userForm.sick_leave_balance),
@@ -834,7 +835,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       }
       await api.createUser({ ...userForm, profile_picture_url })
       setMsg('✓ User created!')
-      setUserForm({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '' })
+      setUserForm({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, can_view_assets: false, can_view_whatsapp_contacts: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '' })
       setProfilePicFile(null)
       setShowCreateUser(false)
       fetchUsers()
@@ -2261,6 +2262,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <input type="checkbox" checked={userForm.can_view_assets} onChange={e=>setUserForm(f=>({...f,can_view_assets:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
                     <span className="text-slate-400 text-sm">يمكنه عرض الأصول (Assets)</span>
                   </label>
+                  {profile?.role === 'super_admin' && (
+                    <label className="flex items-center gap-2 cursor-pointer mt-2">
+                      <input type="checkbox" checked={userForm.can_view_whatsapp_contacts} onChange={e=>setUserForm(f=>({...f,can_view_whatsapp_contacts:e.target.checked}))} className="w-4 h-4 rounded accent-emerald-500" />
+                      <span className="text-slate-400 text-sm">📋 مسؤول جهات واتساب (يرى أصحاب التيكتات)</span>
+                    </label>
+                  )}
                 </div>
 
                 {/* ── البيانات الوظيفية ── */}
@@ -2388,6 +2395,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <input type="checkbox" checked={userForm.can_view_assets} onChange={e=>setUserForm(f=>({...f,can_view_assets:e.target.checked}))} className="w-4 h-4 rounded accent-indigo-500" />
                     <span className="text-slate-400 text-sm">يمكنه عرض الأصول (Assets)</span>
                   </label>
+                  {profile?.role === 'super_admin' && (
+                    <label className="flex items-center gap-2 cursor-pointer mt-2">
+                      <input type="checkbox" checked={userForm.can_view_whatsapp_contacts} onChange={e=>setUserForm(f=>({...f,can_view_whatsapp_contacts:e.target.checked}))} className="w-4 h-4 rounded accent-emerald-500" />
+                      <span className="text-slate-400 text-sm">📋 مسؤول جهات واتساب (يرى أصحاب التيكتات)</span>
+                    </label>
+                  )}
                 </div>
 
                 {/* ── أرصدة الإجازات ── */}
@@ -2594,13 +2607,14 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                         <td className="px-4 py-3 text-slate-500 text-xs">
                           {u.can_view_attendance ? <span className="text-emerald-400 block">✓ Attendance</span> : null}
                           {u.can_view_assets ? <span className="text-blue-400 block">✓ Assets</span> : null}
-                          {!u.can_view_attendance && !u.can_view_assets ? '—' : null}
+                          {u.can_view_whatsapp_contacts ? <span className="text-green-400 block">✓ WhatsApp</span> : null}
+                          {!u.can_view_attendance && !u.can_view_assets && !u.can_view_whatsapp_contacts ? '—' : null}
                         </td>
                       )}
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button onClick={()=>setEmployeeProfileId(u.id)} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">ملف</button>
-                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,can_view_assets:u.can_view_assets,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7,work_start_hour:u.work_start_hour??9,department:u.department||'',job_title:u.job_title||'',phone:u.phone||'',national_id:u.national_id||'',hire_date:u.hire_date||'',birth_date:u.birth_date||'',gender:u.gender||'',address:u.address||'',employment_type:u.employment_type||'full_time',employee_code:u.employee_code||'',direct_manager:u.direct_manager||'',notes:u.notes||'',whatsapp_phone:u.whatsapp_phone||''})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
+                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,can_view_assets:u.can_view_assets,can_view_whatsapp_contacts:u.can_view_whatsapp_contacts||false,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7,work_start_hour:u.work_start_hour??9,department:u.department||'',job_title:u.job_title||'',phone:u.phone||'',national_id:u.national_id||'',hire_date:u.hire_date||'',birth_date:u.birth_date||'',gender:u.gender||'',address:u.address||'',employment_type:u.employment_type||'full_time',employee_code:u.employee_code||'',direct_manager:u.direct_manager||'',notes:u.notes||'',whatsapp_phone:u.whatsapp_phone||''})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
                           <button onClick={()=>openResetPwd(u)} disabled={resettingUserId===u.id} className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 transition-colors">{resettingUserId===u.id ? '...' : 'Reset Pwd'}</button>
                           <button onClick={()=>deleteUser(u.id)} disabled={loading} className="text-xs text-red-400/70 hover:text-red-400 disabled:opacity-50 transition-colors">Delete</button>
                         </div>

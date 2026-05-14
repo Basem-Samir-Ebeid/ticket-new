@@ -31,7 +31,7 @@ router.get('/', requireAuth as any, requireAdmin as any, async (req: any, res) =
 router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) => {
   try {
     const {
-      email, password, full_name, role, can_view_attendance, can_view_assets,
+      email, password, full_name, role, can_view_attendance, can_view_assets, can_view_whatsapp_contacts,
       department, job_title, phone, national_id, hire_date, birth_date,
       gender, address, employment_type, employee_code, direct_manager, notes,
     } = req.body
@@ -50,6 +50,7 @@ router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) 
       role: role || 'employee',
       can_view_attendance: can_view_attendance || false,
       can_view_assets: can_view_assets || false,
+      can_view_whatsapp_contacts: can_view_whatsapp_contacts || false,
       must_change_password: true,
       department: department || null,
       job_title: job_title || null,
@@ -76,14 +77,14 @@ router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) 
 router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, res) => {
   try {
     const {
-      full_name, role, can_view_attendance, can_view_assets, profile_picture_url,
+      full_name, role, can_view_attendance, can_view_assets, can_view_whatsapp_contacts, profile_picture_url,
       leave_balance, sick_leave_balance, emergency_leave_balance, work_start_hour,
       department, job_title, phone, national_id, hire_date, birth_date,
       gender, address, employment_type, employee_code, direct_manager, notes,
       whatsapp_phone,
     } = req.body
 
-    const updateData: Record<string, any> = { full_name, role, can_view_attendance, can_view_assets, profile_picture_url }
+    const updateData: Record<string, any> = { full_name, role, can_view_attendance, can_view_assets, can_view_whatsapp_contacts, profile_picture_url }
     if (leave_balance !== undefined) updateData.leave_balance = Number(leave_balance)
     if (sick_leave_balance !== undefined) updateData.sick_leave_balance = Number(sick_leave_balance)
     if (emergency_leave_balance !== undefined) updateData.emergency_leave_balance = Number(emergency_leave_balance)

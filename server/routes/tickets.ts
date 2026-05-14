@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db'
 import { tickets, ticketReplies, profiles, notifications, ticketTemplates, ticketHistory, assets } from '../../shared/schema'
-import { eq, and, desc, or } from 'drizzle-orm'
+import { eq, and, desc, or, inArray } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { sendPushToAdmins } from './push'
@@ -115,6 +115,31 @@ router.delete('/templates/:id', requireAuth as any, async (req: any, res) => {
     res.json({ success: true })
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to delete template' })
+  }
+})
+
+// ─── WhatsApp contacts (ticket creators) ──────────────────────────────────────
+
+router.get('/whatsapp-contacts', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!req.profile?.can_view_whatsapp_contacts && !isAdminRole(req.profile?.role)) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
+    const allTickets = await db.select({ created_by: tickets.created_by }).from(tickets)
+    const creatorIds = [...new Set(allTickets.map((t: any) => t.created_by).filter(Boolean))] as string[]
+    if (creatorIds.length === 0) return res.json([])
+    const creators = await db.select({
+      id: profiles.id,
+      full_name: profiles.full_name,
+      email: profiles.email,
+      whatsapp_phone: profiles.whatsapp_phone,
+      department: profiles.department,
+      job_title: profiles.job_title,
+      profile_picture_url: profiles.profile_picture_url,
+    }).from(profiles).where(inArray(profiles.id, creatorIds))
+    res.json(creators)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to get WhatsApp contacts' })
   }
 })
 

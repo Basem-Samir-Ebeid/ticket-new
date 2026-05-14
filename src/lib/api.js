@@ -92,6 +92,7 @@ export const api = {
   // Tickets
   getTickets: () => request('GET', '/tickets'),
   getRequests: () => request('GET', '/tickets/requests'),
+  getWhatsappContacts: () => request('GET', '/tickets/whatsapp-contacts'),
   createTicket: (data) => request('POST', '/tickets', data),
   updateTicket: (id, data) => request('PATCH', `/tickets/${id}`, data),
   deleteTicket: (id) => request('DELETE', `/tickets/${id}`),
