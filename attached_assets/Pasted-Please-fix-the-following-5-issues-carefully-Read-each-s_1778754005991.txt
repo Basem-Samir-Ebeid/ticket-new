@@ -1,0 +1,133 @@
+Please fix the following 5 issues carefully. Read each section fully before touching any file. Make the minimum changes needed — do NOT refactor, restructure, or change anything outside what is explicitly described below.
+
+---
+
+## FIX 1 — Add `whatsapp_phone` to `withProfiles()` in tickets.ts
+
+**File:** `server/routes/tickets.ts`
+
+**Problem:** The `withProfiles()` function fetches profiles but only selects `id, full_name, email, role`. It does NOT include `whatsapp_phone`, so the frontend never receives it on ticket objects.
+
+**Fix:** In the `withProfiles()` function, add `whatsapp_phone: profiles.whatsapp_phone` to the select object:
+
+Change this:
+```ts
+const allProfiles = await db.select({
+  id: profiles.id, full_name: profiles.full_name, email: profiles.email, role: profiles.role
+}).from(profiles)
+```
+
+To this:
+```ts
+const allProfiles = await db.select({
+  id: profiles.id, full_name: profiles.full_name, email: profiles.email, role: profiles.role, whatsapp_phone: profiles.whatsapp_phone
+}).from(profiles)
+```
+
+Do NOT change anything else in this file.
+
+---
+
+## FIX 2 — Add Ticket Creator Info + WhatsApp Button to MemberDashboard Ticket Cards
+
+**File:** `src/pages/MemberDashboard.jsx`
+
+**Problem:** In the "Assigned" tickets tab (`activeTab === 'tickets'`), the ticket cards show the title and status but not who sent the ticket. The admin (or member who created it) needs to be identifiable, and if they have a WhatsApp number, there should be a button to contact them.
+
+**Fix:** Inside the `filteredAssigned.map((t, i) => ...)` block, find the ticket card's inner content div. After the `<h3>` that shows `{t.title}`, add this block:
+
+```jsx
+{t.created_by_profile && (
+  <div className="flex items-center gap-2 mt-2 flex-wrap">
+    <span className="text-slate-500 text-xs">
+      👤 من: <span className="text-slate-300">{t.created_by_profile.full_name || t.created_by_profile.email}</span>
+    </span>
+    {t.created_by_profile.whatsapp_phone && (
+      <a
+        href={`https://wa.me/${t.created_by_profile.whatsapp_phone.replace(/\D/g, '')}?text=${encodeURIComponent('بخصوص التيكيت: ' + t.title)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={e => e.stopPropagation()}
+        className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg font-medium transition-all"
+        style={{background:'rgba(37,211,102,0.12)', border:'1px solid rgba(37,211,102,0.25)', color:'#25d366'}}
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.115.554 4.103 1.523 5.824L0 24l6.344-1.501A11.955 11.955 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.885 0-3.655-.51-5.18-1.402l-.37-.22-3.767.891.938-3.67-.242-.385A9.938 9.938 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+        واتساب
+      </a>
+    )}
+  </div>
+)}
+```
+
+The `e.stopPropagation()` is critical — it prevents the WhatsApp link click from also opening the ticket detail panel.
+
+Do NOT touch `assignedTickets`, `filteredAssigned`, `myOwnTickets`, or any other logic. Only add this UI block inside the existing card.
+
+---
+
+## FIX 3 — Remove Dead CallMeBot Code from EmployeeDashboard
+
+**File:** `src/pages/EmployeeDashboard.jsx`
+
+**Problem:** The file still has a full CallMeBot WhatsApp activation section that references `whatsapp_apikey` — a field that no longer exists in the database. This causes a silent failed API call when an employee tries to use it.
+
+**Fix — Step A:** Remove these 3 state declarations (around lines 59–61):
+```js
+const [waApikeyInput, setWaApikeyInput] = useState('')
+const [waApikeySaved, setWaApikeySaved] = useState(false)
+const [savingWaApikey, setSavingWaApikey] = useState(false)
+```
+
+**Fix — Step B:** Remove the `handleSaveWaApikey` function entirely (the async function that calls `api.updateProfile({ whatsapp_apikey: ... })`).
+
+**Fix — Step C:** In the render/JSX section, find the entire card block that starts with:
+```jsx
+{/* WhatsApp / CallMeBot activation */}
+<div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(37,211,102,0.15)'}}>
+```
+And ends after the closing `</div>` of that card. **Remove the entire block** including the instructions and the form.
+
+Also remove this line from the useEffect or wherever `setWaApikeySaved(false)` is called (around line 172):
+```js
+setWaApikeySaved(false)
+```
+
+Do NOT remove the password change section or any other part of the profile tab.
+
+---
+
+## FIX 4 — Remove `whatsapp_apikey` from `api/index.js` Schema Migration
+
+**File:** `api/index.js`
+
+**Problem:** Around line 121, `api/index.js` runs this SQL on startup:
+```sql
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS whatsapp_apikey TEXT;
+```
+This re-adds a column that was intentionally removed from the schema.
+
+**Fix:** Find and delete only this one line:
+```sql
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS whatsapp_apikey TEXT;
+```
+
+Do NOT remove the `whatsapp_phone` migration line or any other migration. Do NOT change any other logic in this file.
+
+---
+
+## FIX 5 — No Changes Needed to api/index.js WhatsApp for accept/refuse/replies
+
+After reviewing `api/index.js`, the accept, refuse, and replies endpoints already call `sendWhatsAppToUserId` correctly (lines 950, 955, 971, 1005, 1010). **No changes needed here.**
+
+---
+
+## Summary of files to touch
+
+| File | Change |
+|------|--------|
+| `server/routes/tickets.ts` | Add `whatsapp_phone` to `withProfiles()` select |
+| `src/pages/MemberDashboard.jsx` | Add creator name + WhatsApp button to assigned ticket cards |
+| `src/pages/EmployeeDashboard.jsx` | Remove CallMeBot state, function, and entire UI card |
+| `api/index.js` | Remove one SQL line that re-adds `whatsapp_apikey` column |
+
+Do NOT touch `AdminDashboard.jsx`, `server/routes/leaves.ts`, `server/routes/attendance.ts`, `server/whatsappConfig.ts`, `shared/schema.ts`, or any other file.
