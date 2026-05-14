@@ -171,6 +171,33 @@ export default function MemberDashboard() {
     if (!todayLogin || todayLogin.logout_time) return
     setLoggingOut(true)
     setAttendanceError('')
+
+    const nowCairo = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' }))
+    const isAfterSixPM = nowCairo.getHours() >= 18
+
+    if (isAfterSixPM) {
+      // بعد 6 مساءً: نحاول نجيب الموقع بس مش مطلوب
+      const tryGPS = () => new Promise((resolve) => {
+        if (!navigator.geolocation) { resolve({ lat: null, lng: null }); return }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          () => resolve({ lat: null, lng: null }),
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        )
+      })
+      const { lat, lng } = await tryGPS()
+      try {
+        await api.registerLogout(lat, lng)
+        await checkTodayLogin()
+        setAttendanceError('')
+      } catch (e) {
+        setAttendanceError(e.message)
+      }
+      setLoggingOut(false)
+      return
+    }
+
+    // قبل 6 مساءً: الموقع مطلوب وبيتحقق من النطاق
     if (!navigator.geolocation) {
       setAttendanceError('الموقع الجغرافي غير مدعوم في هذا المتصفح.')
       setLoggingOut(false)

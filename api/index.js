@@ -1140,7 +1140,11 @@ app.post('/api/attendance/logout', requireAuth, async (req, res) => {
 
     const isRemote = existing[0].attendance_type === 'remote'
 
-    if (!isRemote) {
+    // Check if current time in Cairo is after 6 PM — bypass geofence if so
+    const nowCairo = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' }))
+    const isAfterSixPM = nowCairo.getHours() >= 18
+
+    if (!isRemote && !isAfterSixPM) {
       if (latitude == null || longitude == null) return res.status(400).json({ error: 'Location is required to check out' })
       const office = await getOfficeConfig()
       const distance = haversineDistance(Number(latitude), Number(longitude), office.latitude, office.longitude)
