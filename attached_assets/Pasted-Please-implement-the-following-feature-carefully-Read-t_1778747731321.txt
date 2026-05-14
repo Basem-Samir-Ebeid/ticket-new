@@ -1,0 +1,56 @@
+Please implement the following feature carefully. Read the existing code thoroughly before making any changes.
+
+---
+
+## Feature: Ticket Panel with WhatsApp Contact — for Admin/Member Users
+
+### Context
+
+The app has three user roles:
+- `admin` / `super_admin` → see `AdminDashboard.jsx`
+- `member` → see `MemberDashboard.jsx`
+
+Currently, `MemberDashboard.jsx` has two ticket tabs:
+1. **"Assigned" tab** (`activeTab === 'tickets'`) — shows tickets assigned TO the logged-in member by the admin
+2. **"My Tickets" tab** (`activeTab === 'myTickets'`) — shows tickets the member created themselves and sent to the admin
+
+This is all working fine. Do NOT break it.
+
+---
+
+### What I Need
+
+In the **"Assigned" tickets tab** (`activeTab === 'tickets'`), inside each ticket card, I want to display **who created the ticket** (i.e., `t.created_by_profile?.full_name`) along with a **WhatsApp contact button** that opens a WhatsApp chat with that person.
+
+The ticket object already has `t.created_by_profile` (with `full_name`, `email`) and the creator's `whatsapp_phone` may be available via the profile.
+
+**Specifically, for each ticket card in the Assigned tab:**
+
+1. Show the creator's name below the ticket title, like:
+   > 👤 From: **Ahmed Mohamed**
+
+2. If the creator has a `whatsapp_phone` set in their profile, show a small WhatsApp button next to their name. When clicked, it opens:
+   `https://wa.me/{phone_number_digits_only}?text=Hi, regarding ticket: {ticket_title}`
+   - Strip all non-digit characters from the phone number before building the URL
+   - The button should be styled in green (`#25d366`) and small (icon + optional label "WhatsApp")
+   - It should open in a new tab (`target="_blank"`)
+
+3. If the creator has NO `whatsapp_phone`, do not show the button (graceful fallback).
+
+---
+
+### Data Already Available
+
+In `server/routes/tickets.ts`, the `GET /tickets` endpoint already calls `withProfiles()` which joins `created_by_profile` and `assigned_to_profile` onto each ticket. The `profiles` table has a `whatsapp_phone` column.
+
+So `t.created_by_profile.whatsapp_phone` should be accessible on the frontend — verify this is included in `withProfiles()`. If `whatsapp_phone` is not being selected in the profile join, add it to the select query.
+
+---
+
+### Important Constraints
+
+- Only modify `MemberDashboard.jsx` and `server/routes/tickets.ts` (if needed for the profile join)
+- Do NOT touch `AdminDashboard.jsx`
+- Do NOT change any existing ticket filtering logic (`assignedTickets`, `filteredAssigned`, etc.)
+- Keep the design consistent with the existing dark glass-card style in the file
+- The WhatsApp button should be subtle — not a full-width button, just a small inline button/link inside the ticket card

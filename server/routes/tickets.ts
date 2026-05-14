@@ -21,7 +21,7 @@ const router = Router()
 
 async function withProfiles(rows: any[]) {
   const allProfiles = await db.select({
-    id: profiles.id, full_name: profiles.full_name, email: profiles.email, role: profiles.role
+    id: profiles.id, full_name: profiles.full_name, email: profiles.email, role: profiles.role, whatsapp_phone: profiles.whatsapp_phone
   }).from(profiles)
   const profileMap = new Map(allProfiles.map(p => [p.id, p]))
 
