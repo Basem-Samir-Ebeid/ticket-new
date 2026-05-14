@@ -45,6 +45,7 @@ export const tickets = pgTable('tickets', {
   title: text('title').notNull(),
   description: text('description'),
   affected_person: text('affected_person'),
+  affected_user_id: uuid('affected_user_id').references(() => profiles.id),
   asset_id: uuid('asset_id'),
   category: text('category'),
   due_date: date('due_date'),

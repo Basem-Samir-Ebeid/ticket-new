@@ -147,6 +147,7 @@ async function ensureSchema() {
       ALTER TABLE tickets ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'medium';
       ALTER TABLE tickets ADD COLUMN IF NOT EXISTS rating INTEGER;
       ALTER TABLE tickets ADD COLUMN IF NOT EXISTS rating_comment TEXT;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS affected_user_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
 
       CREATE TABLE IF NOT EXISTS ticket_history (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -845,13 +846,13 @@ app.get('/api/tickets/:id', requireAuth, async (req, res) => {
 
 app.post('/api/tickets', requireAuth, async (req, res) => {
   try {
-    const { title, description, affected_person, category, due_date, assigned_to, status, priority, is_request } = req.body
+    const { title, description, affected_person, affected_user_id, category, due_date, assigned_to, status, priority, is_request } = req.body
     const now = new Date()
     const db = getPool()
     const { rows } = await db.query(
-      `INSERT INTO tickets (title,description,affected_person,category,due_date,assigned_to,created_by,status,priority,is_request,request_status,opened_at,pending_at,solved_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
-      [title, description || null, affected_person || null, category || null, due_date || null,
+      `INSERT INTO tickets (title,description,affected_person,affected_user_id,category,due_date,assigned_to,created_by,status,priority,is_request,request_status,opened_at,pending_at,solved_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+      [title, description || null, affected_person || null, affected_user_id || null, category || null, due_date || null,
        assigned_to || null, req.user.id, status || 'opened', priority || 'medium',
        is_request || false, is_request ? 'pending_review' : null,
        now, status === 'pending' ? now : null, status === 'solved' ? now : null]
@@ -877,6 +878,12 @@ app.post('/api/tickets', requireAuth, async (req, res) => {
       await db.query('INSERT INTO notifications (user_id, ticket_id, message) VALUES ($1,$2,$3)',
         [assigned_to, ticket.id, `🎫 تم تعيين تذكرة لك: "${title}"`])
       sendWhatsAppToUserId(assigned_to, `🎫 تم تعيين تذكرة لك\nالعنوان: "${title}"\nالأولوية: ${priorityLabel[priority] || priority}\nبواسطة: ${creatorName}`).catch(() => {})
+    }
+
+    // Notify the affected person if they are in the system and have WhatsApp
+    if (affected_user_id && affected_user_id !== assigned_to) {
+      const priorityLabel2 = { low: 'منخفضة', medium: 'متوسطة', high: 'عالية', urgent: 'عاجلة' }
+      sendWhatsAppToUserId(affected_user_id, `🎫 تم فتح تذكرة باسمك\nالعنوان: "${title}"\nالأولوية: ${priorityLabel2[priority] || priority}\nبواسطة: ${creatorName}`).catch(() => {})
     }
 
     res.json(ticket)

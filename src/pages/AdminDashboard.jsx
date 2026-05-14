@@ -36,7 +36,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [showCreateTicket, setShowCreateTicket] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, can_view_assets: false, can_view_whatsapp_contacts: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '' })
-  const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
+  const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', affected_user_id: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
   const [ticketAssets, setTicketAssets] = useState([])
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
@@ -872,6 +872,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         title: ticketForm.title,
         description: ticketForm.description,
         affected_person: ticketForm.affected_person,
+        affected_user_id: ticketForm.affected_user_id || null,
         assigned_to: ticketForm.assigned_to || null,
         status: ticketForm.status,
         priority: ticketForm.priority || 'medium',
@@ -880,7 +881,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         asset_id: ticketForm.asset_id || null,
       })
       setMsg('✓ Ticket created!')
-      setTicketForm({ title: '', description: '', affected_person: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
+      setTicketForm({ title: '', description: '', affected_person: '', affected_user_id: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
       setShowCreateTicket(false)
       fetchTickets()
     } catch (e) { setMsg('Error: ' + e.message) }
@@ -1496,7 +1497,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Affected Person</label>
-                    <input value={ticketForm.affected_person} onChange={e=>setTicketForm(f=>({...f,affected_person:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="Person with issue" />
+                    <select value={ticketForm.affected_user_id||''} onChange={e=>{const uid=e.target.value;setTicketForm(f=>({...f,affected_user_id:uid,affected_person:uid?(users.find(u=>u.id===uid)?.full_name||''):f.affected_person}))}} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+                      <option value="">-- اختر موظف (اختياري) --</option>
+                      {users.map(u=><option key={u.id} value={u.id}>{u.full_name||u.email}</option>)}
+                    </select>
+                    <input value={ticketForm.affected_person} onChange={e=>setTicketForm(f=>({...f,affected_person:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all mt-2" placeholder="أو اكتب الاسم يدوياً" />
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Assign To</label>

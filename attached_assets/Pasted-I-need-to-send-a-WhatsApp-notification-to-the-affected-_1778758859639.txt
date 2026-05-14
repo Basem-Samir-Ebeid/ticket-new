@@ -1,0 +1,79 @@
+I need to send a WhatsApp notification to the affected person when a ticket is created for them. Currently `affected_person` is a free-text field (just a name string), so we can't look up their WhatsApp number.
+
+Please implement the following changes carefully. Read all files before touching anything.
+
+---
+
+## CHANGE 1 — Add `affected_user_id` to the tickets table
+
+**File:** `api/index.js` — in the startup SQL migration block
+
+Add this line alongside the other `ALTER TABLE tickets` statements:
+```sql
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS affected_user_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
+```
+
+**File:** `shared/schema.ts` — in the `tickets` table definition, add:
+```ts
+affected_user_id: uuid('affected_user_id').references(() => profiles.id),
+```
+
+---
+
+## CHANGE 2 — Update the ticket creation form in AdminDashboard
+
+**File:** `src/pages/AdminDashboard.jsx`
+
+In the ticket creation form, find the `affected_person` text input:
+```jsx
+<input value={ticketForm.affected_person} onChange={e=>setTicketForm(f=>({...f,affected_person:e.target.value}))} ... placeholder="Person with issue" />
+```
+
+Replace it with a dropdown that lists all users, AND keep the text input below it for cases where the person is not in the system:
+```jsx
+<select value={ticketForm.affected_user_id||''} onChange={e=>{
+  const uid = e.target.value
+  setTicketForm(f=>({...f, affected_user_id: uid, affected_person: uid ? (users.find(u=>u.id===uid)?.full_name||'') : f.affected_person}))
+}} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+  <option value="">-- اختر موظف (اختياري) --</option>
+  {users.map(u => <option key={u.id} value={u.id}>{u.full_name || u.email}</option>)}
+</select>
+<input value={ticketForm.affected_person} onChange={e=>setTicketForm(f=>({...f,affected_person:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all mt-2" placeholder="أو اكتب الاسم يدوياً" />
+```
+
+Also add `affected_user_id: ''` to the `ticketForm` initial state (in `useState`) and in the reset after submit.
+
+When submitting (in the `createTicket` / submit handler), include `affected_user_id: ticketForm.affected_user_id || null` in the request body.
+
+---
+
+## CHANGE 3 — Save `affected_user_id` on ticket creation
+
+**File:** `api/index.js` — `POST /api/tickets` handler
+
+Destructure `affected_user_id` from `req.body`:
+```js
+const { title, description, affected_person, affected_user_id, category, due_date, assigned_to, status, priority, is_request } = req.body
+```
+
+Add it to the INSERT query (add the column and value to the existing INSERT):
+```sql
+INSERT INTO tickets (title, description, affected_person, affected_user_id, ...)
+VALUES ($1, $2, $3, $4, ...)
+```
+Shift the existing `$` parameter numbers accordingly.
+
+After the existing `sendWhatsAppToUserId(assigned_to, ...)` call, add:
+```js
+// Notify the affected person if they are in the system and have WhatsApp
+if (affected_user_id && affected_user_id !== assigned_to) {
+  sendWhatsAppToUserId(affected_user_id, `🎫 تم فتح تذكرة باسمك\nالعنوان: "${title}"\nالأولوية: ${priorityLabel[priority] || priority}\nبواسطة: ${creatorName}`).catch(() => {})
+}
+```
+
+---
+
+## Important constraints
+- Do NOT remove the existing `affected_person` text field from the DB or the form — keep it as a fallback
+- Do NOT touch `server/routes/tickets.ts` — app runs on Vercel via `api/index.js`
+- Do NOT change any other files
