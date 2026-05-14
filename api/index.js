@@ -118,7 +118,6 @@ async function ensureSchema() {
       ALTER TABLE profiles ADD COLUMN IF NOT EXISTS direct_manager TEXT;
       ALTER TABLE profiles ADD COLUMN IF NOT EXISTS notes TEXT;
       ALTER TABLE profiles ADD COLUMN IF NOT EXISTS whatsapp_phone TEXT;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS whatsapp_apikey TEXT;
 
       CREATE TABLE IF NOT EXISTS tickets (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

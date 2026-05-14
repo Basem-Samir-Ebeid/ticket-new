@@ -56,9 +56,6 @@ export default function EmployeeDashboard() {
   const [showLeaveForm, setShowLeaveForm] = useState(false)
   const [leaveForm, setLeaveForm] = useState({ start_date: '', end_date: '', reason: '', leave_type: 'annual' })
   const [profileForm, setProfileForm] = useState({ full_name: '', email: '', phone: '' })
-  const [waApikeyInput, setWaApikeyInput] = useState('')
-  const [waApikeySaved, setWaApikeySaved] = useState(false)
-  const [savingWaApikey, setSavingWaApikey] = useState(false)
   const [updatingProfile, setUpdatingProfile] = useState(false)
   const [profileMsg, setProfileMsg] = useState('')
   const [changePasswordForm, setChangePasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
@@ -169,7 +166,6 @@ export default function EmployeeDashboard() {
   useEffect(() => {
     if (profile) {
       setProfileForm({ full_name: profile.full_name || '', email: profile.email || '', phone: profile.phone || '' })
-      setWaApikeySaved(false)
     }
   }, [profile])
 
@@ -447,19 +443,6 @@ export default function EmployeeDashboard() {
       setProfileMsg('✓ Profile updated!')
     } catch (err) { setProfileMsg('Error: ' + err.message) }
     setUpdatingProfile(false)
-  }
-
-  async function handleSaveWaApikey(e) {
-    e.preventDefault()
-    if (!waApikeyInput.trim()) return
-    setSavingWaApikey(true); setProfileMsg('')
-    try {
-      await api.updateProfile({ whatsapp_apikey: waApikeyInput.trim() })
-      setWaApikeySaved(true)
-      setWaApikeyInput('')
-      setProfileMsg('✓ تم حفظ مفتاح CallMeBot!')
-    } catch (err) { setProfileMsg('Error: ' + err.message) }
-    setSavingWaApikey(false)
   }
 
   async function handleChangePassword(e) {
@@ -1120,39 +1103,6 @@ export default function EmployeeDashboard() {
                 </div>
                 {profileMsg && <p className={`text-sm rounded-xl px-3 py-2 ${profileMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{profileMsg}</p>}
                 <button type="submit" disabled={updatingProfile} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{updatingProfile ? 'Saving...' : 'Save Changes'}</button>
-              </form>
-            </div>
-
-            {/* WhatsApp / CallMeBot activation */}
-            <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(37,211,102,0.15)'}}>
-              <h2 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
-                <span className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{background:'rgba(37,211,102,0.12)',border:'1px solid rgba(37,211,102,0.2)'}}>📱</span>
-                تفعيل إشعارات واتساب
-              </h2>
-              <div className="mb-4 p-3 rounded-xl text-xs space-y-1.5" style={{background:'rgba(37,211,102,0.05)', border:'1px solid rgba(37,211,102,0.12)'}}>
-                <p className="text-emerald-400 font-semibold">خطوات التفعيل (مجاني):</p>
-                <p className="text-slate-400">١. أضف الرقم <span className="text-white font-mono">+34 644 59 71 96</span> في جهات اتصالك</p>
-                <p className="text-slate-400">٢. ابعت على واتساب: <span className="text-white font-mono select-all">I allow callmebot to send me messages</span></p>
-                <p className="text-slate-400">٣. هيوصلك API key — احفظه في الحقل أدناه</p>
-                <p className="text-slate-400">٤. تأكد أن رقمك محفوظ في قسم "Edit Profile" بالأعلى</p>
-              </div>
-              <form onSubmit={handleSaveWaApikey} className="space-y-3">
-                <div>
-                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">مفتاح CallMeBot (لإشعارات الواتساب)</label>
-                  {waApikeySaved ? (
-                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm" style={{background:'rgba(37,211,102,0.08)', border:'1px solid rgba(37,211,102,0.2)'}}>
-                      <span className="text-emerald-400 font-semibold">✓ تم الحفظ</span>
-                      <button type="button" onClick={()=>setWaApikeySaved(false)} className="text-slate-500 text-xs hover:text-slate-300 ml-auto">تغيير</button>
-                    </div>
-                  ) : (
-                    <input value={waApikeyInput} onChange={e=>setWaApikeyInput(e.target.value)} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 transition-all" placeholder="أدخل الـ API key الخاص بك" dir="ltr" />
-                  )}
-                </div>
-                {!waApikeySaved && (
-                  <button type="submit" disabled={savingWaApikey || !waApikeyInput.trim()} className="text-sm px-4 py-2 rounded-xl font-medium text-white disabled:opacity-40 transition-all" style={{background:'rgba(37,211,102,0.18)', border:'1px solid rgba(37,211,102,0.28)'}}>
-                    {savingWaApikey ? 'جاري الحفظ...' : 'حفظ المفتاح'}
-                  </button>
-                )}
               </form>
             </div>
 
