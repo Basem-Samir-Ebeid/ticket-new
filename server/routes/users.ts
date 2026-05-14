@@ -84,7 +84,13 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
       whatsapp_phone,
     } = req.body
 
-    const updateData: Record<string, any> = { full_name, role, can_view_attendance, can_view_assets, can_view_whatsapp_contacts, profile_picture_url }
+    const updateData: Record<string, any> = {}
+    if (full_name !== undefined) updateData.full_name = full_name
+    if (role !== undefined) updateData.role = role
+    if (can_view_attendance !== undefined) updateData.can_view_attendance = can_view_attendance
+    if (can_view_assets !== undefined) updateData.can_view_assets = can_view_assets
+    if (can_view_whatsapp_contacts !== undefined) updateData.can_view_whatsapp_contacts = can_view_whatsapp_contacts
+    if (profile_picture_url !== undefined) updateData.profile_picture_url = profile_picture_url
     if (leave_balance !== undefined) updateData.leave_balance = Number(leave_balance)
     if (sick_leave_balance !== undefined) updateData.sick_leave_balance = Number(sick_leave_balance)
     if (emergency_leave_balance !== undefined) updateData.emergency_leave_balance = Number(emergency_leave_balance)
@@ -98,6 +104,8 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
 
     // WhatsApp fields
     if (whatsapp_phone !== undefined) updateData.whatsapp_phone = whatsapp_phone?.trim() || null
+
+    if (Object.keys(updateData).length === 0) return res.status(400).json({ error: 'No fields to update' })
 
     const [user] = await db.update(profiles)
       .set(updateData)
