@@ -1604,7 +1604,7 @@ async function sendWhatsApp(phone, message) {
     const cfg = await getAppSetting('whatsapp_config')
     console.log('[WA-DEBUG] cfg:', JSON.stringify(cfg))
     console.log('[WA-DEBUG] phone:', phone)
-    const isEnabled = cfg.enabled === true || cfg.enabled === 'true' || cfg.enabled === 1
+    const isEnabled = cfg.enabled == true || cfg.enabled === 'true' || cfg.enabled === 1 || cfg.enabled === '1'
     console.log('[WA-DEBUG] isEnabled:', isEnabled, '| instance:', cfg.greenapi_instance_id, '| token exists:', !!cfg.greenapi_token)
     if (!isEnabled || !cfg.greenapi_instance_id || !cfg.greenapi_token) {
       console.log('[WA-DEBUG] Skipping — not enabled or missing config')
@@ -1621,7 +1621,18 @@ async function sendWhatsApp(phone, message) {
     })
     const responseText = await r.text().catch(() => '')
     console.log('[WA-DEBUG] Response:', r.status, responseText)
-    if (!r.ok) console.error('[WA] sendWhatsApp error:', r.status, responseText)
+    if (!r.ok) {
+      console.error('[WA] First attempt failed:', r.status, responseText, '— retrying in 2s')
+      await new Promise(res => setTimeout(res, 2000))
+      const r2 = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, message }),
+        signal: AbortSignal.timeout(10000),
+      })
+      const rt2 = await r2.text().catch(() => '')
+      console.log('[WA-DEBUG] Retry response:', r2.status, rt2)
+    }
   } catch (err) {
     console.error('[WA] sendWhatsApp exception:', err.message)
   }
@@ -1630,6 +1641,7 @@ async function sendWhatsAppToUserId(userId, message) {
   try {
     const { rows } = await getPool().query('SELECT whatsapp_phone FROM profiles WHERE id=$1', [userId])
     const phone = rows[0]?.whatsapp_phone
+    console.log('[WA-DEBUG] sendWhatsAppToUserId — userId:', userId, '| phone found:', phone)
     if (!phone) return
     await sendWhatsApp(phone, message)
   } catch (err) {
