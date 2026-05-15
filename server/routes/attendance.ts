@@ -519,8 +519,9 @@ router.get('/late-overtime-detail', requireAuth as any, async (req: any, res) =>
 
       let lateMinutes = 0
       if (r.login_time) {
-        const loginHour = getLocalHour(new Date(r.login_time))
-        const loginMin  = new Date(r.login_time).getMinutes()
+        const loginCairo = new Date(new Date(r.login_time).toLocaleString('en-US', { timeZone: 'Africa/Cairo' }))
+        const loginHour  = loginCairo.getHours()
+        const loginMin   = loginCairo.getMinutes()
         lateMinutes = Math.max(0, (loginHour - workStart) * 60 + loginMin)
       }
 
@@ -528,11 +529,12 @@ router.get('/late-overtime-detail', requireAuth as any, async (req: any, res) =>
       let overtimeMinutes = 0
       if (r.login_time && r.logout_time) {
         workedMinutes   = Math.round((new Date(r.logout_time).getTime() - new Date(r.login_time).getTime()) / 60000)
-        overtimeMinutes = Math.max(0, workedMinutes - 8 * 60)
+        overtimeMinutes = Math.max(0, workedMinutes - 9 * 60)
       }
 
+      const dateStr = r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date)
       entry.days.push({
-        date: r.date,
+        date: dateStr,
         login_time:       r.login_time,
         logout_time:      r.logout_time,
         late_minutes:     lateMinutes,
@@ -554,14 +556,14 @@ router.get('/late-overtime-detail', requireAuth as any, async (req: any, res) =>
         late_total_minutes:    lateDays.reduce((s: number, d: any) => s + d.late_minutes, 0),
         overtime_days:         otDays.length,
         overtime_total_minutes:otDays.reduce((s: number, d: any) => s + d.overtime_minutes, 0),
-        day_records:           days.sort((a: any, b: any) => a.date.localeCompare(b.date)),
+        day_records:           days.sort((a: any, b: any) => a.date.localeCompare(b.date) || 0),
       }
     })
 
     result.sort((a, b) => b.late_total_minutes - a.late_total_minutes)
     res.json({ year, month, employees: result })
   } catch (err: any) {
-    console.error('GET /attendance/late-overtime-detail error:', err)
+    console.error('GET /attendance/late-overtime-detail error:', err?.message || err)
     res.status(500).json({ error: err?.message || 'Failed to generate report' })
   }
 })

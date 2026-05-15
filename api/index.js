@@ -2045,18 +2045,19 @@ app.get('/api/attendance/late-overtime-detail', requireAuth, async (req, res) =>
       if (!empMap.has(r.user_id)) empMap.set(r.user_id, { profile: prof, days: [] })
       const ws = prof.work_start_hour || 9
       let lateMin = 0, workedMin = 0, otMin = 0
-      if (r.login_time) { const d = new Date(r.login_time); lateMin = Math.max(0, (d.getHours() - ws) * 60 + d.getMinutes()) }
-      if (r.login_time && r.logout_time) { workedMin = Math.round((new Date(r.logout_time) - new Date(r.login_time)) / 60000); otMin = Math.max(0, workedMin - 480) }
-      empMap.get(r.user_id).days.push({ date: r.date, login_time: r.login_time, logout_time: r.logout_time, late_minutes: lateMin, worked_minutes: workedMin, overtime_minutes: otMin })
+      if (r.login_time) { const loginCairo = new Date(new Date(r.login_time).toLocaleString('en-US', { timeZone: 'Africa/Cairo' })); lateMin = Math.max(0, (loginCairo.getHours() - ws) * 60 + loginCairo.getMinutes()) }
+      if (r.login_time && r.logout_time) { workedMin = Math.round((new Date(r.logout_time) - new Date(r.login_time)) / 60000); otMin = Math.max(0, workedMin - 540) }
+      const dateStr = r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date)
+      empMap.get(r.user_id).days.push({ date: dateStr, login_time: r.login_time, logout_time: r.logout_time, late_minutes: lateMin, worked_minutes: workedMin, overtime_minutes: otMin })
     })
     const result = Array.from(empMap.values()).map(({ profile, days }) => {
       const lateDays = days.filter(d => d.late_minutes > 5)
       const otDays = days.filter(d => d.overtime_minutes > 0)
-      return { id: profile.id, full_name: profile.full_name, email: profile.email, work_start_hour: profile.work_start_hour || 9, days_present: days.length, late_days: lateDays.length, late_total_minutes: lateDays.reduce((s, d) => s + d.late_minutes, 0), overtime_days: otDays.length, overtime_total_minutes: otDays.reduce((s, d) => s + d.overtime_minutes, 0), day_records: days.sort((a, b) => a.date.localeCompare(b.date)) }
+      return { id: profile.id, full_name: profile.full_name, email: profile.email, work_start_hour: profile.work_start_hour || 9, days_present: days.length, late_days: lateDays.length, late_total_minutes: lateDays.reduce((s, d) => s + d.late_minutes, 0), overtime_days: otDays.length, overtime_total_minutes: otDays.reduce((s, d) => s + d.overtime_minutes, 0), day_records: days.sort((a, b) => a.date.localeCompare(b.date) || 0) }
     })
     result.sort((a, b) => b.late_total_minutes - a.late_total_minutes)
     res.json({ year, month, employees: result })
-  } catch (err) { res.status(500).json({ error: 'Failed to generate report' }) }
+  } catch (err) { console.error('GET /api/attendance/late-overtime-detail error:', err?.message || err); res.status(500).json({ error: err?.message || 'Failed to generate report' }) }
 })
 
 app.get('/api/attendance/corrections', requireAuth, async (req, res) => {
