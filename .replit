@@ -51,7 +51,7 @@ externalPort = 80
 [userenv]
 
 [userenv.shared]
-VAPID_PUBLIC_KEY = "BI4ssJCdC18uYW2SoIdbno-hC3dC0c6LOThFCOmBP7KWNCog0N1HtzS_uvIUip8vK2I8wkArbQP5tsxXvApN878"
+VAPID_PUBLIC_KEY = "BG3Qjx6egDcgq2xLYR0_ieiqd2KQWjOISS53qIzBZJBF8zjrz92Ey5ItbqYRoZ45K-cqSCIOI4miUdwRvaWp0ns"
 VAPID_EMAIL = "mailto:admin@ticketsystem.com"
 NODE_ENV = "development"
 
