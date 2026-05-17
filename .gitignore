@@ -4,3 +4,6 @@ dist
 .env.local
 .github-sync-status
 server/github-sync-config.json
+attached_assets/Screenshot_*.jpg
+attached_assets/Screenshot_*.png
+screenshots/
