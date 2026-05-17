@@ -407,7 +407,7 @@ function GroupModal({ group, users, onSave, onClose, saving }) {
   const [search, setSearch] = useState('')
 
   const filtered = users.filter(u =>
-    (u.role === 'employee' || u.role === 'admin') &&
+    (u.role === 'employee' || u.role === 'admin' || u.role === 'member' || u.role === 'super_admin') &&
     ((u.full_name || '').toLowerCase().includes(search.toLowerCase()) ||
      (u.email || '').toLowerCase().includes(search.toLowerCase()))
   )
