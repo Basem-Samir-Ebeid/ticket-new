@@ -21,6 +21,7 @@ import GlobalSearch from '../components/GlobalSearch'
 import TagChipInput, { TagPills } from '../components/TagChipInput'
 import MobileNav from '../components/MobileNav'
 import { exportTicketsToExcel, exportAttendanceToExcel } from '../lib/exportUtils'
+import KnowledgeSuggest from '../components/KnowledgeSuggest'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -44,8 +45,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [showCreateUser, setShowCreateUser] = useState(false)
   const [showCreateTicket, setShowCreateTicket] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
-  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, can_view_assets: false, can_view_whatsapp_contacts: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '' })
-  const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', affected_user_id: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
+  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, can_view_assets: false, can_view_whatsapp_contacts: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '', is_leaving: false })
+  const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', affected_user_id: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', subcategory: '', due_date: '', asset_id: '' })
   const [ticketAssets, setTicketAssets] = useState([])
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
@@ -191,6 +192,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [autoAssignNewCategory, setAutoAssignNewCategory] = useState('')
   const [autoAssignNewUserId, setAutoAssignNewUserId] = useState('')
   const [githubSyncAlert, setGithubSyncAlert] = useState(null)
+  const [ticketSubcatMap, setTicketSubcatMap] = useState({})
+  const [empOnbTasks, setEmpOnbTasks] = useState([])
+  const [loadingEmpOnbTasks, setLoadingEmpOnbTasks] = useState(false)
+  const [empOnbDetailTab, setEmpOnbDetailTab] = useState('onboarding')
 
   const selectedTicketRef = useRef(null)
   const selectedDateRef = useRef(selectedDate)
@@ -208,7 +213,19 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     fetchLeaveRequests()
     fetchTemplates()
     if (isSuperAdmin) fetchGithubSyncStatus()
+    api.getSubcategories().then(d => setTicketSubcatMap(d || {})).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!editingUser) { setEmpOnbTasks([]); return }
+    setLoadingEmpOnbTasks(true)
+    api.getOnboardingTasks(editingUser.id).then(tasks => setEmpOnbTasks(Array.isArray(tasks) ? tasks : [])).catch(() => setEmpOnbTasks([])).finally(() => setLoadingEmpOnbTasks(false))
+    setEmpOnbDetailTab('onboarding')
+  }, [editingUser?.id])
+
+  useEffect(() => {
+    return () => replyFiles.forEach(f => { if (f.type.startsWith('image/')) URL.revokeObjectURL(URL.createObjectURL(f)) })
+  }, [replyFiles])
 
   useEffect(() => {
     const onTicketUpdate = (e) => {
@@ -797,6 +814,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         try { const r = await api.uploadFile(profilePicFile); profile_picture_url = r.url } catch {}
         setUploadingPic(false)
       }
+      const wasLeaving = editingUser.is_leaving
       const updatedUser = await api.updateUser(editingUser.id, {
         full_name: userForm.full_name,
         role: userForm.role,
@@ -822,6 +840,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         notes: userForm.notes,
         whatsapp_phone: userForm.whatsapp_phone,
       })
+      if (userForm.is_leaving && !wasLeaving) {
+        api.generateOnboardingTasks(editingUser.id, 'offboarding').catch(() => {})
+      }
       if (updatedUser && updatedUser.id) {
         setUsers(prev => prev.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
       }
@@ -868,9 +889,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         try { const r = await api.uploadFile(profilePicFile); profile_picture_url = r.url } catch {}
         setUploadingPic(false)
       }
-      await api.createUser({ ...userForm, profile_picture_url })
+      const newUser = await api.createUser({ ...userForm, profile_picture_url })
+      if (newUser?.id) {
+        api.generateOnboardingTasks(newUser.id, 'onboarding').catch(() => {})
+      }
       setMsg('✓ User created!')
-      setUserForm({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, can_view_assets: false, can_view_whatsapp_contacts: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '' })
+      setUserForm({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, can_view_assets: false, can_view_whatsapp_contacts: false, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '', is_leaving: false })
       setProfilePicFile(null)
       setShowCreateUser(false)
       fetchUsers()
@@ -909,11 +933,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         status: ticketForm.status,
         priority: ticketForm.priority || 'medium',
         category: ticketForm.category || null,
+        subcategory: ticketForm.subcategory || null,
         due_date: ticketForm.due_date || null,
         asset_id: ticketForm.asset_id || null,
       })
       setMsg('✓ Ticket created!')
-      setTicketForm({ title: '', description: '', affected_person: '', affected_user_id: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', due_date: '', asset_id: '' })
+      setTicketForm({ title: '', description: '', affected_person: '', affected_user_id: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', subcategory: '', due_date: '', asset_id: '' })
       setShowCreateTicket(false)
       fetchTickets()
     } catch (e) { setMsg('Error: ' + e.message) }
@@ -1308,6 +1333,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     {selectedTicket.asset.name}{selectedTicket.asset.serial_number ? ` · ${selectedTicket.asset.serial_number}` : ''}
                   </div>
                 )}
+                {selectedTicket.category && (
+                  <p className="text-slate-500 text-xs mt-2">Category: <span className="text-slate-300">{selectedTicket.category}{selectedTicket.subcategory ? ` › ${selectedTicket.subcategory}` : ''}</span></p>
+                )}
                 <p className="text-slate-500 text-xs mt-2">Assigned to: <span className="text-slate-300">{selectedTicket.assigned_to_profile?.full_name || 'Unassigned'}</span></p>
 
                 {/* Tags section */}
@@ -1428,7 +1456,19 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <div className={`rounded-2xl px-4 py-2.5 max-w-[85%] ${isMe ? 'rounded-tr-sm' : 'rounded-tl-sm'}`}
                         style={{background: isMe ? 'rgba(217,119,6,0.15)' : 'rgba(255,255,255,0.06)', border: isMe ? '1px solid rgba(245,158,11,0.2)' : '1px solid rgba(255,255,255,0.06)'}}>
                         {r.message && <p className="text-slate-200 text-sm leading-relaxed">{r.message}</p>}
-                        <FileAttachment url={r.image_url} name={r.attachment_name} />
+                        {r.attachments?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {r.attachments.map((url, i) => {
+                              const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url)
+                              return isImage ? (
+                                <img key={i} src={url} alt={`attachment-${i}`} className="max-w-[180px] max-h-[180px] rounded-lg object-cover cursor-pointer border border-white/10" onClick={() => window.open(url, '_blank')} />
+                              ) : (
+                                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5">📎 {url.split('/').pop()}</a>
+                              )
+                            })}
+                          </div>
+                        )}
+                        {!r.attachments?.length && <FileAttachment url={r.image_url} name={r.attachment_name} />}
                       </div>
                     </div>
                   </div>
@@ -1453,14 +1493,25 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 onBlur={e=>{e.target.style.borderColor='rgba(255,255,255,0.08)';e.target.style.boxShadow='none'}}
               />
               {replyFiles.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {replyFiles.map((f, i) => (
-                    <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs"
-                      style={{background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',color:'#fbbf24'}}>
-                      <span className="max-w-[120px] truncate">{f.name}</span>
-                      <button type="button" onClick={() => setReplyFiles(prev => prev.filter((_,j)=>j!==i))} className="opacity-60 hover:opacity-100 ml-0.5">×</button>
-                    </div>
-                  ))}
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {replyFiles.map((file, i) => {
+                    const isImage = file.type.startsWith('image/')
+                    const previewUrl = isImage ? URL.createObjectURL(file) : null
+                    return (
+                      <div key={i} className="relative group">
+                        {isImage ? (
+                          <img src={previewUrl} alt={file.name} className="w-16 h-16 object-cover rounded-lg border border-white/10" />
+                        ) : (
+                          <div className="w-16 h-16 flex flex-col items-center justify-center rounded-lg border border-white/10 bg-white/5 text-center px-1">
+                            <span className="text-lg">📎</span>
+                            <span className="text-[9px] text-slate-400 truncate w-full text-center mt-0.5">{file.name.split('.').pop().toUpperCase()}</span>
+                          </div>
+                        )}
+                        <span className="absolute bottom-0 left-0 right-0 text-[8px] text-center text-slate-400 bg-black/50 rounded-b-lg py-0.5">{(file.size/1024).toFixed(0)}KB</span>
+                        <button type="button" onClick={() => setReplyFiles(prev => prev.filter((_,j)=>j!==i))} className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">×</button>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
               <div className="flex items-center gap-3 flex-wrap">
@@ -1770,7 +1821,20 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Category</label>
-                    <input value={ticketForm.category} onChange={e=>setTicketForm(f=>({...f,category:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="e.g. Hardware, Network" />
+                    {Object.keys(ticketSubcatMap).length > 0 ? (
+                      <select value={ticketForm.category} onChange={e=>setTicketForm(f=>({...f,category:e.target.value,subcategory:''}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+                        <option value="">-- Select category --</option>
+                        {Object.keys(ticketSubcatMap).map(c=><option key={c} value={c}>{c}</option>)}
+                      </select>
+                    ) : (
+                      <input value={ticketForm.category} onChange={e=>setTicketForm(f=>({...f,category:e.target.value,subcategory:''}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="e.g. Hardware, Network" />
+                    )}
+                    {ticketForm.category && ticketSubcatMap[ticketForm.category]?.length > 0 && (
+                      <select value={ticketForm.subcategory} onChange={e=>setTicketForm(f=>({...f,subcategory:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all mt-2">
+                        <option value="">-- Select subcategory --</option>
+                        {ticketSubcatMap[ticketForm.category].map(s=><option key={s} value={s}>{s}</option>)}
+                      </select>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Due Date</label>
@@ -1882,6 +1946,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       {t.description && <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 leading-relaxed">{t.description}</p>}
                       {t.affected_person && <p className="text-slate-600 text-xs mt-1.5 flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>{t.affected_person}</p>}
                       {t.tags?.length > 0 && <div className="mt-1.5"><TagPills tags={t.tags} /></div>}
+                      {t.category && <span className="text-[10px] text-slate-500 mt-1 block">{t.category}{t.subcategory ? ` › ${t.subcategory}` : ''}</span>}
                       <p className="text-slate-600 text-[11px] mt-1">→ <span className="text-slate-400">{t.assigned_to_profile?.full_name || 'Unassigned'}</span></p>
                     </div>
                     <div className="flex flex-col gap-2 flex-shrink-0">
@@ -2778,70 +2843,92 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
                 </div>
 
-                {/* ── Onboarding / Offboarding Checklist ── */}
-                {(oTplOnboarding.length > 0 || oTplOffboarding.length > 0) && (
-                  <div>
-                    <p className="text-[10px] text-emerald-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5">
-                      <span className="w-4 h-px bg-emerald-500/40 inline-block"/>Onboarding / Offboarding Checklist
-                    </p>
-                    <div className="rounded-2xl overflow-hidden border border-white/8" style={{background:'rgba(255,255,255,0.02)'}}>
-                      <div className="flex border-b border-white/8">
-                        {['onboarding','offboarding'].map(t => (
-                          <button key={t} type="button" onClick={() => setOnbTab(t)}
-                            className={`flex-1 text-xs py-2.5 font-semibold capitalize transition-all ${onbTab===t ? 'text-emerald-400 border-b-2 border-emerald-500 bg-emerald-500/5' : 'text-slate-500 hover:text-slate-300'}`}>
-                            {t === 'onboarding' ? '🧑‍💼 Onboarding' : '👋 Offboarding'}
-                            <span className="ml-1.5 text-[10px] opacity-60">
-                              {(() => {
-                                const list = t === 'onboarding' ? oTplOnboarding : oTplOffboarding
-                                const doneKey = `${editingUser?.id}_${t}`
-                                const done = list.filter((_,i) => onbChecked[`${doneKey}_${i}`]).length
-                                return `${done}/${list.length}`
-                              })()}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                      <div className="p-4 space-y-2.5 max-h-56 overflow-y-auto">
-                        {(onbTab === 'onboarding' ? oTplOnboarding : oTplOffboarding).map((step, i) => {
-                          const key = `${editingUser?.id}_${onbTab}_${i}`
-                          const done = !!onbChecked[key]
-                          const total = (onbTab === 'onboarding' ? oTplOnboarding : oTplOffboarding).length
-                          return (
-                            <label key={i} className={`flex items-start gap-3 cursor-pointer group p-2 rounded-xl transition-all ${done ? 'opacity-60' : 'hover:bg-white/3'}`}>
-                              <div className={`mt-0.5 w-5 h-5 rounded-lg flex-shrink-0 flex items-center justify-center border transition-all ${done ? 'bg-emerald-500/20 border-emerald-500/40' : 'border-white/15 group-hover:border-white/25'}`}
-                                onClick={() => setOnbChecked(p => ({...p, [key]: !p[key]}))}>
-                                {done && <svg className="w-3 h-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>}
-                              </div>
-                              <span className={`text-sm leading-relaxed ${done ? 'line-through text-slate-600' : 'text-slate-300'}`}>{step}</span>
-                              <span className="ml-auto text-[10px] text-slate-700 flex-shrink-0">{i+1}/{total}</span>
-                            </label>
-                          )
-                        })}
-                        {(onbTab === 'onboarding' ? oTplOnboarding : oTplOffboarding).length === 0 && (
-                          <p className="text-slate-600 text-xs text-center py-4">No {onbTab} steps configured. Add them in Settings.</p>
-                        )}
-                      </div>
-                      {/* progress bar */}
-                      {(onbTab === 'onboarding' ? oTplOnboarding : oTplOffboarding).length > 0 && (() => {
-                        const list = onbTab === 'onboarding' ? oTplOnboarding : oTplOffboarding
-                        const done = list.filter((_,i) => onbChecked[`${editingUser?.id}_${onbTab}_${i}`]).length
-                        const pct = Math.round((done / list.length) * 100)
+                {/* ── Onboarding / Offboarding Checklist (API-driven) ── */}
+                <div>
+                  <p className="text-[10px] text-emerald-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5">
+                    <span className="w-4 h-px bg-emerald-500/40 inline-block"/>Onboarding / Offboarding Tasks
+                  </p>
+                  <div className="rounded-2xl overflow-hidden border border-white/8" style={{background:'rgba(255,255,255,0.02)'}}>
+                    {/* sub-tabs */}
+                    <div className="flex border-b border-white/8">
+                      {['onboarding','offboarding'].map(typ => {
+                        const count = empOnbTasks.filter(t=>t.task_type===typ).length
+                        const done = empOnbTasks.filter(t=>t.task_type===typ&&t.completed).length
                         return (
-                          <div className="px-4 pb-3">
-                            <div className="flex justify-between text-[10px] text-slate-600 mb-1.5">
-                              <span>{done} of {list.length} completed</span>
-                              <span className={pct===100 ? 'text-emerald-400 font-semibold' : ''}>{pct}%</span>
-                            </div>
-                            <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
-                              <div className="h-full rounded-full transition-all duration-500"
-                                style={{width:`${pct}%`, background: pct===100 ? '#10b981' : 'linear-gradient(90deg,#6366f1,#8b5cf6)'}} />
-                            </div>
-                          </div>
+                          <button key={typ} type="button" onClick={() => setEmpOnbDetailTab(typ)}
+                            className={`flex-1 text-xs py-2.5 font-semibold capitalize transition-all ${empOnbDetailTab===typ ? 'text-emerald-400 border-b-2 border-emerald-500 bg-emerald-500/5' : 'text-slate-500 hover:text-slate-300'}`}>
+                            {typ === 'onboarding' ? '🧑‍💼 Onboarding' : '👋 Offboarding'}
+                            <span className="ml-1.5 text-[10px] opacity-60">{done}/{count}</span>
+                          </button>
                         )
-                      })()}
+                      })}
+                    </div>
+                    {/* progress bar */}
+                    {(() => {
+                      const list = empOnbTasks.filter(t=>t.task_type===empOnbDetailTab)
+                      const done = list.filter(t=>t.completed).length
+                      const pct = list.length ? Math.round((done/list.length)*100) : 0
+                      return list.length > 0 ? (
+                        <div className="px-4 pt-3">
+                          <div className="flex justify-between text-[10px] text-slate-600 mb-1.5">
+                            <span>{done} of {list.length} completed</span>
+                            <span className={pct===100 ? 'text-emerald-400 font-semibold' : ''}>{pct}%</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-white/5 overflow-hidden mb-1">
+                            <div className="h-full rounded-full transition-all duration-500"
+                              style={{width:`${pct}%`, background: pct===100 ? '#10b981' : 'linear-gradient(90deg,#6366f1,#8b5cf6)'}} />
+                          </div>
+                        </div>
+                      ) : null
+                    })()}
+                    {/* task list */}
+                    <div className="p-4 space-y-2.5 max-h-64 overflow-y-auto">
+                      {loadingEmpOnbTasks && <p className="text-slate-500 text-xs text-center py-4">Loading tasks…</p>}
+                      {!loadingEmpOnbTasks && empOnbTasks.filter(t=>t.task_type===empOnbDetailTab).length === 0 && (
+                        <div className="text-center py-4 space-y-2">
+                          <p className="text-slate-600 text-xs">No {empOnbDetailTab} tasks yet.</p>
+                          <button type="button"
+                            onClick={async () => {
+                              setLoadingEmpOnbTasks(true)
+                              try { await api.generateOnboardingTasks(editingUser.id, empOnbDetailTab); const tasks = await api.getOnboardingTasks(editingUser.id); setEmpOnbTasks(tasks) } catch {}
+                              setLoadingEmpOnbTasks(false)
+                            }}
+                            className="text-xs px-3 py-1.5 rounded-xl border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 transition-all">
+                            + Generate {empOnbDetailTab} tasks
+                          </button>
+                        </div>
+                      )}
+                      {!loadingEmpOnbTasks && empOnbTasks.filter(t=>t.task_type===empOnbDetailTab).map(task => (
+                        <label key={task.id} className={`flex items-start gap-3 cursor-pointer group p-2 rounded-xl transition-all ${task.completed ? 'opacity-60' : 'hover:bg-white/3'}`}>
+                          <div
+                            className={`mt-0.5 w-5 h-5 rounded-lg flex-shrink-0 flex items-center justify-center border transition-all ${task.completed ? 'bg-emerald-500/20 border-emerald-500/40' : 'border-white/15 group-hover:border-white/25'}`}
+                            onClick={async () => {
+                              try {
+                                const updated = await api.updateOnboardingTask(task.id, { completed: !task.completed })
+                                setEmpOnbTasks(prev => prev.map(t => t.id === task.id ? {...t, ...updated} : t))
+                              } catch {}
+                            }}>
+                            {task.completed && <svg className="w-3 h-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className={`text-sm leading-relaxed ${task.completed ? 'line-through text-slate-600' : 'text-slate-300'}`}>{task.task_name}</span>
+                            {task.due_date && <p className="text-[10px] text-slate-600 mt-0.5">Due: {new Date(task.due_date).toLocaleDateString()}</p>}
+                            {task.completed && task.completed_at && <p className="text-[10px] text-slate-600 mt-0.5">Done: {new Date(task.completed_at).toLocaleDateString()}</p>}
+                          </div>
+                        </label>
+                      ))}
                     </div>
                   </div>
-                )}
+                </div>
+
+                {/* ── Mark as Leaving ── */}
+                <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/8 transition-all">
+                  <input type="checkbox" checked={!!userForm.is_leaving} onChange={e=>setUserForm(f=>({...f,is_leaving:e.target.checked}))} className="w-4 h-4 rounded accent-red-500" />
+                  <div>
+                    <span className="text-red-300 text-sm font-medium">Mark as leaving</span>
+                    <p className="text-red-500/60 text-[10px] mt-0.5">Enabling this will auto-generate offboarding tasks for this employee when saved.</p>
+                  </div>
+                </label>
 
                 <div className="flex gap-2 pt-1 flex-wrap">
                   <button type="submit" disabled={loading || uploadingPic} className="btn-primary disabled:opacity-50 text-sm px-5 py-2">{uploadingPic ? 'جاري الرفع...' : loading ? 'جاري الحفظ...' : 'حفظ التغييرات'}</button>
@@ -2941,7 +3028,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button onClick={()=>setEmployeeProfileId(u.id)} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">ملف</button>
-                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,can_view_assets:u.can_view_assets,can_view_whatsapp_contacts:u.can_view_whatsapp_contacts||false,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7,work_start_hour:u.work_start_hour??9,department:u.department||'',job_title:u.job_title||'',phone:u.phone||'',national_id:u.national_id||'',hire_date:u.hire_date||'',birth_date:u.birth_date||'',gender:u.gender||'',address:u.address||'',employment_type:u.employment_type||'full_time',employee_code:u.employee_code||'',direct_manager:u.direct_manager||'',notes:u.notes||'',whatsapp_phone:u.whatsapp_phone||''})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
+                          <button onClick={()=>{setEditingUser(u);setUserForm({full_name:u.full_name||'',role:u.role,can_view_attendance:u.can_view_attendance,can_view_assets:u.can_view_assets,can_view_whatsapp_contacts:u.can_view_whatsapp_contacts||false,email:'',password:'',leave_balance:u.leave_balance??21,sick_leave_balance:u.sick_leave_balance??14,emergency_leave_balance:u.emergency_leave_balance??7,work_start_hour:u.work_start_hour??9,department:u.department||'',job_title:u.job_title||'',phone:u.phone||'',national_id:u.national_id||'',hire_date:u.hire_date||'',birth_date:u.birth_date||'',gender:u.gender||'',address:u.address||'',employment_type:u.employment_type||'full_time',employee_code:u.employee_code||'',direct_manager:u.direct_manager||'',notes:u.notes||'',whatsapp_phone:u.whatsapp_phone||'',is_leaving:u.is_leaving||false})}} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Edit</button>
                           <button onClick={()=>openResetPwd(u)} disabled={resettingUserId===u.id} className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 transition-colors">{resettingUserId===u.id ? '...' : 'Reset Pwd'}</button>
                           <button onClick={()=>deleteUser(u.id)} disabled={loading} className="text-xs text-red-400/70 hover:text-red-400 disabled:opacity-50 transition-colors">Delete</button>
                         </div>

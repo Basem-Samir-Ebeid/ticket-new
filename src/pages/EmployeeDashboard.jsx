@@ -28,7 +28,7 @@ export default function EmployeeDashboard() {
   const [selectedTicket, setSelectedTicket] = useState(null)
   const [replies, setReplies] = useState([])
   const [replyText, setReplyText] = useState('')
-  const [replyFile, setReplyFile] = useState(null)
+  const [replyFiles, setReplyFiles] = useState([])
   const [uploading, setUploading] = useState(false)
   const [replyError, setReplyError] = useState('')
   const [filter, setFilter] = useState('all')
@@ -37,7 +37,8 @@ export default function EmployeeDashboard() {
   const [myTicketSearch, setMyTicketSearch] = useState('')
 
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [createForm, setCreateForm] = useState({ title: '', description: '', affected_person: '', priority: 'medium', asset_id: '' })
+  const [createForm, setCreateForm] = useState({ title: '', description: '', affected_person: '', priority: 'medium', asset_id: '', category: '', subcategory: '' })
+  const [subcatMap, setSubcatMap] = useState({})
   const [myAssets, setMyAssets] = useState([])
   const [createMsg, setCreateMsg] = useState('')
   const [creating, setCreating] = useState(false)
@@ -90,6 +91,7 @@ export default function EmployeeDashboard() {
       fetchTemplates()
       fetchMyAssets()
       fetchMyCorrections()
+      api.getSubcategories().then(m => setSubcatMap(m || {})).catch(() => {})
     }
   }, [user])
 
@@ -378,16 +380,18 @@ export default function EmployeeDashboard() {
 
   async function submitReply(e) {
     e.preventDefault()
-    if (!replyText.trim() && !replyFile) return
+    if (!replyText.trim() && replyFiles.length === 0) return
     setUploading(true)
     setReplyError('')
+    let attachments = []
     let file_url = null
     let file_name = null
-    if (replyFile) {
+    if (replyFiles.length > 0) {
       try {
-        const result = await api.uploadFile(replyFile)
-        file_url = result.url
-        file_name = result.name
+        const uploads = await Promise.all(replyFiles.map(f => api.uploadFile(f)))
+        attachments = uploads.map(r => r.url)
+        file_url = uploads[0]?.url
+        file_name = uploads[0]?.name
       } catch (err) {
         setReplyError('File upload failed: ' + (err.message || 'Unknown error'))
         setUploading(false)
@@ -395,9 +399,9 @@ export default function EmployeeDashboard() {
       }
     }
     try {
-      await api.createReply(selectedTicket.id, { message: replyText, image_url: file_url, attachment_name: file_name })
+      await api.createReply(selectedTicket.id, { message: replyText, image_url: file_url, attachment_name: file_name, attachments })
       setReplyText('')
-      setReplyFile(null)
+      setReplyFiles([])
       fetchReplies(selectedTicket.id)
     } catch (err) {
       setReplyError('Failed to send reply: ' + (err.message || 'Unknown error'))
@@ -424,10 +428,12 @@ export default function EmployeeDashboard() {
         affected_person: createForm.affected_person,
         priority: createForm.priority || 'medium',
         asset_id: createForm.asset_id || null,
+        category: createForm.category || null,
+        subcategory: createForm.subcategory || null,
         is_request: true,
       })
       setCreateMsg('✓ Ticket submitted to admin for review!')
-      setCreateForm({ title: '', description: '', affected_person: '', priority: 'medium', asset_id: '' })
+      setCreateForm({ title: '', description: '', affected_person: '', priority: 'medium', asset_id: '', category: '', subcategory: '' })
       setShowCreateForm(false)
       fetchMyRequests()
     } catch (err) { setCreateMsg('Error: ' + err.message) }
@@ -627,7 +633,19 @@ export default function EmployeeDashboard() {
                       <div className={`rounded-2xl px-4 py-2.5 max-w-[85%] ${isMe ? 'rounded-tr-sm' : 'rounded-tl-sm'}`}
                         style={{background: isMe ? 'rgba(79,70,229,0.18)' : 'rgba(255,255,255,0.06)', border: isMe ? '1px solid rgba(99,102,241,0.2)' : '1px solid rgba(255,255,255,0.06)'}}>
                         {r.message && <p className="text-slate-200 text-sm leading-relaxed">{r.message}</p>}
-                        <FileAttachment url={r.image_url} name={r.attachment_name} />
+                        {r.attachments?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {r.attachments.map((url, i) => {
+                              const isImg = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url)
+                              return isImg ? (
+                                <img key={i} src={url} alt="" className="max-w-[180px] max-h-[180px] rounded-lg object-cover cursor-pointer border border-white/10" onClick={() => window.open(url, '_blank')} />
+                              ) : (
+                                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5">📎 {url.split('/').pop()}</a>
+                              )
+                            })}
+                          </div>
+                        )}
+                        {!r.attachments?.length && <FileAttachment url={r.image_url} name={r.attachment_name} />}
                       </div>
                     </div>
                   </div>
@@ -652,18 +670,35 @@ export default function EmployeeDashboard() {
                 onFocus={e=>{e.target.style.borderColor='rgba(99,102,241,0.5)';e.target.style.boxShadow='0 0 0 3px rgba(99,102,241,0.08)'}}
                 onBlur={e=>{e.target.style.borderColor='rgba(255,255,255,0.08)';e.target.style.boxShadow='none'}}
               />
+              {replyFiles.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {replyFiles.map((file, i) => {
+                    const isImg = file.type.startsWith('image/')
+                    return (
+                      <div key={i} className="relative group">
+                        {isImg ? (
+                          <img src={URL.createObjectURL(file)} alt={file.name} className="w-16 h-16 object-cover rounded-lg border border-white/10" />
+                        ) : (
+                          <div className="w-16 h-16 flex flex-col items-center justify-center rounded-lg border border-white/10 bg-white/5 text-center px-1">
+                            <span className="text-lg">📎</span>
+                            <span className="text-[9px] text-slate-400 truncate w-full text-center mt-0.5">{file.name.split('.').pop().toUpperCase()}</span>
+                          </div>
+                        )}
+                        <button type="button" onClick={() => setReplyFiles(prev => prev.filter((_,j)=>j!==i))} className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">×</button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
               <div className="flex items-center gap-3 flex-wrap">
                 <label className="cursor-pointer flex items-center gap-2 text-sm px-4 py-2 rounded-xl border border-white/10 text-slate-400 hover:text-white hover:border-white/20 transition-all" style={{background:'rgba(255,255,255,0.04)'}}>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" /></svg>
-                  {replyFile ? <span className="text-indigo-400 max-w-[120px] truncate">{replyFile.name}</span> : 'Attach File'}
-                  <input type="file" accept="*/*" className="hidden" onChange={e=>{ setReplyFile(e.target.files[0]); setReplyError('') }} />
+                  {replyFiles.length > 0 ? `${replyFiles.length} file(s)` : 'Attach Files'}
+                  <input type="file" accept="*/*" multiple className="hidden" onChange={e=>{ setReplyFiles(prev => [...prev, ...Array.from(e.target.files)]); setReplyError(''); e.target.value='' }} />
                 </label>
-                {replyFile && (
-                  <button type="button" onClick={()=>setReplyFile(null)} className="text-slate-500 hover:text-red-400 text-xs transition-colors">✕ Remove</button>
-                )}
                 <button
                   type="submit"
-                  disabled={uploading || (!replyText.trim() && !replyFile)}
+                  disabled={uploading || (!replyText.trim() && replyFiles.length === 0)}
                   className="ml-auto flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   style={{background:'linear-gradient(135deg,#4f46e5,#7c3aed)', boxShadow:'0 4px 14px rgba(79,70,229,0.3)'}}
                 >
@@ -886,6 +921,21 @@ export default function EmployeeDashboard() {
                     </select>
                   </div>
                 </div>
+                {Object.keys(subcatMap).length > 0 && (
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Category</label>
+                    <select value={createForm.category} onChange={e=>setCreateForm(f=>({...f,category:e.target.value,subcategory:''}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
+                      <option value="">-- Select category --</option>
+                      {Object.keys(subcatMap).map(c=><option key={c} value={c}>{c}</option>)}
+                    </select>
+                    {createForm.category && subcatMap[createForm.category]?.length > 0 && (
+                      <select value={createForm.subcategory} onChange={e=>setCreateForm(f=>({...f,subcategory:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all mt-2">
+                        <option value="">-- Select subcategory --</option>
+                        {subcatMap[createForm.category].map(s=><option key={s} value={s}>{s}</option>)}
+                      </select>
+                    )}
+                  </div>
+                )}
                 {myAssets.length > 0 && (
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Related Asset (Optional)</label>

@@ -1,0 +1,188 @@
+Please fix and complete the following 5 items. Read everything carefully before starting.
+
+---
+
+## 1 — Multiple Attachments: Fix display in reply thread
+
+The upload already works (multiple files sent as `attachments` array). The problem is in the reply thread rendering — it only shows `r.image_url` via the old `FileAttachment` component and ignores the `attachments` array entirely.
+
+**Fix the reply rendering in AdminDashboard, EmployeeDashboard, and MemberDashboard:**
+
+Replace the single `<FileAttachment url={r.image_url} name={r.attachment_name} />` with logic that handles both old single-file replies and new multi-file replies:
+
+```jsx
+{/* Show new multi-file attachments array */}
+{r.attachments?.length > 0 && (
+  <div className="flex flex-wrap gap-2 mt-2">
+    {r.attachments.map((url, i) => {
+      const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url)
+      return isImage ? (
+        <img
+          key={i}
+          src={url}
+          alt={`attachment-${i}`}
+          className="max-w-[180px] max-h-[180px] rounded-lg object-cover cursor-pointer border border-white/10"
+          onClick={() => window.open(url, '_blank')}
+        />
+      ) : (
+        <a
+          key={i}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5"
+        >
+          📎 {url.split('/').pop()}
+        </a>
+      )
+    })}
+  </div>
+)}
+{/* Fallback: show old single-file attachment for backward compatibility */}
+{(!r.attachments?.length) && <FileAttachment url={r.image_url} name={r.attachment_name} />}
+```
+
+Apply this fix in the reply thread in: `AdminDashboard.jsx`, `EmployeeDashboard.jsx`, and `MemberDashboard.jsx`.
+
+---
+
+## 2 — Thumbnail Preview before sending (reply form)
+
+Currently the reply form only shows a plain text counter like "3 file(s)" with no visual preview. Replace this with proper per-file previews:
+
+**In the reply form (all three dashboards), replace the current file count display with:**
+
+```jsx
+{replyFiles.length > 0 && (
+  <div className="flex flex-wrap gap-2 mt-2">
+    {replyFiles.map((file, i) => {
+      const isImage = file.type.startsWith('image/')
+      const previewUrl = isImage ? URL.createObjectURL(file) : null
+      return (
+        <div key={i} className="relative group">
+          {isImage ? (
+            <img
+              src={previewUrl}
+              alt={file.name}
+              className="w-16 h-16 object-cover rounded-lg border border-white/10"
+            />
+          ) : (
+            <div className="w-16 h-16 flex flex-col items-center justify-center rounded-lg border border-white/10 bg-white/5 text-center px-1">
+              <span className="text-lg">📎</span>
+              <span className="text-[9px] text-slate-400 truncate w-full text-center mt-0.5">
+                {file.name.split('.').pop().toUpperCase()}
+              </span>
+            </div>
+          )}
+          {/* file size */}
+          <span className="absolute bottom-0 left-0 right-0 text-[8px] text-center text-slate-400 bg-black/50 rounded-b-lg py-0.5">
+            {(file.size / 1024).toFixed(0)}KB
+          </span>
+          {/* remove button */}
+          <button
+            type="button"
+            onClick={() => setReplyFiles(prev => prev.filter((_, j) => j !== i))}
+            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            ×
+          </button>
+        </div>
+      )
+    })}
+  </div>
+)}
+```
+
+Make sure to revoke object URLs on cleanup to avoid memory leaks:
+```js
+useEffect(() => {
+  return () => replyFiles.forEach(f => {
+    if (f.type.startsWith('image/')) URL.revokeObjectURL(URL.createObjectURL(f))
+  })
+}, [replyFiles])
+```
+
+Apply this in `AdminDashboard.jsx`, `EmployeeDashboard.jsx`, and `MemberDashboard.jsx`.
+
+---
+
+## 3 — Onboarding UI in Employee Modal
+
+The API (`/api/onboarding`) and DB table (`onboarding_tasks`) exist. Add the full UI:
+
+### 3a — Onboarding/Offboarding tab in the employee detail modal
+
+When the admin views an employee's details (the modal/panel that opens when clicking an employee), add an **"Onboarding" tab** next to any existing tabs.
+
+The tab should:
+- On open, fetch `GET /api/onboarding?user_id={employee.id}` to get the task list for that employee
+- Show a progress bar at the top: `{completedCount}/{totalCount} tasks — {pct}%` with a colored bar
+- List each task as a row:
+  - Checkbox: clicking calls `PATCH /api/onboarding/{task.id}` with `{ completed: true/false }`, then refreshes the list
+  - Task name
+  - Due date (if any)
+  - Completed by + date (shown in muted text if completed)
+- Show two sub-tabs inside: **Onboarding** and **Offboarding** (filter by `task_type`)
+
+### 3b — Auto-generate onboarding tasks when creating a new employee
+
+After the admin successfully creates a new employee (`POST /api/users`), immediately call:
+```js
+await api.post(`/api/onboarding/generate`, { user_id: newEmployee.id })
+```
+Create the endpoint `POST /api/onboarding/generate` if it doesn't exist — it should read the default onboarding task list from `system_settings` key `onboarding_templates` and insert a row in `onboarding_tasks` for each task with `task_type = 'onboarding'` and `user_id` from the body.
+
+### 3c — "Mark as leaving" toggle on employee edit
+
+In the employee edit form, add a toggle: **"Mark as leaving"**. When the admin enables it and saves:
+1. Call `POST /api/onboarding/generate-offboarding` with `{ user_id: employee.id }` — this reads the offboarding template from settings and inserts tasks with `task_type = 'offboarding'`
+2. Create that endpoint if it doesn't exist (same pattern as generate above but for offboarding)
+3. After generating, the Offboarding sub-tab in the employee modal will show the tasks
+
+---
+
+## 4 — Subcategory dropdown in the ticket creation/edit form
+
+The subcategories are already configured in Settings (stored in `system_settings` as key `ticket_subcategories`, a JSON map like `{"Hardware": ["Laptop", "Monitor"], "Software": ["Bug", "Install"]}`). Now wire them up in the ticket forms:
+
+### 4a — In the ticket creation form (AdminDashboard, EmployeeDashboard, MemberDashboard)
+
+1. On form mount, fetch `GET /api/settings/subcategories` and store the result in state (e.g. `subcatMap`)
+2. When the user selects a `category`, check `subcatMap[selectedCategory]`:
+   - If it has entries → show a `<select>` dropdown for `subcategory` below the category field
+   - If empty or not found → hide the subcategory field and set `subcategory = ''`
+3. Include `subcategory` in the ticket creation payload
+
+### 4b — In the ticket edit form (admin editing an existing ticket)
+
+Same logic — prefill the subcategory dropdown with the ticket's current `subcategory` value when opening the edit form.
+
+### 4c — Display subcategory on ticket cards and detail view
+
+- On each ticket card in the list, if `ticket.subcategory` exists, show it next to the category badge like: `Hardware › Laptop`
+- In the ticket detail modal, show `Category: Hardware › Laptop` instead of just `Hardware`
+
+---
+
+## 5 — Add KnowledgeSuggest to MemberDashboard ticket creation form
+
+The `KnowledgeSuggest` component already exists and works in `AdminDashboard` and `EmployeeDashboard`. It's missing from `MemberDashboard`.
+
+1. Import the component at the top of `MemberDashboard.jsx`:
+```js
+import KnowledgeSuggest from '../components/KnowledgeSuggest'
+```
+
+2. Find the ticket creation form in `MemberDashboard.jsx` (where the title input field is). Add the component right below the title `<input>`:
+```jsx
+<KnowledgeSuggest query={createForm.title} onResolved={() => setShowCreateForm(false)} />
+```
+(Adjust `createForm.title` and `setShowCreateForm` to match the actual state variable names used in MemberDashboard)
+
+---
+
+## Implementation Notes
+
+- Apply all reply thread and preview fixes to all three dashboards: AdminDashboard, EmployeeDashboard, MemberDashboard
+- Do not break any existing functionality
+- Implement in order: 1 → 2 → 3 → 4 → 5
