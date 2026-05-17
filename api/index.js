@@ -364,6 +364,49 @@ async function ensureSchema() {
       VALUES ('main', 30.0803897, 31.3524335, 20)
       ON CONFLICT (id) DO NOTHING;
     `)
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS factory_rotation_groups (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS factory_rotation_members (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        group_id UUID NOT NULL REFERENCES factory_rotation_groups(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        order_index INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS factory_rotation_schedule (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        group_id UUID NOT NULL REFERENCES factory_rotation_groups(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        scheduled_date DATE NOT NULL,
+        notified BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS overtime_rotation_groups (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS overtime_rotation_members (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        group_id UUID NOT NULL REFERENCES overtime_rotation_groups(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        order_index INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS overtime_rotation_schedule (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        group_id UUID NOT NULL REFERENCES overtime_rotation_groups(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        scheduled_date DATE NOT NULL,
+        notified BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `)
     schemaInitialized = true
     console.log('[schema] Schema ready')
   } catch (err) {
@@ -2235,6 +2278,222 @@ app.get('/api/leaves/monthly-report', requireAuth, async (req, res) => {
 
     res.json({ year, month, stats, leaves: rows.map(r => ({ ...r, user: pm.get(r.user_id) || null })) })
   } catch (err) { res.status(500).json({ error: 'Failed to get leave report' }) }
+})
+
+// ── FACTORY ROTATION ──────────────────────────────────────────────────────────
+function isWorkday(date) { const d = date.getDay(); return d !== 5 && d !== 6 }
+function addDays(date, n) { const d = new Date(date); d.setDate(d.getDate() + n); return d }
+function toDateStrCairo(date) { return date.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) }
+
+app.get('/api/factory-rotation/groups', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const db = getPool()
+    const { rows: groups } = await db.query('SELECT * FROM factory_rotation_groups ORDER BY created_at ASC')
+    const { rows: members } = await db.query('SELECT m.*, p.full_name, p.email FROM factory_rotation_members m LEFT JOIN profiles p ON m.user_id = p.id ORDER BY m.order_index ASC')
+    const result = groups.map(g => ({ ...g, members: members.filter(m => m.group_id === g.id) }))
+    res.json(result)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/factory-rotation/groups', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { name, members = [] } = req.body
+    if (!name) return res.status(400).json({ error: 'Name is required' })
+    const db = getPool()
+    const { rows } = await db.query('INSERT INTO factory_rotation_groups (name, created_by) VALUES ($1, $2) RETURNING *', [name, req.user.id])
+    const group = rows[0]
+    for (let i = 0; i < members.length; i++) {
+      await db.query('INSERT INTO factory_rotation_members (group_id, user_id, order_index) VALUES ($1, $2, $3)', [group.id, members[i].user_id, members[i].order_index ?? i])
+    }
+    res.json(group)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.put('/api/factory-rotation/groups/:id', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { name, members } = req.body
+    const db = getPool()
+    const { rows } = await db.query('UPDATE factory_rotation_groups SET name=$1 WHERE id=$2 RETURNING *', [name, req.params.id])
+    if (!rows[0]) return res.status(404).json({ error: 'Group not found' })
+    if (Array.isArray(members)) {
+      await db.query('DELETE FROM factory_rotation_members WHERE group_id=$1', [req.params.id])
+      for (let i = 0; i < members.length; i++) {
+        await db.query('INSERT INTO factory_rotation_members (group_id, user_id, order_index) VALUES ($1, $2, $3)', [req.params.id, members[i].user_id, members[i].order_index ?? i])
+      }
+    }
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/factory-rotation/groups/:id', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    await getPool().query('DELETE FROM factory_rotation_groups WHERE id=$1', [req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/factory-rotation/schedule', requireAuth, async (req, res) => {
+  try {
+    const { group_id, from, to } = req.query
+    const db = getPool()
+    let q = 'SELECT s.*, p.full_name, p.email FROM factory_rotation_schedule s LEFT JOIN profiles p ON s.user_id = p.id WHERE 1=1'
+    const params = []
+    if (group_id) { params.push(group_id); q += ` AND s.group_id=$${params.length}` }
+    if (from) { params.push(from); q += ` AND s.scheduled_date>=$${params.length}` }
+    if (to) { params.push(to); q += ` AND s.scheduled_date<=$${params.length}` }
+    q += ' ORDER BY s.scheduled_date ASC'
+    const { rows } = await db.query(q, params)
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/factory-rotation/generate', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { group_id, from_date, to_date } = req.body
+    if (!group_id || !from_date || !to_date) return res.status(400).json({ error: 'group_id, from_date and to_date are required' })
+    const db = getPool()
+    const { rows: members } = await db.query('SELECT * FROM factory_rotation_members WHERE group_id=$1 ORDER BY order_index ASC', [group_id])
+    if (!members.length) return res.status(400).json({ error: 'Group has no members' })
+    await db.query('DELETE FROM factory_rotation_schedule WHERE group_id=$1 AND scheduled_date>=$2 AND scheduled_date<=$3', [group_id, from_date, to_date])
+    let cursor = new Date(from_date), end = new Date(to_date), idx = 0, count = 0
+    while (cursor <= end) {
+      if (isWorkday(cursor)) {
+        await db.query('INSERT INTO factory_rotation_schedule (group_id, user_id, scheduled_date) VALUES ($1, $2, $3)', [group_id, members[idx % members.length].user_id, toDateStrCairo(cursor)])
+        idx++; count++
+      }
+      cursor = addDays(cursor, 1)
+    }
+    res.json({ generated: count })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/factory-rotation/my-next', requireAuth, async (req, res) => {
+  try {
+    const today = toDateStrCairo(new Date())
+    const { rows } = await getPool().query('SELECT * FROM factory_rotation_schedule WHERE user_id=$1 AND scheduled_date>=$2 ORDER BY scheduled_date ASC LIMIT 10', [req.user.id, today])
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.put('/api/factory-rotation/schedule/:id', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { user_id } = req.body
+    if (!user_id) return res.status(400).json({ error: 'user_id required' })
+    const { rows } = await getPool().query('UPDATE factory_rotation_schedule SET user_id=$1, notified=false WHERE id=$2 RETURNING *', [user_id, req.params.id])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── OVERTIME ROTATION ─────────────────────────────────────────────────────────
+app.get('/api/overtime-rotation/groups', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const db = getPool()
+    const { rows: groups } = await db.query('SELECT * FROM overtime_rotation_groups ORDER BY created_at ASC')
+    const { rows: members } = await db.query('SELECT m.*, p.full_name, p.email FROM overtime_rotation_members m LEFT JOIN profiles p ON m.user_id = p.id ORDER BY m.order_index ASC')
+    const result = groups.map(g => ({ ...g, members: members.filter(m => m.group_id === g.id) }))
+    res.json(result)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/overtime-rotation/groups', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { name, members = [] } = req.body
+    if (!name) return res.status(400).json({ error: 'Name is required' })
+    const db = getPool()
+    const { rows } = await db.query('INSERT INTO overtime_rotation_groups (name, created_by) VALUES ($1, $2) RETURNING *', [name, req.user.id])
+    const group = rows[0]
+    for (let i = 0; i < members.length; i++) {
+      await db.query('INSERT INTO overtime_rotation_members (group_id, user_id, order_index) VALUES ($1, $2, $3)', [group.id, members[i].user_id, members[i].order_index ?? i])
+    }
+    res.json(group)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.put('/api/overtime-rotation/groups/:id', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { name, members } = req.body
+    const db = getPool()
+    const { rows } = await db.query('UPDATE overtime_rotation_groups SET name=$1 WHERE id=$2 RETURNING *', [name, req.params.id])
+    if (!rows[0]) return res.status(404).json({ error: 'Group not found' })
+    if (Array.isArray(members)) {
+      await db.query('DELETE FROM overtime_rotation_members WHERE group_id=$1', [req.params.id])
+      for (let i = 0; i < members.length; i++) {
+        await db.query('INSERT INTO overtime_rotation_members (group_id, user_id, order_index) VALUES ($1, $2, $3)', [req.params.id, members[i].user_id, members[i].order_index ?? i])
+      }
+    }
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/overtime-rotation/groups/:id', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    await getPool().query('DELETE FROM overtime_rotation_groups WHERE id=$1', [req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/overtime-rotation/schedule', requireAuth, async (req, res) => {
+  try {
+    const { group_id, from, to } = req.query
+    const db = getPool()
+    let q = 'SELECT s.*, p.full_name, p.email FROM overtime_rotation_schedule s LEFT JOIN profiles p ON s.user_id = p.id WHERE 1=1'
+    const params = []
+    if (group_id) { params.push(group_id); q += ` AND s.group_id=$${params.length}` }
+    if (from) { params.push(from); q += ` AND s.scheduled_date>=$${params.length}` }
+    if (to) { params.push(to); q += ` AND s.scheduled_date<=$${params.length}` }
+    q += ' ORDER BY s.scheduled_date ASC'
+    const { rows } = await db.query(q, params)
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/overtime-rotation/generate', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { group_id, from_date, to_date, skip_weekends = false } = req.body
+    if (!group_id || !from_date || !to_date) return res.status(400).json({ error: 'group_id, from_date and to_date are required' })
+    const db = getPool()
+    const { rows: members } = await db.query('SELECT * FROM overtime_rotation_members WHERE group_id=$1 ORDER BY order_index ASC', [group_id])
+    if (!members.length) return res.status(400).json({ error: 'Group has no members' })
+    await db.query('DELETE FROM overtime_rotation_schedule WHERE group_id=$1 AND scheduled_date>=$2 AND scheduled_date<=$3', [group_id, from_date, to_date])
+    let cursor = new Date(from_date), end = new Date(to_date), idx = 0, count = 0
+    while (cursor <= end) {
+      if (!skip_weekends || isWorkday(cursor)) {
+        await db.query('INSERT INTO overtime_rotation_schedule (group_id, user_id, scheduled_date) VALUES ($1, $2, $3)', [group_id, members[idx % members.length].user_id, toDateStrCairo(cursor)])
+        idx++; count++
+      }
+      cursor = addDays(cursor, 1)
+    }
+    res.json({ generated: count })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/overtime-rotation/my-next', requireAuth, async (req, res) => {
+  try {
+    const today = toDateStrCairo(new Date())
+    const { rows } = await getPool().query('SELECT * FROM overtime_rotation_schedule WHERE user_id=$1 AND scheduled_date>=$2 ORDER BY scheduled_date ASC LIMIT 10', [req.user.id, today])
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.put('/api/overtime-rotation/schedule/:id', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { user_id } = req.body
+    if (!user_id) return res.status(400).json({ error: 'user_id required' })
+    const { rows } = await getPool().query('UPDATE overtime_rotation_schedule SET user_id=$1, notified=false WHERE id=$2 RETURNING *', [user_id, req.params.id])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
