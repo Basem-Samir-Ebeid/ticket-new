@@ -1,0 +1,223 @@
+Please implement the following features and improvements to the IT Ticket System. Read everything carefully before starting, and implement all items in order of priority.
+
+---
+
+## 🔴 PRIORITY 1 — Reports & Analytics Dashboard
+
+Add a dedicated Reports & Analytics page accessible to admin and super_admin roles.
+
+**Ticket Analytics:**
+- Total tickets by status (opened / pending / solved) as cards with counts
+- Average resolution time per technician and per category
+- SLA compliance rate: percentage of tickets solved within the due date
+- Top 5 most frequent ticket categories (bar chart)
+- Tickets created per day/week/month (line chart)
+- Tickets by priority breakdown (pie or donut chart)
+
+**Team Performance:**
+- Per-technician table: assigned tickets, solved tickets, average resolution time, satisfaction rating average
+- Leaderboard sorted by solved tickets
+
+**Asset Analytics:**
+- Assets by type breakdown
+- Assets by condition (good / fair / poor)
+- Assets with warranty expiring in the next 30 / 60 / 90 days (count cards + list)
+
+**Attendance Analytics:**
+- Late arrivals count per employee this month
+- Remote vs office attendance ratio
+- Average working hours per employee
+
+Use Recharts or Chart.js for all charts. Add date range filter (this week / this month / last 3 months / custom range) at the top of the page that applies to all charts.
+
+---
+
+## 🔴 PRIORITY 2 — Export to Excel and PDF
+
+Add export buttons throughout the system:
+
+- **Tickets page**: Export filtered tickets list to Excel (.xlsx) — columns: ID, title, category, priority, status, assigned to, created by, created date, solved date, resolution time
+- **Attendance page**: Export monthly attendance report to Excel — columns: employee name, date, login time, logout time, hours worked, attendance type, late (yes/no)
+- **Assets page**: Export full assets list to Excel — columns: name, type, brand, model, serial number, status, condition, assigned to, purchase date, warranty expires
+- **Penalties page**: Export penalties to Excel
+- **Reports page**: Export any chart data to Excel, and add a "Print / Export PDF" button that generates a formatted PDF of the entire reports page
+
+Use `xlsx` (SheetJS) library for Excel export and `jspdf` + `html2canvas` for PDF export. Add export buttons with a download icon next to page titles.
+
+---
+
+## 🔴 PRIORITY 3 — QR Code for Assets
+
+**In the Assets page and asset detail view:**
+- Generate a QR code for each asset that encodes the URL: `{BASE_URL}/assets/{asset_id}`
+- Display the QR code inside the asset detail modal/page
+- Add a "Print QR" button that opens a print-friendly page showing: asset name, serial number, brand/model, and the QR code — formatted to fit a label sticker (approximately 6cm × 4cm)
+- Add a "Download QR" button that downloads the QR code as a PNG file named `{asset_name}-{serial_number}-QR.png`
+- Add a bulk option in the assets list: select multiple assets → "Print QR Codes" → generates a printable sheet with all selected assets' QR codes (4 per row)
+
+Use the `qrcode` npm package (or `qrcode.react` for the React component).
+
+---
+
+## 🔴 PRIORITY 4 — Knowledge Base
+
+Create a new Knowledge Base section with its own database table and routes:
+
+**Database table `knowledge_articles`:**
+- id, title, content (rich text), category, tags (array), views_count, helpful_count, not_helpful_count, created_by, updated_by, is_published, created_at, updated_at
+
+**Admin capabilities:**
+- Create / edit / delete articles with a rich text editor (use react-quill or similar)
+- Set category and tags
+- Publish / unpublish articles
+- View article analytics (views, helpful ratings)
+
+**Employee capabilities:**
+- Browse and search articles by title, category, or tags
+- View article content
+- Rate article as helpful / not helpful
+- When creating a new ticket, show suggested related articles based on the ticket title/description before submission (simple keyword match)
+
+**Pages needed:**
+- `/knowledge` — public listing page (searchable, filterable by category)
+- `/knowledge/:id` — article detail page
+- Admin section in AdminDashboard to manage articles
+
+---
+
+## 🟡 PRIORITY 5 — Advanced SLA Management
+
+**Add SLA rules per priority level in system settings:**
+- Critical: resolve within 2 hours
+- High: resolve within 8 hours  
+- Medium: resolve within 24 hours
+- Low: resolve within 72 hours
+
+(These values should be configurable by super_admin in the Settings page)
+
+**SLA tracking:**
+- Calculate SLA deadline automatically when a ticket is created based on priority
+- Show SLA status badge on each ticket: `On Track` (green) / `At Risk` (amber, <20% time left) / `Breached` (red, past deadline)
+- Add SLA breach auto-escalation: when a ticket breaches SLA, automatically notify the super_admin via in-app notification + email
+- Show SLA compliance percentage in the Reports page
+
+---
+
+## 🟡 PRIORITY 6 — Warranty Expiry Alerts
+
+- Add a background job (or cron-style check on server startup and daily) that checks assets with `warranty_expires` within the next 30, 60, and 90 days
+- Send in-app notifications and email to all admin users for assets expiring soon
+- In the Assets page, add a visual indicator (amber badge) on assets expiring within 90 days
+- Add a "Warranty Expiring Soon" section/filter in the Assets page
+- Add warranty expiry count cards to the Reports page (expiring in 30/60/90 days)
+
+---
+
+## 🟡 PRIORITY 7 — Preventive Maintenance Scheduling
+
+**New database table `maintenance_schedules`:**
+- id, asset_id, title, description, frequency (weekly/monthly/quarterly/yearly), next_due_date, last_completed_date, assigned_to, created_by, created_at
+
+**Features:**
+- Admin can set a maintenance schedule for any asset
+- System automatically creates a ticket when next_due_date is reached (checked on server startup and daily)
+- The auto-created ticket is linked to the asset, has category "Maintenance", and is assigned to the specified technician
+- In the asset detail view, show upcoming maintenance schedule
+- Add a "Maintenance Calendar" view (simple list grouped by week) in the Assets page
+
+---
+
+## 🟡 PRIORITY 8 — Ticket Tags
+
+- Add a `tags` text array column to the `tickets` table
+- Allow admins and technicians to add/remove tags on tickets (autocomplete from existing tags)
+- Add tag filtering in the tickets list
+- Show tags as colored pills on ticket cards
+- In Reports page, show top 10 most used tags
+
+---
+
+## 🟡 PRIORITY 9 — Advanced Search
+
+- Add a global search bar in the top navbar (accessible with Ctrl+K shortcut)
+- Search should query: tickets (title, description), assets (name, serial number, brand), knowledge base articles (title, content), and employees (name, email)
+- Show results grouped by type with icons
+- Clicking a result navigates to the relevant page
+- Recent searches stored in localStorage
+
+---
+
+## 🟢 PRIORITY 10 — Onboarding / Offboarding Checklist
+
+**New database table `onboarding_tasks`:**
+- id, user_id, task_name, task_type (onboarding/offboarding), completed, completed_by, completed_at, due_date, created_at
+
+**Features:**
+- When admin creates a new employee, automatically generate a default onboarding checklist: Create email account, Assign laptop/device, Set up system access, Create necessary accounts (add accounts listed in settings), Give office tour, Complete HR paperwork
+- When admin marks an employee as "leaving" (new field on profile), generate offboarding checklist: Retrieve all assigned assets, Revoke system access, Archive email, Final attendance report, Process final paycheck
+- Admin can check off tasks and add notes
+- Show onboarding progress bar on the employee profile page
+- Default checklist items should be configurable in Settings
+
+---
+
+## 🟢 PRIORITY 11 — Access Management
+
+**New database table `access_records`:**
+- id, user_id, system_name, access_level (read/write/admin), granted_by, granted_at, revoked_at, notes, created_at
+
+**Features:**
+- Admin can log what systems each employee has access to (e.g., ERP, CRM, VPN, GitHub, etc.)
+- System names list is configurable in Settings
+- When an employee's access is revoked (revoked_at set), it logs the date
+- Employee profile page shows a tab with their active system accesses
+- Offboarding checklist auto-links to access records (mark access as revoked when offboarding task is completed)
+- In Reports page, show access summary table
+
+---
+
+## 🟢 PRIORITY 12 — Software License Tracking
+
+**New database table `software_licenses`:**
+- id, software_name, vendor, license_key (encrypted), license_type (per-seat/site/subscription), total_seats, used_seats, expiry_date, cost, renewal_reminder_days, notes, created_by, created_at
+
+**New table `license_assignments`:**
+- id, license_id, user_id, assigned_at, unassigned_at
+
+**Features:**
+- Admin can add software licenses and track seats used vs total
+- Assign licenses to specific employees
+- Auto-alert (in-app + email) when: seats are 90% used, license expires within 30/60 days
+- License list page with status badges (Active / Expiring Soon / Expired)
+- In Reports page, show license utilization overview
+
+---
+
+## ⚙️ GENERAL IMPROVEMENTS
+
+1. **Multiple attachments per ticket reply**: Allow uploading up to 5 files/images per reply (currently limited to 1). Show thumbnail previews before sending.
+
+2. **Ticket sub-categories**: Add a `subcategory` field to tickets. When a category is selected, show a dependent dropdown of subcategories. Subcategory list should be configurable in Settings.
+
+3. **Full audit log page**: Add an Audit Log page (super_admin only) that shows every significant action in the system: logins, ticket status changes, asset assignments, settings changes, user creation/deletion. Store in a new `audit_logs` table with: user_id, action_type, entity_type, entity_id, description, ip_address, created_at.
+
+4. **Improved mobile PWA**: Ensure all pages are fully responsive and usable on mobile. The attendance check-in button should be prominent and accessible without scrolling on mobile. Add a bottom navigation bar for mobile users with: Home, Tickets, Assets, Profile.
+
+5. **Ticket merge**: Allow admin to merge duplicate tickets (select a primary ticket, all replies and history from the duplicate move to the primary, duplicate is marked as "merged" and closed).
+
+6. **Satisfaction rating reports**: The rating system exists but is not surfaced in reports. Add to the Reports page: average satisfaction score per technician, rating distribution chart, and recent low ratings list (1-2 stars) for quick follow-up.
+
+---
+
+## 📋 IMPLEMENTATION NOTES
+
+- Maintain the existing tech stack: React + Vite frontend, Express + TypeScript backend, Drizzle ORM, PostgreSQL (Neon)
+- Add all new database tables to `shared/schema.ts` using Drizzle schema syntax
+- Add all new API routes in `server/routes/` following the existing pattern (requireAuth middleware, role checks)
+- Register all new routes in `server/app.ts`
+- Use the existing notification system (in-app + WhatsApp + email) for all new alerts
+- Keep the existing UI style: TailwindCSS, dark/light mode support, existing color scheme
+- All new pages should be added to the Sidebar navigation with appropriate role-based visibility
+- Test that all existing features still work after each addition
+
+Start with Priority 1 (Reports) and work through to Priority 12, then apply the General Improvements. Confirm each priority is complete before moving to the next.

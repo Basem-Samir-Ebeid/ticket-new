@@ -213,6 +213,68 @@ export const api = {
   // Auto-assign rules
   getAutoAssignRules: () => request('GET', '/settings/auto-assign'),
   saveAutoAssignRules: (data) => request('POST', '/settings/auto-assign', data),
+
+  // Reports
+  getTicketReports: (range = 'month') => request('GET', `/reports/tickets?range=${range}`),
+  getAssetReports: () => request('GET', '/reports/assets'),
+  getAttendanceReports: (range = 'month') => request('GET', `/reports/attendance?range=${range}`),
+
+  // Knowledge Base
+  getKnowledgeArticles: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request('GET', `/knowledge${qs ? '?' + qs : ''}`)
+  },
+  getKnowledgeCategories: () => request('GET', '/knowledge/categories'),
+  getKnowledgeArticle: (id) => request('GET', `/knowledge/${id}`),
+  createKnowledgeArticle: (data) => request('POST', '/knowledge', data),
+  updateKnowledgeArticle: (id, data) => request('PATCH', `/knowledge/${id}`, data),
+  deleteKnowledgeArticle: (id) => request('DELETE', `/knowledge/${id}`),
+  rateKnowledgeArticle: (id, helpful) => request('POST', `/knowledge/${id}/rate`, { helpful }),
+
+  // Audit Logs
+  getAuditLogs: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request('GET', `/audit-logs${qs ? '?' + qs : ''}`)
+  },
+
+  // Maintenance Schedules
+  getMaintenanceSchedules: () => request('GET', '/maintenance'),
+  getAssetMaintenance: (assetId) => request('GET', `/maintenance/asset/${assetId}`),
+  createMaintenanceSchedule: (data) => request('POST', '/maintenance', data),
+  updateMaintenanceSchedule: (id, data) => request('PATCH', `/maintenance/${id}`, data),
+  deleteMaintenanceSchedule: (id) => request('DELETE', `/maintenance/${id}`),
+
+  // Onboarding Tasks
+  getOnboardingTasks: (userId) => request('GET', `/onboarding/${userId}`),
+  generateOnboardingTasks: (userId, type) => request('POST', `/onboarding/${userId}/generate`, { type }),
+  createOnboardingTask: (userId, data) => request('POST', `/onboarding/${userId}`, data),
+  updateOnboardingTask: (id, data) => request('PATCH', `/onboarding/${id}`, data),
+  deleteOnboardingTask: (id) => request('DELETE', `/onboarding/${id}`),
+
+  // Access Records
+  getAccessRecords: () => request('GET', '/access-records'),
+  getUserAccessRecords: (userId) => request('GET', `/access-records/user/${userId}`),
+  createAccessRecord: (data) => request('POST', '/access-records', data),
+  updateAccessRecord: (id, data) => request('PATCH', `/access-records/${id}`, data),
+  deleteAccessRecord: (id) => request('DELETE', `/access-records/${id}`),
+
+  // Software Licenses
+  getLicenses: () => request('GET', '/licenses'),
+  createLicense: (data) => request('POST', '/licenses', data),
+  updateLicense: (id, data) => request('PATCH', `/licenses/${id}`, data),
+  deleteLicense: (id) => request('DELETE', `/licenses/${id}`),
+  getLicenseAssignments: (id) => request('GET', `/licenses/${id}/assignments`),
+  assignLicense: (id, userId) => request('POST', `/licenses/${id}/assign`, { user_id: userId }),
+  unassignLicense: (id, userId) => request('POST', `/licenses/${id}/unassign`, { user_id: userId }),
+
+  // Global Search
+  search: (q) => request('GET', `/search?q=${encodeURIComponent(q)}`),
+
+  // Ticket Tags
+  updateTicketTags: (id, tags) => request('PATCH', `/tickets/${id}`, { tags }),
+
+  // Ticket Merge
+  mergeTickets: (primaryId, duplicateId) => request('POST', `/tickets/${primaryId}/merge`, { duplicate_id: duplicateId }),
 }
 
 // ─── CSV Export helper ───────────────────────────────────────────────────────

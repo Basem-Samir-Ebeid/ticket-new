@@ -31,6 +31,7 @@ export const profiles = pgTable('profiles', {
   direct_manager: text('direct_manager'),
   notes: text('notes'),
   whatsapp_phone: text('whatsapp_phone'),
+  is_leaving: boolean('is_leaving').notNull().default(false),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -48,7 +49,10 @@ export const tickets = pgTable('tickets', {
   affected_user_id: uuid('affected_user_id').references(() => profiles.id),
   asset_id: uuid('asset_id'),
   category: text('category'),
+  subcategory: text('subcategory'),
+  tags: text('tags').array().default(sql`'{}'::text[]`),
   due_date: date('due_date'),
+  sla_deadline: timestamp('sla_deadline', { withTimezone: true }),
   assigned_to: uuid('assigned_to').references(() => profiles.id, { onDelete: 'set null' }),
   created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'cascade' }),
   status: text('status').notNull().default('opened'),
@@ -58,6 +62,7 @@ export const tickets = pgTable('tickets', {
   review: text('review'),
   rating: integer('rating'),
   rating_comment: text('rating_comment'),
+  merged_into: uuid('merged_into'),
   opened_at: timestamp('opened_at', { withTimezone: true }),
   pending_at: timestamp('pending_at', { withTimezone: true }),
   solved_at: timestamp('solved_at', { withTimezone: true }),
@@ -92,6 +97,7 @@ export const ticketReplies = pgTable('ticket_replies', {
   message: text('message'),
   image_url: text('image_url'),
   attachment_name: text('attachment_name'),
+  attachments: text('attachments').array().default(sql`'{}'::text[]`),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -267,4 +273,99 @@ export const attendanceCorrections = pgTable('attendance_corrections', {
   reviewed_by: uuid('reviewed_by').references(() => profiles.id, { onDelete: 'set null' }),
   reviewed_at: timestamp('reviewed_at', { withTimezone: true }),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Knowledge Base ────────────────────────────────────────────────────────────
+export const knowledgeArticles = pgTable('knowledge_articles', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  title: text('title').notNull(),
+  content: text('content').notNull().default(''),
+  category: text('category').notNull().default('general'),
+  tags: text('tags').array().default(sql`'{}'::text[]`),
+  views_count: integer('views_count').notNull().default(0),
+  helpful_count: integer('helpful_count').notNull().default(0),
+  not_helpful_count: integer('not_helpful_count').notNull().default(0),
+  is_published: boolean('is_published').notNull().default(false),
+  created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  updated_by: uuid('updated_by').references(() => profiles.id, { onDelete: 'set null' }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Maintenance Schedules ─────────────────────────────────────────────────────
+export const maintenanceSchedules = pgTable('maintenance_schedules', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  asset_id: uuid('asset_id').notNull().references(() => assets.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  description: text('description'),
+  frequency: text('frequency').notNull().default('monthly'),
+  next_due_date: date('next_due_date').notNull(),
+  last_completed_date: date('last_completed_date'),
+  assigned_to: uuid('assigned_to').references(() => profiles.id, { onDelete: 'set null' }),
+  created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Audit Logs ───────────────────────────────────────────────────────────────
+export const auditLogs = pgTable('audit_logs', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid('user_id').references(() => profiles.id, { onDelete: 'set null' }),
+  user_name: text('user_name'),
+  action_type: text('action_type').notNull(),
+  entity_type: text('entity_type'),
+  entity_id: text('entity_id'),
+  description: text('description').notNull(),
+  ip_address: text('ip_address'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Onboarding Tasks ─────────────────────────────────────────────────────────
+export const onboardingTasks = pgTable('onboarding_tasks', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  task_name: text('task_name').notNull(),
+  task_type: text('task_type').notNull().default('onboarding'),
+  completed: boolean('completed').notNull().default(false),
+  completed_by: uuid('completed_by').references(() => profiles.id, { onDelete: 'set null' }),
+  completed_at: timestamp('completed_at', { withTimezone: true }),
+  due_date: date('due_date'),
+  notes: text('notes'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Access Records ───────────────────────────────────────────────────────────
+export const accessRecords = pgTable('access_records', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  system_name: text('system_name').notNull(),
+  access_level: text('access_level').notNull().default('read'),
+  granted_by: uuid('granted_by').references(() => profiles.id, { onDelete: 'set null' }),
+  granted_at: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+  revoked_at: timestamp('revoked_at', { withTimezone: true }),
+  notes: text('notes'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Software Licenses ────────────────────────────────────────────────────────
+export const softwareLicenses = pgTable('software_licenses', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  software_name: text('software_name').notNull(),
+  vendor: text('vendor'),
+  license_key: text('license_key'),
+  license_type: text('license_type').notNull().default('per-seat'),
+  total_seats: integer('total_seats'),
+  expiry_date: date('expiry_date'),
+  cost: doublePrecision('cost'),
+  renewal_reminder_days: integer('renewal_reminder_days').notNull().default(30),
+  notes: text('notes'),
+  created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const licenseAssignments = pgTable('license_assignments', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  license_id: uuid('license_id').notNull().references(() => softwareLicenses.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  assigned_at: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
+  unassigned_at: timestamp('unassigned_at', { withTimezone: true }),
 })

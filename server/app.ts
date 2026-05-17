@@ -18,6 +18,14 @@ import forgotPasswordRoutes from './routes/forgot-password'
 import assetRoutes from './routes/assets'
 import penaltyRoutes from './routes/penalties'
 import complaintRoutes from './routes/complaints'
+import reportsRoutes from './routes/reports'
+import knowledgeRoutes from './routes/knowledge'
+import auditLogsRoutes from './routes/audit-logs'
+import maintenanceRoutes from './routes/maintenance'
+import onboardingRoutes from './routes/onboarding'
+import accessRecordsRoutes from './routes/access-records'
+import licensesRoutes from './routes/licenses'
+import searchRoutes from './routes/search'
 
 const app = express()
 
@@ -44,6 +52,14 @@ app.use('/api/auth', forgotPasswordRoutes)
 app.use('/api/assets', assetRoutes)
 app.use('/api/penalties', penaltyRoutes)
 app.use('/api/complaints', complaintRoutes)
+app.use('/api/reports', reportsRoutes)
+app.use('/api/knowledge', knowledgeRoutes)
+app.use('/api/audit-logs', auditLogsRoutes)
+app.use('/api/maintenance', maintenanceRoutes)
+app.use('/api/onboarding', onboardingRoutes)
+app.use('/api/access-records', accessRecordsRoutes)
+app.use('/api/licenses', licensesRoutes)
+app.use('/api/search', searchRoutes)
 
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(process.cwd(), 'dist')))
