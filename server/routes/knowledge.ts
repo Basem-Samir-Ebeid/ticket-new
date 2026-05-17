@@ -127,6 +127,31 @@ router.delete('/:id', requireAuth as any, async (req: any, res) => {
   }
 })
 
+// ─── Suggest articles for ticket creation ────────────────────────────────────
+router.get('/suggest', async (req: any, res) => {
+  try {
+    const q = String(req.query.q || '').trim()
+    if (!q || q.length < 2) return res.json([])
+    const pattern = `%${q}%`
+    const articles = await db.select({
+      id: knowledgeArticles.id,
+      title: knowledgeArticles.title,
+      category: knowledgeArticles.category,
+    }).from(knowledgeArticles)
+      .where(and(
+        eq(knowledgeArticles.is_published, true),
+        or(
+          ilike(knowledgeArticles.title, pattern),
+          ilike(knowledgeArticles.content, pattern),
+        )
+      ))
+      .limit(3)
+    res.json(articles)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message })
+  }
+})
+
 router.post('/:id/rate', requireAuth as any, async (req: any, res) => {
   try {
     const { helpful } = req.body

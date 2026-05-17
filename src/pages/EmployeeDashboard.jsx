@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { playNotificationSound, showBrowserNotification } from '../lib/sound'
@@ -9,6 +9,9 @@ import FileAttachment from '../components/FileAttachment'
 import PenaltiesPage from './PenaltiesPage'
 import ComplaintsPage from './ComplaintsPage'
 import AssetsPage from './AssetsPage'
+import MobileNav from '../components/MobileNav'
+import KnowledgeSuggest from '../components/KnowledgeSuggest'
+import { TagPills } from '../components/TagChipInput'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -850,6 +853,7 @@ export default function EmployeeDashboard() {
                     onChange={e=>setCreateForm(f=>({...f,title:e.target.value}))}
                     className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all"
                   />
+                  <KnowledgeSuggest query={createForm.title} />
                 </div>
                 <div>
                   <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Description</label>
@@ -1258,6 +1262,7 @@ export default function EmployeeDashboard() {
         )}
       </div>
       </div>
+      <MobileNav tabs={employeeTabs} activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   )
 }

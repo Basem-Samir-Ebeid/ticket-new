@@ -63,6 +63,7 @@ export const tickets = pgTable('tickets', {
   rating: integer('rating'),
   rating_comment: text('rating_comment'),
   merged_into: uuid('merged_into'),
+  sla_escalated: boolean('sla_escalated').notNull().default(false),
   opened_at: timestamp('opened_at', { withTimezone: true }),
   pending_at: timestamp('pending_at', { withTimezone: true }),
   solved_at: timestamp('solved_at', { withTimezone: true }),

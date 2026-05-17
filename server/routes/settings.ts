@@ -6,8 +6,8 @@ import { getSmtpConfig, saveSmtpConfig } from '../smtpConfig'
 import { getWhatsAppConfig, saveWhatsAppConfig, sendWhatsAppNotification } from '../whatsappConfig'
 import { getAutoAssignConfig, saveAutoAssignConfig } from '../autoAssignConfig'
 import { db } from '../db'
-import { settingsLog } from '../../shared/schema'
-import { desc } from 'drizzle-orm'
+import { settingsLog, systemSettings } from '../../shared/schema'
+import { desc, eq, inArray } from 'drizzle-orm'
 import { execFileSync, execFile } from 'child_process'
 import path from 'path'
 import fs from 'fs'
@@ -441,6 +441,96 @@ router.post('/auto-assign', requireAuth as any, async (req: any, res) => {
     res.json(config)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to save auto-assign rules' })
+  }
+})
+
+// ─── SLA Rules (public GET, admin POST) ──────────────────────────────────────
+router.get('/sla', async (_req, res) => {
+  try {
+    const keys = ['sla_urgent', 'sla_high', 'sla_medium', 'sla_low']
+    const rows = await db.select().from(systemSettings).where(inArray(systemSettings.key, keys))
+    const defaults: Record<string, number> = { sla_urgent: 4, sla_high: 24, sla_medium: 72, sla_low: 120 }
+    const result: Record<string, number> = { ...defaults }
+    for (const row of rows) result[row.key] = Number(row.value)
+    res.json(result)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message })
+  }
+})
+
+router.post('/sla', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { sla_urgent, sla_high, sla_medium, sla_low } = req.body
+    const updates = [
+      { key: 'sla_urgent', value: String(Number(sla_urgent) || 4) },
+      { key: 'sla_high', value: String(Number(sla_high) || 24) },
+      { key: 'sla_medium', value: String(Number(sla_medium) || 72) },
+      { key: 'sla_low', value: String(Number(sla_low) || 120) },
+    ]
+    for (const u of updates) {
+      await db.insert(systemSettings).values({ key: u.key, value: u.value })
+        .onConflictDoUpdate({ target: systemSettings.key, set: { value: u.value } })
+    }
+    res.json({ success: true })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message })
+  }
+})
+
+// ─── Ticket Subcategories ──────────────────────────────────────────────────────
+router.get('/subcategories', async (_req, res) => {
+  try {
+    const [row] = await db.select().from(systemSettings).where(eq(systemSettings.key, 'ticket_subcategories'))
+    res.json(row ? JSON.parse(row.value) : {})
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message })
+  }
+})
+
+router.post('/subcategories', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const value = JSON.stringify(req.body)
+    await db.insert(systemSettings).values({ key: 'ticket_subcategories', value })
+      .onConflictDoUpdate({ target: systemSettings.key, set: { value } })
+    res.json({ success: true })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message })
+  }
+})
+
+// ─── Onboarding Templates ──────────────────────────────────────────────────────
+router.get('/onboarding-templates', async (_req, res) => {
+  try {
+    const [onb] = await db.select().from(systemSettings).where(eq(systemSettings.key, 'onboarding_templates'))
+    const [off] = await db.select().from(systemSettings).where(eq(systemSettings.key, 'offboarding_templates'))
+    res.json({
+      onboarding: onb ? JSON.parse(onb.value) : [],
+      offboarding: off ? JSON.parse(off.value) : [],
+    })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message })
+  }
+})
+
+router.post('/onboarding-templates', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { onboarding, offboarding } = req.body
+    if (onboarding !== undefined) {
+      const v = JSON.stringify(onboarding)
+      await db.insert(systemSettings).values({ key: 'onboarding_templates', value: v })
+        .onConflictDoUpdate({ target: systemSettings.key, set: { value: v } })
+    }
+    if (offboarding !== undefined) {
+      const v = JSON.stringify(offboarding)
+      await db.insert(systemSettings).values({ key: 'offboarding_templates', value: v })
+        .onConflictDoUpdate({ target: systemSettings.key, set: { value: v } })
+    }
+    res.json({ success: true })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message })
   }
 })
 

@@ -1,0 +1,137 @@
+Please complete the following missing and partially implemented features. Read all items carefully before starting.
+
+---
+
+## 1 — QR Code: Complete the missing parts (Assets page)
+
+The QR code displays inside the asset detail view, but the following are missing:
+
+- **Download QR as PNG**: Add a "Download QR" button that uses a canvas to render the QR code and downloads it as a PNG file named `{asset_name}-{serial_number}-QR.png`
+- **Print QR as label sticker**: Add a "Print QR" button that opens a print-only page (or triggers `window.print()`) showing the asset name, serial number, brand/model, and the QR code — formatted to fit a small label sticker (approximately 6cm × 4cm). Use a `@media print` CSS class to hide everything except the label.
+- **Bulk QR Print**: In the assets list, add checkboxes to select multiple assets. Add a "Print QR Codes" button that appears when assets are selected. Clicking it generates a printable page with all selected assets' QR codes in a grid (4 per row), each showing asset name + serial number + QR code.
+
+---
+
+## 2 — SLA: Make hours configurable + add auto-escalation
+
+Currently the SLA hours are hardcoded in `src/components/SLABadge.jsx`. Fix this:
+
+- **Configurable SLA in Settings**: In the Settings page (admin/super_admin), add a new "SLA Rules" section where the admin can set resolution time in hours for each priority:
+  - Urgent: default 4 hours
+  - High: default 24 hours
+  - Medium: default 72 hours
+  - Low: default 120 hours
+  
+  Store these 4 values in the `system_settings` table with keys: `sla_urgent`, `sla_high`, `sla_medium`, `sla_low`. Add a GET `/api/settings/sla` endpoint that returns these values (public, no auth required so the frontend can fetch without extra complexity). Update `SLABadge.jsx` to fetch these values from the API on mount (cache in module-level variable so it only fetches once per session).
+
+- **Auto-escalation on SLA breach**: Add a background interval check on the server (run every 15 minutes using `setInterval` in `server/index.ts` or `server/app.ts`). For each open/pending ticket where `sla_deadline` has passed and has not already triggered an escalation notification (add a boolean column `sla_escalated` to the tickets table), do the following:
+  1. Set `sla_escalated = true` on the ticket
+  2. Create an in-app notification for all admin and super_admin users with message: `"SLA breached: ticket #${ticket.id.slice(0,8)} — ${ticket.title}"`
+  3. Send an email to all admin users using the existing mailer
+  4. If WhatsApp is configured, send a WhatsApp notification using the existing whatsappConfig
+
+---
+
+## 3 — Ticket Tags: Add full UI
+
+The `tags` column already exists in the tickets table. Now add the UI:
+
+- **Tag input on ticket detail**: In the ticket detail modal/view (in AdminDashboard and EmployeeDashboard), add a tag input field. It should work like a chip input: the user types a tag name and presses Enter or comma to add it, clicks × to remove a tag. Show autocomplete suggestions from existing tags used across all tickets (fetch from a new GET `/api/tickets/tags` endpoint that returns all unique tags).
+- **Tag display**: Show tags as small colored pills on each ticket card in the list views (both admin and employee dashboards).
+- **Filter by tag**: Add a tag filter dropdown in the tickets list (next to the status filter). Selecting a tag shows only tickets that have that tag.
+- **Tags in Reports**: In ReportsPage, add a "Top 10 Tags" bar chart showing the most used tags.
+- **API**: Add PATCH `/api/tickets/:id/tags` endpoint to update tags on a ticket (admin + assigned technician only).
+
+---
+
+## 4 — Subcategories: Add UI and settings
+
+The `subcategory` column already exists in the tickets table. Now add:
+
+- **Settings configuration**: In the Settings page, add a "Ticket Subcategories" section. For each existing category (Hardware, Software, Network, etc.), the admin can add/remove subcategory options. Store as JSON in `system_settings` with key `ticket_subcategories` (value: `{"Hardware": ["Laptop", "Monitor", "Printer"], "Software": ["Installation", "License", "Bug"], ...}`).
+- **Ticket form**: In the create/edit ticket form, when a category is selected, show a dependent `<select>` dropdown for subcategory populated from the configured subcategories for that category. If no subcategories are configured for the selected category, hide the subcategory field.
+- **Display**: Show the subcategory next to the category label on ticket cards and in the ticket detail view.
+
+---
+
+## 5 — Onboarding/Offboarding: Add UI in AdminDashboard
+
+The API (`/api/onboarding`) and database table (`onboarding_tasks`) already exist. Now add the UI:
+
+- **In the employee detail view/modal** (when admin clicks on an employee): Add an "Onboarding" tab showing the checklist tasks for that employee. Each task shows: task name, due date, completed checkbox (clicking it calls PATCH `/api/onboarding/:id` to mark complete), completed by name, completed date.
+- **Progress bar**: At the top of the onboarding tab, show a progress bar (e.g., "5/8 tasks complete — 62%").
+- **Auto-generate on employee creation**: When admin creates a new employee, automatically call POST `/api/onboarding/generate` (create this endpoint if not exists) to generate the default onboarding task list for that user.
+- **Offboarding trigger**: In the employee edit form, add a toggle "Mark as leaving". When enabled, call POST `/api/onboarding/generate-offboarding` to generate the offboarding checklist. Show offboarding tasks in a separate "Offboarding" tab on the employee detail view.
+- **Default task lists**: Make the default onboarding and offboarding task names configurable in the Settings page under "Onboarding Templates".
+
+---
+
+## 6 — Ticket Merge
+
+- **API**: Add POST `/api/tickets/:id/merge` endpoint (admin only). Body: `{ merge_into_id: string }`. This should:
+  1. Move all replies (`ticket_replies`) from the source ticket to the target ticket
+  2. Move all history (`ticket_history`) from source to target
+  3. Set source ticket status to `"merged"` and set `merged_into = merge_into_id`
+  4. Add a history entry on the target ticket: `"Ticket #xxx merged into this ticket by [admin name]"`
+  5. Send in-app notification to the creator of the source ticket: `"Your ticket has been merged into ticket #xxx"`
+
+- **UI**: In the ticket detail view (admin only), add a "Merge" button. Clicking it opens a small modal with a search input to find the target ticket by title or ID. Show a confirmation prompt before merging. After merge, close the source ticket modal and refresh the list.
+- **Display**: In the tickets list, show merged tickets with a "Merged" gray badge and make them non-editable.
+
+---
+
+## 7 — Multiple Attachments per Ticket Reply
+
+Currently only 1 file can be uploaded per reply. Change this:
+
+- **Frontend**: Update the reply form (in ticket detail modals in all dashboards) to allow selecting up to 5 files/images at once. Show thumbnail previews for images and file name + size for other file types before sending. Add an × button to remove a file from the selection before sending.
+- **Backend**: Update the upload route to handle multiple files (use `multer().array('files', 5)` instead of `.single()`). Store multiple attachment URLs — change `image_url` and `attachment_name` columns behavior, OR add new columns `attachment_urls` (text array) and `attachment_names` (text array) to `ticket_replies` table. Keep backward compatibility with existing single-file replies.
+- **Display**: In the reply thread, show all attachments — images as thumbnails (click to enlarge), other files as download links with file type icon.
+
+---
+
+## 8 — Mobile Bottom Navigation Bar
+
+Add a bottom navigation bar visible only on mobile screens (hidden on md and above):
+
+- Show 4 tabs: **Home** (dashboard icon), **Tickets** (ticket icon), **Assets** (laptop icon), **Profile** (user icon)
+- The bar should be fixed at the bottom of the screen on mobile, with a safe area for iOS home indicator (`padding-bottom: env(safe-area-inset-bottom)`)
+- Tapping a tab switches to that section within the dashboard (using the existing tab system)
+- Show a badge on the Tickets tab with the count of open/unread tickets
+- Apply to: AdminDashboard, EmployeeDashboard, MemberDashboard
+- The existing sidebar should be hidden on mobile (add `hidden md:flex` to it) and replaced by the bottom nav
+
+---
+
+## 9 — Satisfaction Rating in Reports Page
+
+The rating system already exists in the tickets table (`rating` and `rating_comment` columns). Add to ReportsPage:
+
+- **Summary cards**: Average rating (out of 5 stars), total ratings count, percentage of ratings that are 4-5 stars
+- **Per-technician rating table**: For each technician who has solved tickets with ratings in the selected date range — show their name, number of rated tickets, average rating (as stars), and trend vs previous period
+- **Rating distribution chart**: A bar chart showing count of 1-star, 2-star, 3-star, 4-star, 5-star ratings
+- **Recent low ratings list**: A table showing the last 10 tickets rated 1 or 2 stars, with ticket title, technician name, rating, comment, and date — so admins can follow up
+- Add the rating data to the existing `/api/reports/tickets` endpoint response (no new endpoint needed, just extend the existing one)
+
+---
+
+## 10 — Knowledge Base Article Suggestions when Creating a Ticket
+
+When an employee or member is creating a new ticket:
+
+- After the user types at least 3 characters in the ticket **title** field, make a debounced API call (300ms) to GET `/api/knowledge/suggest?q={title}` (create this endpoint — it searches `knowledge_articles` by title and content using ILIKE, returns top 3 published articles with id, title, category)
+- Show the suggestions below the title field as a small collapsible panel: "💡 Related articles that might help:"
+- Each suggestion shows the article title and category with a link/button that opens the article in a modal or new tab
+- If the user clicks an article and reads it, show a button "My issue is resolved" that closes the ticket creation form
+- Hide the suggestions panel once the user submits the ticket
+- This should appear in: the ticket creation form in EmployeeDashboard, MemberDashboard, and anywhere else tickets are created by non-admin users
+
+---
+
+## Implementation Notes
+
+- Keep the existing tech stack unchanged
+- For any new DB columns, add them to `shared/schema.ts` and run the migration
+- For new API endpoints, follow the existing pattern in `server/routes/`
+- Test that all previously working features still work after each change
+- Implement in the order listed above (1 through 10)

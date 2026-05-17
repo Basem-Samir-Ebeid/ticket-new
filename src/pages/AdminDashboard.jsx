@@ -18,6 +18,8 @@ import SoftwareLicensesPage from './SoftwareLicensesPage'
 import MaintenancePage from './MaintenancePage'
 import AuditLogsPage from './AuditLogsPage'
 import GlobalSearch from '../components/GlobalSearch'
+import TagChipInput, { TagPills } from '../components/TagChipInput'
+import MobileNav from '../components/MobileNav'
 import { exportTicketsToExcel, exportAttendanceToExcel } from '../lib/exportUtils'
 
 function getLocalDateString(date = new Date()) {
@@ -90,9 +92,32 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [settingsLog, setSettingsLog] = useState([])
   const [loadingLog, setLoadingLog] = useState(false)
   const [replyText, setReplyText] = useState('')
-  const [replyFile, setReplyFile] = useState(null)
+  const [replyFiles, setReplyFiles] = useState([])
   const [uploading, setUploading] = useState(false)
   const [replyError, setReplyError] = useState('')
+  const [ticketTagFilter, setTicketTagFilter] = useState('')
+  const [mergeModal, setMergeModal] = useState(false)
+  const [mergeTargetId, setMergeTargetId] = useState('')
+  const [merging, setMerging] = useState(false)
+  const [mergeMsg, setMergeMsg] = useState('')
+  const [editingTags, setEditingTags] = useState(false)
+  const [editTagsValue, setEditTagsValue] = useState([])
+  const [savingTags, setSavingTags] = useState(false)
+  const [slaForm, setSlaForm] = useState({ sla_urgent: 4, sla_high: 24, sla_medium: 72, sla_low: 120 })
+  const [savingSla, setSavingSla] = useState(false)
+  const [slaMsg, setSlaMsg] = useState('')
+  const [subcatForm, setSubcatForm] = useState({})
+  const [subcatRaw, setSubcatRaw] = useState('')
+  const [savingSubcat, setSavingSubcat] = useState(false)
+  const [subcatMsg, setSubcatMsg] = useState('')
+  const [oTplOnboarding, setOTplOnboarding] = useState([])
+  const [oTplOffboarding, setOTplOffboarding] = useState([])
+  const [oTplOnbRaw, setOTplOnbRaw] = useState('')
+  const [oTplOffRaw, setOTplOffRaw] = useState('')
+  const [savingOTpl, setSavingOTpl] = useState(false)
+  const [oTplMsg, setOTplMsg] = useState('')
+  const [onbTab, setOnbTab] = useState('onboarding')
+  const [onbChecked, setOnbChecked] = useState({})
   const [githubSyncStatus, setGithubSyncStatus] = useState(null)
   const [githubSyncForm, setGithubSyncForm] = useState({ repo_url: '', branch: 'main', token: '' })
   const [githubSyncHasToken, setGithubSyncHasToken] = useState(false)
@@ -989,16 +1014,29 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
   async function submitReply(e) {
     e.preventDefault()
-    if (!replyText.trim() && !replyFile) return
+    if (!replyText.trim() && !replyFiles.length) return
     setUploading(true)
     setReplyError('')
     let file_url = null
     let file_name = null
-    if (replyFile) {
+    let attachments = []
+    if (replyFiles.length === 1) {
       try {
-        const result = await api.uploadFile(replyFile)
+        const result = await api.uploadFile(replyFiles[0])
         file_url = result.url
         file_name = result.name
+        attachments = [result.url]
+      } catch (err) {
+        setReplyError('File upload failed: ' + (err.message || 'Unknown error'))
+        setUploading(false)
+        return
+      }
+    } else if (replyFiles.length > 1) {
+      try {
+        const results = await api.uploadMultiple(replyFiles)
+        attachments = results.map(r => r.url)
+        file_url = results[0].url
+        file_name = results[0].name
       } catch (err) {
         setReplyError('File upload failed: ' + (err.message || 'Unknown error'))
         setUploading(false)
@@ -1006,14 +1044,96 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       }
     }
     try {
-      await api.createReply(selectedTicket.id, { message: replyText, image_url: file_url, attachment_name: file_name })
+      await api.createReply(selectedTicket.id, { message: replyText, image_url: file_url, attachment_name: file_name, attachments })
       setReplyText('')
-      setReplyFile(null)
+      setReplyFiles([])
       fetchReplies(selectedTicket.id)
     } catch (err) {
       setReplyError('Failed to send reply: ' + (err.message || 'Unknown error'))
     }
     setUploading(false)
+  }
+
+  async function fetchSlaSettings() {
+    try {
+      const d = await api.getSlaSettings()
+      setSlaForm({ sla_urgent: d.sla_urgent||4, sla_high: d.sla_high||24, sla_medium: d.sla_medium||72, sla_low: d.sla_low||120 })
+    } catch {}
+  }
+
+  async function handleSaveSla(e) {
+    e.preventDefault(); setSavingSla(true); setSlaMsg('')
+    try {
+      await api.saveSlaSettings(slaForm)
+      setSlaMsg('✓ SLA rules saved!')
+      const { invalidateSlaCache } = await import('../components/SLABadge.jsx')
+      invalidateSlaCache?.()
+    } catch (err) { setSlaMsg('Error: ' + err.message) }
+    setSavingSla(false)
+  }
+
+  async function fetchSubcategories() {
+    try {
+      const d = await api.getSubcategories()
+      setSubcatForm(d || {})
+      setSubcatRaw(JSON.stringify(d || {}, null, 2))
+    } catch {}
+  }
+
+  async function handleSaveSubcategories(e) {
+    e.preventDefault(); setSavingSubcat(true); setSubcatMsg('')
+    try {
+      let data
+      try { data = JSON.parse(subcatRaw) } catch { setSubcatMsg('Error: Invalid JSON'); setSavingSubcat(false); return }
+      await api.saveSubcategories(data)
+      setSubcatForm(data)
+      setSubcatMsg('✓ Subcategories saved!')
+    } catch (err) { setSubcatMsg('Error: ' + err.message) }
+    setSavingSubcat(false)
+  }
+
+  async function fetchOnboardingTemplates() {
+    try {
+      const d = await api.getOnboardingTemplates()
+      setOTplOnboarding(d.onboarding || [])
+      setOTplOffboarding(d.offboarding || [])
+      setOTplOnbRaw((d.onboarding || []).join('\n'))
+      setOTplOffRaw((d.offboarding || []).join('\n'))
+    } catch {}
+  }
+
+  async function handleSaveOnboardingTemplates(e) {
+    e.preventDefault(); setSavingOTpl(true); setOTplMsg('')
+    try {
+      const onboarding = oTplOnbRaw.split('\n').map(s => s.trim()).filter(Boolean)
+      const offboarding = oTplOffRaw.split('\n').map(s => s.trim()).filter(Boolean)
+      await api.saveOnboardingTemplates({ onboarding, offboarding })
+      setOTplOnboarding(onboarding)
+      setOTplOffboarding(offboarding)
+      setOTplMsg('✓ Templates saved!')
+    } catch (err) { setOTplMsg('Error: ' + err.message) }
+    setSavingOTpl(false)
+  }
+
+  async function handleSaveTags() {
+    setSavingTags(true)
+    try {
+      const updated = await api.patchTicketTags(selectedTicket.id, editTagsValue)
+      setSelectedTicket(p => ({...p, tags: updated.tags || editTagsValue}))
+      setEditingTags(false)
+    } catch {}
+    setSavingTags(false)
+  }
+
+  async function handleMerge(e) {
+    e.preventDefault(); setMerging(true); setMergeMsg('')
+    try {
+      await api.mergeTicket(selectedTicket.id, mergeTargetId)
+      setMergeModal(false)
+      setMergeMsg('')
+      setSelectedTicket(null)
+    } catch (err) { setMergeMsg('Error: ' + err.message) }
+    setMerging(false)
   }
 
   function calculateDuration(startTime, endTime) {
@@ -1106,7 +1226,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     const matchesSearch = !q || (t.title||'').toLowerCase().includes(q) || (t.description||'').toLowerCase().includes(q) || (t.affected_person||'').toLowerCase().includes(q)
     const matchesStatus = ticketStatusFilter === 'all' || t.status === ticketStatusFilter
     const matchesPriority = ticketPriorityFilter === 'all' || t.priority === ticketPriorityFilter
-    return matchesSearch && matchesStatus && matchesPriority
+    const matchesTag = !ticketTagFilter || (t.tags && t.tags.includes(ticketTagFilter))
+    return matchesSearch && matchesStatus && matchesPriority && matchesTag
   }).sort((a, b) => {
     if (!ticketSortByPriority) return 0
     return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2)
@@ -1133,7 +1254,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   ]
   function handleAdminTabChange(t) {
     setTab(t); setSelectedTicket(null)
-    if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings(); fetchSmtpSettings(); fetchWhatsAppSettings(); fetchAutoAssignRules() }
+    if (t === 'settings') { fetchOfficeSettings(); fetchSettingsLog(); fetchGithubSyncSettings(); fetchSmtpSettings(); fetchWhatsAppSettings(); fetchAutoAssignRules(); fetchSlaSettings(); fetchSubcategories(); fetchOnboardingTemplates() }
     if (t === 'whatsapp') { fetchWhatsAppSettings(); fetchUsers() }
     if (t === 'attendance') { fetchLiveAttendance(); fetchAttendanceCorrections(); fetchRemoteRequests() }
     if (t === 'leave') { fetchLeaveCalendar(); fetchLeaveReport() }
@@ -1170,6 +1291,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <StatusBadge status={selectedTicket.status} />
                   {(() => { const pb = getPriorityBadge(selectedTicket.priority); return <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${pb.cls}`}>{pb.label}</span> })()}
                   <span className="text-slate-500 text-xs">{new Date(selectedTicket.created_at).toLocaleDateString()}</span>
+                  <SLABadge ticket={selectedTicket} />
+                  {selectedTicket.merged_into && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{background:'rgba(100,116,139,0.15)',color:'#94a3b8',border:'1px solid rgba(100,116,139,0.3)'}}>Merged</span>
+                  )}
                 </div>
                 <h2 className="text-white text-xl font-semibold">{selectedTicket.title}</h2>
                 {selectedTicket.description && <p className="text-slate-400 mt-2">{selectedTicket.description}</p>}
@@ -1184,15 +1309,93 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
                 )}
                 <p className="text-slate-500 text-xs mt-2">Assigned to: <span className="text-slate-300">{selectedTicket.assigned_to_profile?.full_name || 'Unassigned'}</span></p>
+
+                {/* Tags section */}
+                <div className="mt-3">
+                  {!editingTags ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <TagPills tags={selectedTicket.tags} />
+                      <button type="button" onClick={() => { setEditingTags(true); setEditTagsValue(selectedTicket.tags || []) }}
+                        className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20 transition-all">
+                        {selectedTicket.tags?.length ? '✎ Edit Tags' : '+ Add Tags'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 mt-1">
+                      <TagChipInput value={editTagsValue} onChange={setEditTagsValue} />
+                      <div className="flex gap-2">
+                        <button type="button" onClick={handleSaveTags} disabled={savingTags}
+                          className="text-xs px-3 py-1.5 rounded-xl font-semibold transition-all disabled:opacity-50"
+                          style={{background:'rgba(99,102,241,0.2)',color:'#818cf8',border:'1px solid rgba(99,102,241,0.3)'}}>
+                          {savingTags ? 'Saving…' : 'Save Tags'}
+                        </button>
+                        <button type="button" onClick={() => setEditingTags(false)}
+                          className="text-xs px-3 py-1.5 rounded-xl text-slate-500 hover:text-white border border-white/10 transition-all">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-              <select value={selectedTicket.status} onChange={e => { updateStatus(selectedTicket.id, e.target.value); setSelectedTicket(p => ({...p, status: e.target.value})) }}
-                className="bg-white/5 border border-white/10 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
-                <option value="opened">Opened</option>
-                <option value="pending">Pending</option>
-                <option value="solved">Solved</option>
-              </select>
+              <div className="flex flex-col gap-2 items-end ml-3">
+                <select value={selectedTicket.status} onChange={e => { updateStatus(selectedTicket.id, e.target.value); setSelectedTicket(p => ({...p, status: e.target.value})) }}
+                  className="bg-white/5 border border-white/10 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                  <option value="opened">Opened</option>
+                  <option value="pending">Pending</option>
+                  <option value="solved">Solved</option>
+                </select>
+                {selectedTicket.status !== 'merged' && (
+                  <button type="button" onClick={() => { setMergeModal(true); setMergeTargetId(''); setMergeMsg('') }}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl transition-all"
+                    style={{background:'rgba(100,116,139,0.15)',color:'#94a3b8',border:'1px solid rgba(100,116,139,0.2)'}}>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 3M21 7.5H7.5" />
+                    </svg>
+                    Merge
+                  </button>
+                )}
+              </div>
             </div>
           </div>
+
+          {/* Merge Modal */}
+          {mergeModal && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+              style={{background:'rgba(0,0,0,0.7)',backdropFilter:'blur(8px)'}}
+              onClick={() => setMergeModal(false)}>
+              <div className="w-full max-w-md rounded-2xl p-6 shadow-2xl"
+                style={{background:'#0d0d1a',border:'1px solid rgba(255,255,255,0.1)'}}
+                onClick={e => e.stopPropagation()}>
+                <h3 className="text-white font-semibold mb-1">Merge Ticket</h3>
+                <p className="text-slate-500 text-xs mb-4">This ticket will be closed and its replies moved to the target ticket.</p>
+                <form onSubmit={handleMerge} className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Target Ticket</label>
+                    <select value={mergeTargetId} onChange={e => setMergeTargetId(e.target.value)} required
+                      className="w-full bg-white/5 border border-white/10 text-slate-300 text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-indigo-500/50 transition-all">
+                      <option value="">— Select ticket to merge into —</option>
+                      {tickets.filter(t => t.id !== selectedTicket?.id && t.status !== 'merged').map(t => (
+                        <option key={t.id} value={t.id}>{t.title.slice(0,60)} ({t.status})</option>
+                      ))}
+                    </select>
+                  </div>
+                  {mergeMsg && <p className="text-sm rounded-xl px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/20">{mergeMsg}</p>}
+                  <div className="flex gap-2 pt-1">
+                    <button type="submit" disabled={merging || !mergeTargetId}
+                      className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold transition-all disabled:opacity-50"
+                      style={{background:'linear-gradient(135deg,#64748b,#475569)'}}>
+                      {merging ? 'Merging…' : 'Merge Ticket'}
+                    </button>
+                    <button type="button" onClick={() => setMergeModal(false)}
+                      className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm border border-white/10 transition-all">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
           <div className="glass rounded-xl p-5">
             <h3 className="text-white font-medium mb-4">Replies ({replies.length})</h3>
@@ -1249,18 +1452,30 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 onFocus={e=>{e.target.style.borderColor='rgba(251,146,60,0.4)';e.target.style.boxShadow='0 0 0 3px rgba(251,146,60,0.08)'}}
                 onBlur={e=>{e.target.style.borderColor='rgba(255,255,255,0.08)';e.target.style.boxShadow='none'}}
               />
+              {replyFiles.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {replyFiles.map((f, i) => (
+                    <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs"
+                      style={{background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',color:'#fbbf24'}}>
+                      <span className="max-w-[120px] truncate">{f.name}</span>
+                      <button type="button" onClick={() => setReplyFiles(prev => prev.filter((_,j)=>j!==i))} className="opacity-60 hover:opacity-100 ml-0.5">×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-3 flex-wrap">
                 <label className="cursor-pointer flex items-center gap-2 text-sm px-4 py-2 rounded-xl border border-white/10 text-slate-400 hover:text-white hover:border-white/20 transition-all" style={{background:'rgba(255,255,255,0.04)'}}>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" /></svg>
-                  {replyFile ? <span className="text-amber-400 max-w-[120px] truncate">{replyFile.name}</span> : 'Attach File'}
-                  <input type="file" accept="*/*" className="hidden" onChange={e => { setReplyFile(e.target.files[0]); setReplyError('') }} />
+                  {replyFiles.length ? `${replyFiles.length} file(s)` : 'Attach Files'}
+                  <input type="file" accept="*/*" multiple className="hidden"
+                    onChange={e => { setReplyFiles(prev => [...prev, ...Array.from(e.target.files)].slice(0,5)); setReplyError('') }} />
                 </label>
-                {replyFile && (
-                  <button type="button" onClick={() => setReplyFile(null)} className="text-slate-500 hover:text-red-400 text-xs transition-colors">✕ Remove</button>
+                {replyFiles.length > 0 && (
+                  <button type="button" onClick={() => setReplyFiles([])} className="text-slate-500 hover:text-red-400 text-xs transition-colors">✕ Clear all</button>
                 )}
                 <button
                   type="submit"
-                  disabled={uploading || (!replyText.trim() && !replyFile)}
+                  disabled={uploading || (!replyText.trim() && !replyFiles.length)}
                   className="ml-auto flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   style={{background: isSuperAdmin ? 'linear-gradient(135deg,#d97706,#b45309)' : 'linear-gradient(135deg,#2563eb,#1d4ed8)', boxShadow: isSuperAdmin ? '0 4px 14px rgba(217,119,6,0.3)' : '0 4px 14px rgba(37,99,235,0.3)'}}
                 >
@@ -1512,6 +1727,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Title</label>
                     <input required value={ticketForm.title} onChange={e=>setTicketForm(f=>({...f,title:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="Issue title" />
+                    <KnowledgeSuggest query={ticketForm.title} />
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Affected Person</label>
@@ -1604,13 +1820,32 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${ticketSortByPriority ? (isSuperAdmin ? 'tab-active-amber' : 'tab-active-indigo') : 'tab-inactive border border-white/8'}`}>
                   Priority ↑
                 </button>
+                {ticketTagFilter && (
+                  <button onClick={() => setTicketTagFilter('')}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all tab-active-indigo">
+                    🏷 {ticketTagFilter} ✕
+                  </button>
+                )}
               </div>
+              {/* Tag quick-filter pills */}
+              {Array.from(new Set(tickets.flatMap(t => t.tags || []))).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <span className="text-slate-600 text-[11px] self-center">Tags:</span>
+                  {Array.from(new Set(tickets.flatMap(t => t.tags || []))).map(tag => (
+                    <button key={tag} onClick={() => setTicketTagFilter(ticketTagFilter === tag ? '' : tag)}
+                      className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium transition-all border ${ticketTagFilter === tag ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'}`}>
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {(ticketSearch || ticketStatusFilter !== 'all' || ticketPriorityFilter !== 'all') && (
+            {(ticketSearch || ticketStatusFilter !== 'all' || ticketPriorityFilter !== 'all' || ticketTagFilter) && (
               <p className="text-slate-600 text-xs mb-3">
                 Showing {filteredTickets.length} of {tickets.length} tickets
                 {ticketSearch && <> matching "<span className="text-slate-400">{ticketSearch}</span>"</>}
+                {ticketTagFilter && <> tagged "<span className="text-slate-400">{ticketTagFilter}</span>"</>}
               </p>
             )}
 
@@ -1646,6 +1881,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       <h3 className="text-slate-100 text-sm font-semibold group-hover:text-white transition-colors leading-snug">{t.title}</h3>
                       {t.description && <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 leading-relaxed">{t.description}</p>}
                       {t.affected_person && <p className="text-slate-600 text-xs mt-1.5 flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>{t.affected_person}</p>}
+                      {t.tags?.length > 0 && <div className="mt-1.5"><TagPills tags={t.tags} /></div>}
                       <p className="text-slate-600 text-[11px] mt-1">→ <span className="text-slate-400">{t.assigned_to_profile?.full_name || 'Unassigned'}</span></p>
                     </div>
                     <div className="flex flex-col gap-2 flex-shrink-0">
@@ -2541,6 +2777,71 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <p className="text-[10px] text-slate-600 mt-1">أدخل الرقم مع كود الدولة — ستصله الإشعارات تلقائياً عبر Green API</p>
                   </div>
                 </div>
+
+                {/* ── Onboarding / Offboarding Checklist ── */}
+                {(oTplOnboarding.length > 0 || oTplOffboarding.length > 0) && (
+                  <div>
+                    <p className="text-[10px] text-emerald-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5">
+                      <span className="w-4 h-px bg-emerald-500/40 inline-block"/>Onboarding / Offboarding Checklist
+                    </p>
+                    <div className="rounded-2xl overflow-hidden border border-white/8" style={{background:'rgba(255,255,255,0.02)'}}>
+                      <div className="flex border-b border-white/8">
+                        {['onboarding','offboarding'].map(t => (
+                          <button key={t} type="button" onClick={() => setOnbTab(t)}
+                            className={`flex-1 text-xs py-2.5 font-semibold capitalize transition-all ${onbTab===t ? 'text-emerald-400 border-b-2 border-emerald-500 bg-emerald-500/5' : 'text-slate-500 hover:text-slate-300'}`}>
+                            {t === 'onboarding' ? '🧑‍💼 Onboarding' : '👋 Offboarding'}
+                            <span className="ml-1.5 text-[10px] opacity-60">
+                              {(() => {
+                                const list = t === 'onboarding' ? oTplOnboarding : oTplOffboarding
+                                const doneKey = `${editingUser?.id}_${t}`
+                                const done = list.filter((_,i) => onbChecked[`${doneKey}_${i}`]).length
+                                return `${done}/${list.length}`
+                              })()}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="p-4 space-y-2.5 max-h-56 overflow-y-auto">
+                        {(onbTab === 'onboarding' ? oTplOnboarding : oTplOffboarding).map((step, i) => {
+                          const key = `${editingUser?.id}_${onbTab}_${i}`
+                          const done = !!onbChecked[key]
+                          const total = (onbTab === 'onboarding' ? oTplOnboarding : oTplOffboarding).length
+                          return (
+                            <label key={i} className={`flex items-start gap-3 cursor-pointer group p-2 rounded-xl transition-all ${done ? 'opacity-60' : 'hover:bg-white/3'}`}>
+                              <div className={`mt-0.5 w-5 h-5 rounded-lg flex-shrink-0 flex items-center justify-center border transition-all ${done ? 'bg-emerald-500/20 border-emerald-500/40' : 'border-white/15 group-hover:border-white/25'}`}
+                                onClick={() => setOnbChecked(p => ({...p, [key]: !p[key]}))}>
+                                {done && <svg className="w-3 h-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>}
+                              </div>
+                              <span className={`text-sm leading-relaxed ${done ? 'line-through text-slate-600' : 'text-slate-300'}`}>{step}</span>
+                              <span className="ml-auto text-[10px] text-slate-700 flex-shrink-0">{i+1}/{total}</span>
+                            </label>
+                          )
+                        })}
+                        {(onbTab === 'onboarding' ? oTplOnboarding : oTplOffboarding).length === 0 && (
+                          <p className="text-slate-600 text-xs text-center py-4">No {onbTab} steps configured. Add them in Settings.</p>
+                        )}
+                      </div>
+                      {/* progress bar */}
+                      {(onbTab === 'onboarding' ? oTplOnboarding : oTplOffboarding).length > 0 && (() => {
+                        const list = onbTab === 'onboarding' ? oTplOnboarding : oTplOffboarding
+                        const done = list.filter((_,i) => onbChecked[`${editingUser?.id}_${onbTab}_${i}`]).length
+                        const pct = Math.round((done / list.length) * 100)
+                        return (
+                          <div className="px-4 pb-3">
+                            <div className="flex justify-between text-[10px] text-slate-600 mb-1.5">
+                              <span>{done} of {list.length} completed</span>
+                              <span className={pct===100 ? 'text-emerald-400 font-semibold' : ''}>{pct}%</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                              <div className="h-full rounded-full transition-all duration-500"
+                                style={{width:`${pct}%`, background: pct===100 ? '#10b981' : 'linear-gradient(90deg,#6366f1,#8b5cf6)'}} />
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-2 pt-1 flex-wrap">
                   <button type="submit" disabled={loading || uploadingPic} className="btn-primary disabled:opacity-50 text-sm px-5 py-2">{uploadingPic ? 'جاري الرفع...' : loading ? 'جاري الحفظ...' : 'حفظ التغييرات'}</button>
@@ -3537,6 +3838,98 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </button>
             </div>
 
+            {/* SLA Rules */}
+            <div className="glass-card rounded-2xl p-6 animate-fadeIn mb-6" style={{border:'1px solid rgba(245,158,11,0.15)'}}>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(245,158,11,0.12)',border:'1px solid rgba(245,158,11,0.22)'}}>
+                  <span className="text-lg">⏱</span>
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold">SLA Rules</h2>
+                  <p className="text-slate-500 text-xs mt-0.5">Maximum hours before ticket is marked SLA-breached</p>
+                </div>
+              </div>
+              <form onSubmit={handleSaveSla} className="grid grid-cols-2 gap-4">
+                {[['sla_urgent','Urgent (hrs)'],['sla_high','High (hrs)'],['sla_medium','Medium (hrs)'],['sla_low','Low (hrs)']].map(([k,lbl]) => (
+                  <div key={k}>
+                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">{lbl}</label>
+                    <input type="number" min="1" value={slaForm[k]}
+                      onChange={e => setSlaForm(p => ({...p, [k]: Number(e.target.value)}))}
+                      className="w-full rounded-xl px-3 py-2.5 text-white text-sm outline-none border transition-all"
+                      style={{background:'rgba(255,255,255,0.04)',borderColor:'rgba(255,255,255,0.1)'}}
+                    />
+                  </div>
+                ))}
+                {slaMsg && <p className={`col-span-2 text-sm rounded-xl px-3 py-2 border ${slaMsg.startsWith('✓') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>{slaMsg}</p>}
+                <div className="col-span-2">
+                  <button type="submit" disabled={savingSla} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">
+                    {savingSla ? 'Saving…' : 'Save SLA Rules'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Subcategories */}
+            <div className="glass-card rounded-2xl p-6 animate-fadeIn mb-6" style={{border:'1px solid rgba(139,92,246,0.15)'}}>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(139,92,246,0.12)',border:'1px solid rgba(139,92,246,0.22)'}}>
+                  <span className="text-lg">📂</span>
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold">Subcategories</h2>
+                  <p className="text-slate-500 text-xs mt-0.5">JSON map of category → subcategory array</p>
+                </div>
+              </div>
+              <form onSubmit={handleSaveSubcategories} className="space-y-3">
+                <textarea value={subcatRaw} onChange={e => setSubcatRaw(e.target.value)} rows={8}
+                  placeholder={'{\n  "Hardware": ["Laptop","Monitor","Keyboard"],\n  "Software": ["OS","Antivirus"]\n}'}
+                  className="w-full rounded-xl px-4 py-3 text-white text-sm outline-none resize-y font-mono border transition-all"
+                  style={{background:'rgba(255,255,255,0.03)',borderColor:'rgba(255,255,255,0.08)'}}
+                />
+                {subcatMsg && <p className={`text-sm rounded-xl px-3 py-2 border ${subcatMsg.startsWith('✓') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>{subcatMsg}</p>}
+                <button type="submit" disabled={savingSubcat} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">
+                  {savingSubcat ? 'Saving…' : 'Save Subcategories'}
+                </button>
+              </form>
+            </div>
+
+            {/* Onboarding / Offboarding Templates */}
+            <div className="glass-card rounded-2xl p-6 animate-fadeIn mb-6" style={{border:'1px solid rgba(16,185,129,0.15)'}}>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'rgba(16,185,129,0.12)',border:'1px solid rgba(16,185,129,0.22)'}}>
+                  <span className="text-lg">🧑‍💼</span>
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold">Onboarding / Offboarding Templates</h2>
+                  <p className="text-slate-500 text-xs mt-0.5">One checklist item per line</p>
+                </div>
+              </div>
+              <form onSubmit={handleSaveOnboardingTemplates} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Onboarding Steps</label>
+                  <textarea value={oTplOnbRaw} onChange={e => setOTplOnbRaw(e.target.value)} rows={6}
+                    placeholder={"Create AD account\nProvide laptop\nSetup email\nIT orientation"}
+                    className="w-full rounded-xl px-4 py-3 text-white text-sm outline-none resize-y border transition-all"
+                    style={{background:'rgba(255,255,255,0.03)',borderColor:'rgba(255,255,255,0.08)'}}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Offboarding Steps</label>
+                  <textarea value={oTplOffRaw} onChange={e => setOTplOffRaw(e.target.value)} rows={6}
+                    placeholder={"Revoke AD account\nCollect equipment\nDisable email\nData backup"}
+                    className="w-full rounded-xl px-4 py-3 text-white text-sm outline-none resize-y border transition-all"
+                    style={{background:'rgba(255,255,255,0.03)',borderColor:'rgba(255,255,255,0.08)'}}
+                  />
+                </div>
+                {oTplMsg && <p className={`col-span-2 text-sm rounded-xl px-3 py-2 border ${oTplMsg.startsWith('✓') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>{oTplMsg}</p>}
+                <div className="col-span-2 md:col-span-2">
+                  <button type="submit" disabled={savingOTpl} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">
+                    {savingOTpl ? 'Saving…' : 'Save Templates'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
             {/* Ticket Templates */}
             <div className="glass-card rounded-2xl p-6 animate-fadeIn" style={{border:'1px solid rgba(99,102,241,0.15)'}}>
               <div className="flex items-center justify-between mb-5">
@@ -4134,6 +4527,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
           </div>
         </div>
       )}
+      <MobileNav tabs={adminTabs} activeTab={tab} onTabChange={handleAdminTabChange} />
     </div>
   )
 }

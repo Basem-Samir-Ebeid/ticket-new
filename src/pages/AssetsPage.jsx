@@ -4,6 +4,56 @@ import { useAuth } from '../context/AuthContext'
 import { exportAssetsToExcel } from '../lib/exportUtils'
 import { QRCodeSVG } from 'qrcode.react'
 
+function downloadSvgAsPng(svgEl, filename) {
+  if (!svgEl) return
+  const serializer = new XMLSerializer()
+  const svgStr = serializer.serializeToString(svgEl)
+  const blob = new Blob([svgStr], { type: 'image/svg+xml' })
+  const url = URL.createObjectURL(blob)
+  const img = new Image()
+  img.onload = () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = img.width || 120
+    canvas.height = img.height || 120
+    const ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(img, 0, 0)
+    URL.revokeObjectURL(url)
+    const a = document.createElement('a')
+    a.href = canvas.toDataURL('image/png')
+    a.download = filename
+    a.click()
+  }
+  img.src = url
+}
+
+function printQrLabel(asset) {
+  const svgEl = document.querySelector('[data-asset-qr]')
+  if (!svgEl) return
+  const serializer = new XMLSerializer()
+  const svgStr = serializer.serializeToString(svgEl)
+  const blob = new Blob([svgStr], { type: 'image/svg+xml' })
+  const url = URL.createObjectURL(blob)
+  const win = window.open('', '_blank', 'width=400,height=500')
+  if (!win) return
+  win.document.write(`
+    <html><head><title>QR - ${asset.name}</title>
+    <style>body{margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#fff;}
+    img{width:180px;height:180px;border:1px solid #eee;padding:8px;}
+    h2{font-size:14px;margin:8px 0 2px;}p{font-size:11px;color:#555;margin:2px 0;}
+    @media print{button{display:none}}</style></head>
+    <body>
+      <img src="${url}" />
+      <h2>${asset.name}</h2>
+      ${asset.serial_number ? `<p>S/N: ${asset.serial_number}</p>` : ''}
+      ${asset.asset_type ? `<p>${asset.asset_type}</p>` : ''}
+      <p>${asset.id}</p>
+      <button onclick="window.print();window.close();" style="margin-top:16px;padding:8px 20px;cursor:pointer;background:#4f46e5;color:#fff;border:none;border-radius:6px;font-size:13px;">Print</button>
+    </body></html>`)
+  win.document.close()
+}
+
 const ASSET_TYPES = [
   { value: 'laptop',    label: 'Laptop',    icon: '💻' },
   { value: 'desktop',   label: 'Desktop',   icon: '🖥️' },
@@ -324,6 +374,28 @@ export default function AssetsPage({ isSuperAdmin = false }) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
             </svg>
             Excel
+          </button>
+          <button
+            onClick={() => {
+              const win = window.open('', '_blank', 'width=900,height=700')
+              if (!win) return
+              const rows = filtered.map(a => `
+                <div style="display:inline-flex;flex-direction:column;align-items:center;border:1px solid #ddd;border-radius:6px;padding:10px;margin:8px;width:160px;page-break-inside:avoid;font-family:sans-serif">
+                  <div style="font-size:11px;font-weight:600;margin-bottom:6px;text-align:center;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name}</div>
+                  ${a.serial_number ? `<div style="font-size:9px;color:#666;margin-bottom:4px">S/N: ${a.serial_number}</div>` : ''}
+                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent('asset:'+a.id+'|'+a.name+'|'+(a.serial_number||''))}" width="120" height="120" style="border:1px solid #eee" />
+                  <div style="font-size:8px;color:#999;margin-top:4px;text-align:center">${a.id.slice(0,8)}</div>
+                </div>`).join('')
+              win.document.write('<html><head><title>Bulk QR Codes</title><style>body{margin:12px;background:#fff}@media print{button{display:none}}</style></head><body><div style="margin-bottom:12px"><strong>Asset QR Codes</strong> — '+filtered.length+' assets <button onclick="window.print()" style="margin-left:16px;padding:6px 16px;background:#4f46e5;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px">Print All</button></div><div style="display:flex;flex-wrap:wrap">'+rows+'</div></body></html>')
+              win.document.close()
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all"
+            style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', color: '#a78bfa' }}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
+            </svg>
+            Bulk QR Print
           </button>
           {canManageAssets && (
             <button onClick={openCreate}
@@ -708,8 +780,9 @@ export default function AssetsPage({ isSuperAdmin = false }) {
                       <div className="flex flex-col items-center gap-3">
                         <div className="p-3 rounded-xl" style={{background:'#fff'}}>
                           <QRCodeSVG
+                            data-asset-qr
                             value={`asset:${selectedAsset.id}|${selectedAsset.name}|${selectedAsset.serial_number || ''}`}
-                            size={120}
+                            size={140}
                             level="M"
                             includeMargin={false}
                           />
@@ -718,20 +791,22 @@ export default function AssetsPage({ isSuperAdmin = false }) {
                           Scan to identify asset<br/>
                           <span className="text-slate-500">{selectedAsset.name}</span>
                         </p>
-                        <button
-                          onClick={() => {
-                            const canvas = document.querySelector('#asset-qr-download canvas') || document.querySelector('.asset-qr-canvas')
-                            if (!canvas) return
-                            const url = canvas.toDataURL('image/png')
-                            const a = document.createElement('a')
-                            a.href = url
-                            a.download = `qr-${selectedAsset.name.replace(/\s+/g,'-')}.png`
-                            a.click()
-                          }}
-                          className="text-xs px-3 py-1.5 rounded-lg transition-all"
-                          style={{background:'rgba(99,102,241,0.12)',color:'#818cf8',border:'1px solid rgba(99,102,241,0.2)'}}>
-                          Download QR
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => downloadSvgAsPng(document.querySelector('[data-asset-qr]'), `qr-${selectedAsset.name.replace(/\s+/g,'-')}.png`)}
+                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all"
+                            style={{background:'rgba(99,102,241,0.12)',color:'#818cf8',border:'1px solid rgba(99,102,241,0.2)'}}>
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                            Download PNG
+                          </button>
+                          <button
+                            onClick={() => printQrLabel(selectedAsset)}
+                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all"
+                            style={{background:'rgba(16,185,129,0.1)',color:'#34d399',border:'1px solid rgba(16,185,129,0.2)'}}>
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" /></svg>
+                            Print Label
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

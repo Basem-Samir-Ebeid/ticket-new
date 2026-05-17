@@ -271,10 +271,42 @@ export const api = {
   search: (q) => request('GET', `/search?q=${encodeURIComponent(q)}`),
 
   // Ticket Tags
-  updateTicketTags: (id, tags) => request('PATCH', `/tickets/${id}`, { tags }),
+  getTicketTags: () => request('GET', '/tickets/tags'),
+  patchTicketTags: (id, tags) => request('PATCH', `/tickets/${id}/tags`, { tags }),
 
   // Ticket Merge
-  mergeTickets: (primaryId, duplicateId) => request('POST', `/tickets/${primaryId}/merge`, { duplicate_id: duplicateId }),
+  mergeTicket: (id, merge_into_id) => request('POST', `/tickets/${id}/merge`, { merge_into_id }),
+
+  // Upload multiple files
+  uploadMultiple: async (files) => {
+    const form = new FormData()
+    for (const f of files) form.append('files', f, f.name)
+    const res = await fetch(`${BASE}/upload/multiple`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: form,
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Upload failed')
+    return data
+  },
+
+  // SLA settings
+  getSlaSettings: () => request('GET', '/settings/sla'),
+  saveSlaSettings: (data) => request('POST', '/settings/sla', data),
+
+  // Subcategories
+  getSubcategories: () => request('GET', '/settings/subcategories'),
+  saveSubcategories: (data) => request('POST', '/settings/subcategories', data),
+
+  // Onboarding templates
+  getOnboardingTemplates: () => request('GET', '/settings/onboarding-templates'),
+  saveOnboardingTemplates: (data) => request('POST', '/settings/onboarding-templates', data),
+
+  // Knowledge suggestions (no auth needed)
+  suggestKnowledge: (q) => {
+    return fetch(`${BASE}/knowledge/suggest?q=${encodeURIComponent(q)}`).then(r => r.json())
+  },
 }
 
 // ─── CSV Export helper ───────────────────────────────────────────────────────

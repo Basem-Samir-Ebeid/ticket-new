@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db'
 import { tickets, ticketReplies, profiles, notifications, ticketTemplates, ticketHistory, assets } from '../../shared/schema'
-import { eq, and, desc, or, inArray } from 'drizzle-orm'
+import { eq, and, desc, or, inArray, sql as drizzleSql } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { sendPushToAdmins } from './push'
@@ -553,6 +553,86 @@ router.post('/:id/replies', requireAuth as any, async (req: any, res) => {
   } catch (err: any) {
     console.error('POST /tickets/:id/replies error:', err)
     res.status(500).json({ error: err?.message || 'Failed to post reply' })
+  }
+})
+
+// ─── Get all unique tags ──────────────────────────────────────────────────────
+router.get('/tags', requireAuth as any, async (_req, res) => {
+  try {
+    const rows = await db.select({ tags: tickets.tags }).from(tickets)
+    const tagSet = new Set<string>()
+    for (const row of rows) {
+      if (row.tags) for (const t of row.tags) if (t) tagSet.add(t)
+    }
+    res.json([...tagSet].sort())
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message })
+  }
+})
+
+// ─── Update tags on a ticket ──────────────────────────────────────────────────
+router.patch('/:id/tags', requireAuth as any, async (req: any, res) => {
+  try {
+    const { tags } = req.body
+    if (!Array.isArray(tags)) return res.status(400).json({ error: 'tags must be an array' })
+    const [ticket] = await db.select().from(tickets).where(eq(tickets.id, req.params.id))
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
+    const isAdminRole = (r: string) => r === 'admin' || r === 'super_admin'
+    if (!isAdminRole(req.profile.role) && ticket.assigned_to !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized' })
+    }
+    const [updated] = await db.update(tickets)
+      .set({ tags: tags.filter(Boolean) })
+      .where(eq(tickets.id, req.params.id))
+      .returning()
+    broadcastAll('ticket_updated', { ticket_id: req.params.id })
+    res.json(updated)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message })
+  }
+})
+
+// ─── Merge tickets ────────────────────────────────────────────────────────────
+router.post('/:id/merge', requireAuth as any, async (req: any, res) => {
+  try {
+    const isAdminRole = (r: string) => r === 'admin' || r === 'super_admin'
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { merge_into_id } = req.body
+    if (!merge_into_id) return res.status(400).json({ error: 'merge_into_id required' })
+    if (merge_into_id === req.params.id) return res.status(400).json({ error: 'Cannot merge into itself' })
+
+    const [source] = await db.select().from(tickets).where(eq(tickets.id, req.params.id))
+    const [target] = await db.select().from(tickets).where(eq(tickets.id, merge_into_id))
+    if (!source || !target) return res.status(404).json({ error: 'Ticket not found' })
+
+    const adminName = req.profile.full_name || req.profile.email
+
+    await db.update(ticketReplies).set({ ticket_id: merge_into_id }).where(eq(ticketReplies.ticket_id, req.params.id))
+    await db.update(ticketHistory).set({ ticket_id: merge_into_id }).where(eq(ticketHistory.ticket_id, req.params.id))
+    await db.update(tickets).set({ status: 'merged', merged_into: merge_into_id }).where(eq(tickets.id, req.params.id))
+
+    await db.insert(ticketHistory).values({
+      ticket_id: merge_into_id,
+      changed_by: req.user.id,
+      changed_by_name: adminName,
+      field: 'merge',
+      new_value: `Ticket #${req.params.id.slice(0, 8)} merged into this ticket by ${adminName}`,
+    })
+
+    if (source.created_by) {
+      await db.insert(notifications).values({
+        user_id: source.created_by,
+        ticket_id: merge_into_id,
+        message: `Your ticket has been merged into ticket #${merge_into_id.slice(0, 8)}`,
+      }).returning()
+      broadcast(source.created_by, 'notification', { ticket_id: merge_into_id })
+    }
+
+    broadcastAll('ticket_updated', { ticket_id: req.params.id })
+    broadcastAll('ticket_updated', { ticket_id: merge_into_id })
+    res.json({ success: true })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message })
   }
 })
 

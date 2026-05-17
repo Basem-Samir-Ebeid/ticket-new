@@ -57,4 +57,21 @@ router.post('/', requireAuth as any, (req: any, res: Response, next: NextFunctio
   })
 })
 
+// ─── Multi-file upload (up to 5) ─────────────────────────────────────────────
+router.post('/multiple', requireAuth as any, (req: any, res: Response, next: NextFunction) => {
+  upload.array('files', 5)(req, res, (err: any) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'حجم الملف يتجاوز الحد المسموح (5MB)' })
+      }
+      return res.status(400).json({ error: err.message })
+    }
+    if (err) return res.status(400).json({ error: err.message || 'فشل رفع الملفات' })
+    const files = (req.files as Express.Multer.File[]) || []
+    if (!files.length) return res.status(400).json({ error: 'لم يتم إرسال أي ملفات' })
+    const results = files.map(f => ({ url: `/uploads/${f.filename}`, name: f.originalname, size: f.size, mime: f.mimetype }))
+    res.json(results)
+  })
+})
+
 export default router
