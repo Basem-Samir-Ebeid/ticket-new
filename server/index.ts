@@ -8,6 +8,8 @@ import { eq, and, lt, isNotNull, inArray } from 'drizzle-orm'
 import { broadcast } from './ws'
 import { sendEmail } from './email'
 import { sendWhatsAppNotification } from './whatsappConfig'
+import { runFactoryRotationNotifications } from './routes/factory-rotation'
+import { runOvertimeRotationNotifications } from './routes/overtime-rotation'
 
 process.on('uncaughtException', (err) => {
   console.error('[uncaughtException] Server error (staying alive):', err)
@@ -65,6 +67,19 @@ async function runSlaEscalation() {
 
 setInterval(runSlaEscalation, 15 * 60 * 1000)
 setTimeout(runSlaEscalation, 30000)
+
+// ─── Cairo time helper ────────────────────────────────────────────────────────
+function shouldRunAt(hour: number, minute: number = 0): boolean {
+  const now = new Date()
+  const cairo = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }))
+  return cairo.getHours() === hour && cairo.getMinutes() === minute
+}
+
+// ─── Factory & Overtime Rotation crons (every 60s) ───────────────────────────
+setInterval(() => {
+  if (shouldRunAt(8)) runFactoryRotationNotifications()
+  if (shouldRunAt(15)) runOvertimeRotationNotifications()
+}, 60 * 1000)
 
 const PORT = parseInt(process.env.PORT || '3000')
 server.listen(PORT, '0.0.0.0', () => {

@@ -1,0 +1,165 @@
+Please implement two new modules in this system: **Factory Rotation** and **Overtime Rotation**. Read all instructions carefully before writing any code.
+
+---
+
+## MODULE 1: Factory Rotation (تناوب المصنع)
+
+### Database — add to `shared/schema.ts`:
+
+```ts
+export const factoryRotationGroups = pgTable('factory_rotation_groups', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name: text('name').notNull(),
+  created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const factoryRotationMembers = pgTable('factory_rotation_members', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  group_id: uuid('group_id').notNull().references(() => factoryRotationGroups.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  order_index: integer('order_index').notNull().default(0),
+})
+
+export const factoryRotationSchedule = pgTable('factory_rotation_schedule', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  group_id: uuid('group_id').notNull().references(() => factoryRotationGroups.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  scheduled_date: date('scheduled_date').notNull(),
+  notified: boolean('notified').notNull().default(false),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+```
+
+### Backend — create `server/routes/factory-rotation.ts`:
+- `GET /api/factory-rotation/groups` — list all groups with their members (admin/super_admin only)
+- `POST /api/factory-rotation/groups` — create a new group with a name and initial member list (array of user_ids with order)
+- `PUT /api/factory-rotation/groups/:id` — update group name and members
+- `DELETE /api/factory-rotation/groups/:id` — delete group
+- `GET /api/factory-rotation/schedule?group_id=&from=&to=` — get schedule for a date range
+- `POST /api/factory-rotation/generate` — body: `{ group_id, from_date, to_date }` — auto-generate schedule by cycling through members in order, skipping Fridays and Saturdays
+- `GET /api/factory-rotation/my-next` — for the logged-in employee: returns their next upcoming factory day
+
+### Notification Logic — in `server/index.ts`:
+Add a daily cron job that runs every day at **8:00 AM Cairo time (UTC+2)**:
+1. Find all factory rotation entries where `scheduled_date = tomorrow`
+2. For each, send:
+   - In-app notification (insert into `notifications` table + WebSocket broadcast)
+   - WhatsApp message via `sendWhatsAppToUser()` with this text:
+     ```
+     🏭 تذكير المصنع
+     عزيزي [اسم الموظف]، غداً [التاريخ] هو يوم دورتك للذهاب إلى المصنع.
+     يرجى الاستعداد والالتزام بالمواعيد. 🙏
+     ```
+
+### Frontend — create `src/pages/FactoryRotationPage.jsx`:
+- Admin view:
+  - List of rotation groups, each showing its members in order
+  - Button to create a new group: name + pick employees from a searchable list + drag to reorder
+  - Button to generate schedule: pick date range → auto-fills the calendar
+  - Calendar/table view showing who goes each day (color-coded per employee)
+  - Manual override: click a day to reassign it to a different employee
+- Employee view:
+  - Shows only their own upcoming factory days in a simple card list
+  - Shows a highlighted card if their turn is tomorrow
+
+---
+
+## MODULE 2: Overtime Rotation (تناوب الأوفر تايم)
+
+### Database — add to `shared/schema.ts`:
+
+```ts
+export const overtimeRotationGroups = pgTable('overtime_rotation_groups', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name: text('name').notNull(),
+  created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const overtimeRotationMembers = pgTable('overtime_rotation_members', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  group_id: uuid('group_id').notNull().references(() => overtimeRotationGroups.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  order_index: integer('order_index').notNull().default(0),
+})
+
+export const overtimeRotationSchedule = pgTable('overtime_rotation_schedule', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  group_id: uuid('group_id').notNull().references(() => overtimeRotationGroups.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  scheduled_date: date('scheduled_date').notNull(),
+  notified: boolean('notified').notNull().default(false),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+```
+
+### Backend — create `server/routes/overtime-rotation.ts`:
+Same API pattern as factory rotation but under `/api/overtime-rotation/`:
+- CRUD for groups and members
+- `POST /api/overtime-rotation/generate` — generates schedule cycling members in order
+- `GET /api/overtime-rotation/my-next` — employee's upcoming overtime days
+
+### Notification Logic — in `server/index.ts`:
+Add a second daily cron job that runs every day at **3:00 PM Cairo time (UTC+2)**:
+1. Find all overtime rotation entries where `scheduled_date = today`
+2. For each, send:
+   - In-app notification + WebSocket broadcast
+   - WhatsApp message via `sendWhatsAppToUser()` with this text:
+     ```
+     🌙 تذكير الأوفر تايم
+     عزيزي [اسم الموظف]، اليوم [التاريخ] هو دورتك في الأوفر تايم.
+     ستكون مطلوباً للبقاء بعد انتهاء دوام العمل الرسمي. شكراً لالتزامك! 💪
+     ```
+
+### Frontend — create `src/pages/OvertimeRotationPage.jsx`:
+Same structure as FactoryRotationPage but with overtime-specific labels and colors.
+
+---
+
+## Integration Steps
+
+1. **Register routes** in `server/app.ts`:
+```ts
+import factoryRotationRoutes from './routes/factory-rotation'
+import overtimeRotationRoutes from './routes/overtime-rotation'
+// ...
+app.use('/api/factory-rotation', factoryRotationRoutes)
+app.use('/api/overtime-rotation', overtimeRotationRoutes)
+```
+
+2. **Run DB migration** after adding tables: `npm run db:push`
+
+3. **Add navigation links** in `src/components/Sidebar.jsx` and `src/components/MobileNav.jsx`:
+   - "تناوب المصنع" (show for admin + employees in the group)
+   - "تناوب الأوفر تايم" (show for admin + employees in the group)
+
+4. **Add routes** in `src/App.jsx`:
+```jsx
+import FactoryRotationPage from './pages/FactoryRotationPage'
+import OvertimeRotationPage from './pages/OvertimeRotationPage'
+// inside <Routes>:
+<Route path="/factory-rotation" element={<ProtectedRoute><FactoryRotationPage /></ProtectedRoute>} />
+<Route path="/overtime-rotation" element={<ProtectedRoute><OvertimeRotationPage /></ProtectedRoute>} />
+```
+
+5. **Cron timing utility** — implement the daily jobs using `setInterval` in `server/index.ts`, similar to the existing SLA escalation job. Use this helper to check if it's time to run:
+```ts
+function shouldRunAt(hour: number, minute: number = 0): boolean {
+  const now = new Date()
+  const cairo = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }))
+  return cairo.getHours() === hour && cairo.getMinutes() === minute
+}
+// Then in a setInterval every 60 seconds:
+// if (shouldRunAt(8)) runFactoryRotationNotifications()
+// if (shouldRunAt(15)) runOvertimeRotationNotifications()
+```
+
+---
+
+## UI Design Guidelines
+- Follow the existing dark theme (slate-800/900 backgrounds, consistent with AdminDashboard.jsx style)
+- Use the same card/table patterns already in the codebase
+- Color code: Factory = blue/cyan tones, Overtime = orange/amber tones
+- All text labels in Arabic to match the app's existing language
+- Employees see a read-only view; only admins can create/edit groups and generate schedules

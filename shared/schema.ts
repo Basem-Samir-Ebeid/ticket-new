@@ -370,3 +370,51 @@ export const licenseAssignments = pgTable('license_assignments', {
   assigned_at: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
   unassigned_at: timestamp('unassigned_at', { withTimezone: true }),
 })
+
+// ─── Factory Rotation (تناوب المصنع) ─────────────────────────────────────────
+export const factoryRotationGroups = pgTable('factory_rotation_groups', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name: text('name').notNull(),
+  created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const factoryRotationMembers = pgTable('factory_rotation_members', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  group_id: uuid('group_id').notNull().references(() => factoryRotationGroups.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  order_index: integer('order_index').notNull().default(0),
+})
+
+export const factoryRotationSchedule = pgTable('factory_rotation_schedule', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  group_id: uuid('group_id').notNull().references(() => factoryRotationGroups.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  scheduled_date: date('scheduled_date').notNull(),
+  notified: boolean('notified').notNull().default(false),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Overtime Rotation (تناوب الأوفر تايم) ───────────────────────────────────
+export const overtimeRotationGroups = pgTable('overtime_rotation_groups', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name: text('name').notNull(),
+  created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const overtimeRotationMembers = pgTable('overtime_rotation_members', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  group_id: uuid('group_id').notNull().references(() => overtimeRotationGroups.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  order_index: integer('order_index').notNull().default(0),
+})
+
+export const overtimeRotationSchedule = pgTable('overtime_rotation_schedule', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  group_id: uuid('group_id').notNull().references(() => overtimeRotationGroups.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  scheduled_date: date('scheduled_date').notNull(),
+  notified: boolean('notified').notNull().default(false),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})

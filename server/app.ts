@@ -26,6 +26,8 @@ import onboardingRoutes from './routes/onboarding'
 import accessRecordsRoutes from './routes/access-records'
 import licensesRoutes from './routes/licenses'
 import searchRoutes from './routes/search'
+import factoryRotationRoutes from './routes/factory-rotation'
+import overtimeRotationRoutes from './routes/overtime-rotation'
 
 const app = express()
 
@@ -60,6 +62,8 @@ app.use('/api/onboarding', onboardingRoutes)
 app.use('/api/access-records', accessRecordsRoutes)
 app.use('/api/licenses', licensesRoutes)
 app.use('/api/search', searchRoutes)
+app.use('/api/factory-rotation', factoryRotationRoutes)
+app.use('/api/overtime-rotation', overtimeRotationRoutes)
 
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(process.cwd(), 'dist')))

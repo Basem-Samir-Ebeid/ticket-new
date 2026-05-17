@@ -307,6 +307,26 @@ export const api = {
   suggestKnowledge: (q) => {
     return fetch(`${BASE}/knowledge/suggest?q=${encodeURIComponent(q)}`).then(r => r.json())
   },
+
+  // Factory Rotation
+  getFactoryGroups: () => request('GET', '/factory-rotation/groups'),
+  createFactoryGroup: (name, members) => request('POST', '/factory-rotation/groups', { name, members }),
+  updateFactoryGroup: (id, name, members) => request('PUT', `/factory-rotation/groups/${id}`, { name, members }),
+  deleteFactoryGroup: (id) => request('DELETE', `/factory-rotation/groups/${id}`),
+  getFactorySchedule: (group_id, from, to) => request('GET', `/factory-rotation/schedule?group_id=${group_id}&from=${from}&to=${to}`),
+  generateFactorySchedule: (group_id, from_date, to_date) => request('POST', '/factory-rotation/generate', { group_id, from_date, to_date }),
+  getMyNextFactory: () => request('GET', '/factory-rotation/my-next'),
+  overrideFactoryEntry: (id, user_id) => request('PUT', `/factory-rotation/schedule/${id}`, { user_id }),
+
+  // Overtime Rotation
+  getOvertimeGroups: () => request('GET', '/overtime-rotation/groups'),
+  createOvertimeGroup: (name, members) => request('POST', '/overtime-rotation/groups', { name, members }),
+  updateOvertimeGroup: (id, name, members) => request('PUT', `/overtime-rotation/groups/${id}`, { name, members }),
+  deleteOvertimeGroup: (id) => request('DELETE', `/overtime-rotation/groups/${id}`),
+  getOvertimeSchedule: (group_id, from, to) => request('GET', `/overtime-rotation/schedule?group_id=${group_id}&from=${from}&to=${to}`),
+  generateOvertimeSchedule: (group_id, from_date, to_date) => request('POST', '/overtime-rotation/generate', { group_id, from_date, to_date }),
+  getMyNextOvertime: () => request('GET', '/overtime-rotation/my-next'),
+  overrideOvertimeEntry: (id, user_id) => request('PUT', `/overtime-rotation/schedule/${id}`, { user_id }),
 }
 
 // ─── CSV Export helper ───────────────────────────────────────────────────────

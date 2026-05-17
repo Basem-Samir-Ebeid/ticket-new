@@ -9,6 +9,8 @@ import FileAttachment from '../components/FileAttachment'
 import PenaltiesPage from './PenaltiesPage'
 import ComplaintsPage from './ComplaintsPage'
 import AssetsPage from './AssetsPage'
+import FactoryRotationPage from './FactoryRotationPage'
+import OvertimeRotationPage from './OvertimeRotationPage'
 import MobileNav from '../components/MobileNav'
 import KnowledgeSuggest from '../components/KnowledgeSuggest'
 import { TagPills } from '../components/TagChipInput'
@@ -469,6 +471,8 @@ export default function EmployeeDashboard() {
     { key: 'complaints',  label: 'Complaints',  icon: 'requests' },
     ...(profile?.can_view_attendance ? [{ key: 'attendance', label: 'Attendance', icon: 'attendance' }] : []),
     ...(profile?.can_view_assets ? [{ key: 'assets', label: 'Assets', icon: 'assets' }] : []),
+    { key: 'factory-rotation',  label: 'تناوب المصنع',  icon: 'factory' },
+    { key: 'overtime-rotation', label: 'تناوب الأوفر',  icon: 'overtime' },
     { key: 'profile',     label: 'Profile',     icon: 'profile' },
   ]
 
@@ -1214,6 +1218,14 @@ export default function EmployeeDashboard() {
 
         {activeTab === 'assets' && profile?.can_view_assets && (
           <AssetsPage />
+        )}
+
+        {activeTab === 'factory-rotation' && (
+          <FactoryRotationPage />
+        )}
+
+        {activeTab === 'overtime-rotation' && (
+          <OvertimeRotationPage />
         )}
 
         {activeTab === 'attendance' && profile?.can_view_attendance && (

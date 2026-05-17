@@ -22,6 +22,8 @@ import TagChipInput, { TagPills } from '../components/TagChipInput'
 import MobileNav from '../components/MobileNav'
 import { exportTicketsToExcel, exportAttendanceToExcel } from '../lib/exportUtils'
 import KnowledgeSuggest from '../components/KnowledgeSuggest'
+import FactoryRotationPage from './FactoryRotationPage'
+import OvertimeRotationPage from './OvertimeRotationPage'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -1272,10 +1274,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     { key: 'attendance',  label: 'Attendance',  icon: 'attendance', badge: remoteRequests.filter(r=>r.status==='pending').length || 0 },
     { key: 'performance', label: 'Performance', icon: 'performance' },
     { key: 'licenses',    label: 'Licenses',    icon: 'assets' },
-    { key: 'knowledge',   label: 'Knowledge',   icon: 'dashboard' },
-    { key: 'reports',     label: 'Reports',     icon: 'performance' },
+    { key: 'knowledge',         label: 'Knowledge',       icon: 'dashboard' },
+    { key: 'reports',           label: 'Reports',         icon: 'performance' },
+    { key: 'factory-rotation',  label: 'تناوب المصنع',    icon: 'factory' },
+    { key: 'overtime-rotation', label: 'تناوب الأوفر',    icon: 'overtime' },
     ...(isSuperAdmin ? [{ key: 'audit-logs', label: 'Audit Logs', icon: 'settings' }] : []),
-    { key: 'settings',    label: 'Settings',    icon: 'settings' },
+    { key: 'settings',          label: 'Settings',        icon: 'settings' },
   ]
   function handleAdminTabChange(t) {
     setTab(t); setSelectedTicket(null)
@@ -4528,6 +4532,16 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Maintenance Tab */}
         {tab === 'maintenance' && (
           <MaintenancePage />
+        )}
+
+        {/* Factory Rotation Tab */}
+        {tab === 'factory-rotation' && (
+          <FactoryRotationPage />
+        )}
+
+        {/* Overtime Rotation Tab */}
+        {tab === 'overtime-rotation' && (
+          <OvertimeRotationPage />
         )}
 
         {/* Audit Logs Tab (super admin only) */}
