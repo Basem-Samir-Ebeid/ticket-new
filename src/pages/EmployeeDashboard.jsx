@@ -471,8 +471,8 @@ export default function EmployeeDashboard() {
     { key: 'complaints',  label: 'Complaints',  icon: 'requests' },
     ...(profile?.can_view_attendance ? [{ key: 'attendance', label: 'Attendance', icon: 'attendance' }] : []),
     ...(profile?.can_view_assets ? [{ key: 'assets', label: 'Assets', icon: 'assets' }] : []),
-    { key: 'factory-rotation',  label: 'تناوب المصنع',  icon: 'factory' },
-    { key: 'overtime-rotation', label: 'تناوب الأوفر',  icon: 'overtime' },
+    { key: 'factory-rotation',  label: 'Factory Rotation',  icon: 'factory' },
+    { key: 'overtime-rotation', label: 'Overtime Rotation', icon: 'overtime' },
     { key: 'profile',     label: 'Profile',     icon: 'profile' },
   ]
 
