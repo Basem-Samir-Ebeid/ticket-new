@@ -254,6 +254,11 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       broadcast(admin.id, 'notification', notif)
     }
 
+    // Notify the requesting employee (member) that their leave was received
+    sendWhatsAppToUser(
+      req.user.id,
+      `🌴 *تم استلام طلب إجازتك*\n\nالنوع: ${typeLabel[ltype] || ltype}\nمن: ${start_date}\nإلى: ${end_date}\nعدد الأيام: ${days}\nالحالة: في انتظار موافقة الإدارة.`
+    ).catch(() => {})
     try {
       for (const admin of admins) {
         sendWhatsAppToUser(

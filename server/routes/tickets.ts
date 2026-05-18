@@ -221,6 +221,13 @@ router.post('/', requireAuth as any, async (req: any, res) => {
     }
 
     notifyAdminsNewTicket(ticket, creatorName).catch(() => {})
+    // Notify the ticket creator (member) that their ticket was received
+    if (req.user.id) {
+      const memberMsg = is_request
+        ? `📝 *تم استلام طلبك*\n\nالعنوان: ${title}\nالحالة: قيد المراجعة\nسيتم الرد عليك قريباً.`
+        : `🎫 *تم فتح تيكيتك بنجاح*\n\nالعنوان: ${title}\nالأولوية: ${ticket.priority}\nسيتم التعامل معه قريباً.`
+      sendWhatsAppToUser(req.user.id, memberMsg).catch(() => {})
+    }
     if (assigned_to) {
       notifyAssigned(ticket, assigned_to, creatorName).catch(() => {})
       const priorityLabel: Record<string, string> = { low: 'منخفضة', medium: 'متوسطة', high: 'عالية', urgent: 'عاجلة' }
