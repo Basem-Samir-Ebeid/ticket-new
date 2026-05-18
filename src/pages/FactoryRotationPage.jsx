@@ -353,13 +353,41 @@ function AdminView() {
               return { bg: 'rgba(100,116,139,0.06)', border: 'rgba(100,116,139,0.15)', text: '#64748b' }
             }
 
+            const handleExportCSV = () => {
+              const monthKey = new Date(firstOfMonth(monthOffset)).toISOString().slice(0, 7)
+              const rows = [['Name', 'Days Assigned', 'Month']]
+              currentGroup.members.forEach(m => {
+                const days = schedule.filter(s => s.user_id === m.user_id).length
+                rows.push([m.full_name || m.email, days, monthKey])
+              })
+              const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n')
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `rotation-stats-${monthKey}.csv`
+              a.click()
+              URL.revokeObjectURL(url)
+            }
+
             return (
               <div className="mt-4 pt-4 border-t border-white/5">
-                <div className="flex items-center gap-2 mb-3">
-                  <p className="text-[11px] text-slate-500 uppercase tracking-widest">إحصائيات التعيينات — {monthLabel}</p>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{background:'rgba(99,102,241,0.15)', color:'#a5b4fc', border:'1px solid rgba(99,102,241,0.3)'}}>
-                    avg {avg % 1 === 0 ? avg : avg.toFixed(1)}
-                  </span>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[11px] text-slate-500 uppercase tracking-widest">إحصائيات التعيينات — {monthLabel}</p>
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{background:'rgba(99,102,241,0.15)', color:'#a5b4fc', border:'1px solid rgba(99,102,241,0.3)'}}>
+                      avg {avg % 1 === 0 ? avg : avg.toFixed(1)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleExportCSV}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-300 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 transition-all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+                    </svg>
+                    تصدير CSV
+                  </button>
                 </div>
                 <div className="flex flex-col gap-3">
                   {currentGroup.members.map((m, i) => {
