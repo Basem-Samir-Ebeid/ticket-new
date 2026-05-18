@@ -83,7 +83,9 @@ function AdminView() {
     try {
       const rows = await api.getFactorySchedule(groupId, firstOfMonth(offset), lastOfMonth(offset))
       setSchedule(rows)
-    } catch {}
+    } catch (e) {
+      console.error('[loadSchedule]', e)
+    }
   }
 
   async function handleSaveGroup(name, members) {
@@ -127,11 +129,12 @@ function AdminView() {
   async function handleOverride() {
     if (!overrideUser) return
     setSaving(true)
+    setErr('')
     try {
       await api.overrideFactoryEntry(overrideEntry.id, overrideUser)
+      await loadSchedule(selectedGroup, monthOffset)
       setOverrideEntry(null)
       setOverrideUser('')
-      loadSchedule(selectedGroup, monthOffset)
       setSuccess('تم تغيير الموظف بنجاح')
     } catch (e) { setErr(e.message) }
     setSaving(false)
@@ -140,11 +143,12 @@ function AdminView() {
   async function handleAssign() {
     if (!assignUser || !assignDay) return
     setAssignSaving(true)
+    setErr('')
     try {
       await api.assignFactoryEntry(selectedGroup, assignUser, assignDay)
+      await loadSchedule(selectedGroup, monthOffset)
       setAssignDay(null)
       setAssignUser('')
-      loadSchedule(selectedGroup, monthOffset)
       setSuccess('تم تعيين الموظف بنجاح')
     } catch (e) { setErr(e.message) }
     setAssignSaving(false)
@@ -405,13 +409,14 @@ function AdminView() {
                 ))}
               </select>
             </div>
+            {err && <p className="text-red-400 text-xs mt-3 text-right">{err}</p>}
             <div className="flex gap-3 mt-5">
               <button onClick={handleAssign} disabled={assignSaving || !assignUser}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-all"
                 style={{background:'linear-gradient(135deg,#0891b2,#06b6d4)'}}>
                 {assignSaving ? 'جارٍ الحفظ...' : 'تعيين'}
               </button>
-              <button onClick={() => { setAssignDay(null); setAssignUser('') }}
+              <button onClick={() => { setAssignDay(null); setAssignUser(''); setErr('') }}
                 className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm border border-white/10 hover:border-white/20 transition-all">
                 إلغاء
               </button>
@@ -436,6 +441,7 @@ function AdminView() {
                 ))}
               </select>
             </div>
+            {err && <p className="text-red-400 text-xs mt-3 text-right">{err}</p>}
             <div className="flex gap-3 mt-5">
               <button onClick={handleOverride} disabled={saving || !overrideUser}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-all"
