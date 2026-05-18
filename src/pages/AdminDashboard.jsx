@@ -69,6 +69,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [showLeaveForm, setShowLeaveForm] = useState(false)
   const [leaveForm, setLeaveForm] = useState({ start_date: '', end_date: '', reason: '', leave_type: 'annual' })
   const [submittingLeave, setSubmittingLeave] = useState(false)
+  const [showLeaveForEmployeeForm, setShowLeaveForEmployeeForm] = useState(false)
+  const [leaveForEmployeeForm, setLeaveForEmployeeForm] = useState({ target_user_id: '', start_date: '', end_date: '', reason: '', leave_type: 'annual' })
+  const [submittingLeaveForEmployee, setSubmittingLeaveForEmployee] = useState(false)
   const [resetPwdTarget, setResetPwdTarget] = useState(null)
   const [resetPwdValue, setResetPwdValue] = useState('')
   const [resetPwdShow, setResetPwdShow] = useState(false)
@@ -726,6 +729,20 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
       fetchLeaveRequests()
     } catch (err) { setMsg('Error: ' + err.message) }
     setSubmittingLeave(false)
+  }
+
+  async function submitLeaveForEmployee(e) {
+    e.preventDefault()
+    if (!leaveForEmployeeForm.target_user_id || !leaveForEmployeeForm.start_date || !leaveForEmployeeForm.end_date) return
+    setSubmittingLeaveForEmployee(true)
+    try {
+      await api.createLeave(leaveForEmployeeForm)
+      setMsg('✓ Leave created and approved for employee')
+      setShowLeaveForEmployeeForm(false)
+      setLeaveForEmployeeForm({ target_user_id: '', start_date: '', end_date: '', reason: '', leave_type: 'annual' })
+      fetchLeaveRequests()
+    } catch (err) { setMsg('Error: ' + err.message) }
+    setSubmittingLeaveForEmployee(false)
   }
 
   async function registerLogin(type = 'office') {
@@ -2074,8 +2091,62 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 <button onClick={()=>setShowLeaveForm(v=>!v)} className="bg-green-700 hover:bg-green-600 text-white text-xs px-4 py-2 rounded-lg transition-all">
                   🌴 {showLeaveForm ? 'Cancel' : 'Request Leave'}
                 </button>
+                {isSuperAdmin && (
+                  <button onClick={()=>{ setShowLeaveForEmployeeForm(v=>!v); setShowLeaveForm(false) }} className="bg-amber-700 hover:bg-amber-600 text-white text-xs px-4 py-2 rounded-lg transition-all">
+                    👤 {showLeaveForEmployeeForm ? 'Cancel' : 'Add Leave for Employee'}
+                  </button>
+                )}
               </div>
             </div>
+
+            {showLeaveForEmployeeForm && isSuperAdmin && (
+              <form onSubmit={submitLeaveForEmployee} className="glass rounded-xl p-5 space-y-4 animate-scaleIn border border-amber-500/20">
+                <h3 className="text-white font-medium text-sm">👤 Add Leave for Employee <span className="text-amber-400 text-xs font-normal ml-1">(auto-approved)</span></h3>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Employee</label>
+                  <select required value={leaveForEmployeeForm.target_user_id} onChange={e=>setLeaveForEmployeeForm(f=>({...f,target_user_id:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-300 text-sm focus:outline-none focus:border-amber-500">
+                    <option value="">— Select employee —</option>
+                    {users.filter(u=>u.role!=='super_admin').sort((a,b)=>(a.full_name||a.email).localeCompare(b.full_name||b.email)).map(u=>(
+                      <option key={u.id} value={u.id}>{u.full_name || u.email} ({u.role})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Start Date</label>
+                    <input required type="date" value={leaveForEmployeeForm.start_date}
+                      onChange={e=>setLeaveForEmployeeForm(f=>({...f,start_date:e.target.value}))}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">End Date</label>
+                    <input required type="date" value={leaveForEmployeeForm.end_date}
+                      onChange={e=>setLeaveForEmployeeForm(f=>({...f,end_date:e.target.value}))}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Leave Type</label>
+                  <select value={leaveForEmployeeForm.leave_type||'annual'} onChange={e=>setLeaveForEmployeeForm(f=>({...f,leave_type:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-300 text-sm focus:outline-none focus:border-amber-500">
+                    <option value="annual">Annual Leave</option>
+                    <option value="sick">Sick Leave</option>
+                    <option value="emergency">Emergency Leave</option>
+                    <option value="unpaid">Unpaid Leave</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 uppercase tracking-wider">Reason (optional)</label>
+                  <input type="text" value={leaveForEmployeeForm.reason}
+                    onChange={e=>setLeaveForEmployeeForm(f=>({...f,reason:e.target.value}))}
+                    placeholder="e.g. Annual leave, Medical..."
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" />
+                </div>
+                <button type="submit" disabled={submittingLeaveForEmployee}
+                  className="bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white text-sm px-5 py-2 rounded-lg transition-all">
+                  {submittingLeaveForEmployee ? 'Creating...' : '✅ Create & Approve Leave'}
+                </button>
+              </form>
+            )}
 
             {showLeaveForm && (
               <form onSubmit={submitOwnLeave} className="glass rounded-xl p-5 space-y-4 animate-scaleIn border border-green-500/20">

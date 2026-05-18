@@ -169,7 +169,10 @@ router.get('/balance', requireAuth as any, async (req: any, res) => {
 
 router.post('/', requireAuth as any, async (req: any, res) => {
   try {
-    const { start_date, end_date, reason, leave_type } = req.body
+    const isAdmin = req.profile.role === 'admin' || req.profile.role === 'super_admin'
+    const { start_date, end_date, reason, leave_type, target_user_id } = req.body
+    const forUserId = (isAdmin && target_user_id) ? target_user_id : req.user.id
+    const isAdminOverride = isAdmin && !!target_user_id && target_user_id !== req.user.id
     if (!start_date || !end_date) return res.status(400).json({ error: 'Dates required' })
 
     const ltype = leave_type || 'annual'
@@ -178,7 +181,7 @@ router.post('/', requireAuth as any, async (req: any, res) => {
     const [prof] = await db.select({
       leave_balance: profiles.leave_balance, sick_leave_balance: profiles.sick_leave_balance,
       emergency_leave_balance: profiles.emergency_leave_balance
-    }).from(profiles).where(eq(profiles.id, req.user.id))
+    }).from(profiles).where(eq(profiles.id, forUserId))
 
     const balanceMap: Record<string, number> = {
       annual: prof?.leave_balance || 0,
@@ -189,34 +192,54 @@ router.post('/', requireAuth as any, async (req: any, res) => {
 
     const pendingLeaves = await db.select().from(leaveRequests)
       .where(and(
-        eq(leaveRequests.user_id, req.user.id),
+        eq(leaveRequests.user_id, forUserId),
         eq(leaveRequests.leave_type, ltype),
         eq(leaveRequests.status, 'pending')
       ))
     const pendingDays = pendingLeaves.reduce((sum, l) => sum + (l.days_count || 1), 0)
     const available = (balanceMap[ltype] ?? 0) - pendingDays
 
-    if (ltype !== 'unpaid' && days > available) {
+    if (!isAdminOverride && ltype !== 'unpaid' && days > available) {
       return res.status(400).json({ error: `رصيد الإجازة غير كافٍ. المتاح: ${available} يوم، المطلوب: ${days} يوم.` })
     }
 
     const conflicting = await db.select().from(leaveRequests)
       .where(and(
-        eq(leaveRequests.user_id, req.user.id),
+        eq(leaveRequests.user_id, forUserId),
         eq(leaveRequests.status, 'approved'),
         lte(leaveRequests.start_date, end_date),
         gte(leaveRequests.end_date, start_date)
       ))
 
     const [leave] = await db.insert(leaveRequests).values({
-      user_id: req.user.id,
+      user_id: forUserId,
       start_date,
       end_date,
       reason: reason || null,
       leave_type: ltype,
       days_count: days,
-      status: 'pending',
+      status: isAdminOverride ? 'approved' : 'pending',
     }).returning()
+
+    // Admin-created leave: auto-approved — deduct balance and notify employee
+    if (isAdminOverride) {
+      if (ltype === 'annual') {
+        await db.update(profiles).set({ leave_balance: Math.max(0, (prof?.leave_balance || 0) - days) }).where(eq(profiles.id, forUserId))
+      } else if (ltype === 'sick') {
+        await db.update(profiles).set({ sick_leave_balance: Math.max(0, (prof?.sick_leave_balance || 0) - days) }).where(eq(profiles.id, forUserId))
+      } else if (ltype === 'emergency') {
+        await db.update(profiles).set({ emergency_leave_balance: Math.max(0, (prof?.emergency_leave_balance || 0) - days) }).where(eq(profiles.id, forUserId))
+      }
+      const typeLabel: Record<string, string> = { annual: 'سنوية', sick: 'مرضية', emergency: 'طارئة', unpaid: 'بدون راتب' }
+      const [notif] = await db.insert(notifications).values({
+        user_id: forUserId,
+        message: `✅ تمت إضافة إجازة ${typeLabel[ltype] || ltype} لك بواسطة الإدارة (${start_date} → ${end_date} | ${days} أيام)`,
+      }).returning()
+      broadcast(forUserId, 'notification', notif)
+      sendWhatsAppToUser(forUserId, `✅ *إجازة مضافة بواسطة الإدارة*\n\nنوع الإجازة: ${typeLabel[ltype] || ltype}\nمن: ${start_date}\nإلى: ${end_date}\nعدد الأيام: ${days}`).catch(() => {})
+      broadcastAll('leave_update', { action: 'created', leave_id: leave.id })
+      return res.json({ ...leave, conflict_count: conflicting.length })
+    }
 
     const admins = await db.select({ id: profiles.id }).from(profiles)
       .where(or(eq(profiles.role, 'admin'), eq(profiles.role, 'super_admin')))
