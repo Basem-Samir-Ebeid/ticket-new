@@ -336,6 +336,32 @@ function AdminView() {
               </div>
             ))}
           </div>
+
+          {/* Monthly assignment stats */}
+          {currentGroup.members?.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-white/5">
+              <p className="text-[11px] text-slate-500 uppercase tracking-widest mb-3">إحصائيات التعيينات — {monthLabel}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                {currentGroup.members.map((m, i) => {
+                  const count = schedule.filter(s => s.user_id === m.user_id).length
+                  const color = getColor(i)
+                  return (
+                    <div
+                      key={m.user_id}
+                      className="rounded-xl px-3 py-2.5 flex items-center justify-between gap-2"
+                      style={{background:`${color}11`, border:`1px solid ${color}33`}}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background: color}} />
+                        <span className="text-[11px] text-slate-300 truncate">{m.full_name?.split(' ')[0] || m.email?.split('@')[0]}</span>
+                      </div>
+                      <span className="text-sm font-bold flex-shrink-0" style={{color}}>{count}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
