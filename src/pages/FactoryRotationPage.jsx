@@ -339,51 +339,80 @@ function AdminView() {
           </div>
 
           {/* Monthly assignment stats */}
-          {currentGroup.members?.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-white/5">
-              <p className="text-[11px] text-slate-500 uppercase tracking-widest mb-3">إحصائيات التعيينات — {monthLabel}</p>
-              <div className="flex flex-col gap-3">
-                {currentGroup.members.map((m, i) => {
-                  const memberDays = schedule
-                    .filter(s => s.user_id === m.user_id)
-                    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
-                  const color = getColor(i)
-                  return (
-                    <div
-                      key={m.user_id}
-                      className="rounded-xl px-3 py-3"
-                      style={{background:`${color}0d`, border:`1px solid ${color}30`}}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background: color}} />
-                          <span className="text-sm font-semibold" style={{color}}>
-                            {m.full_name || m.email}
+          {currentGroup.members?.length > 0 && (() => {
+            const counts = currentGroup.members.map(m => schedule.filter(s => s.user_id === m.user_id).length)
+            const total = counts.reduce((a, b) => a + b, 0)
+            const avg = currentGroup.members.length > 0 ? total / currentGroup.members.length : 0
+
+            const getLoadColor = (count) => {
+              if (avg === 0) return { bg: 'rgba(100,116,139,0.08)', border: 'rgba(100,116,139,0.2)', text: '#94a3b8' }
+              const ratio = count / avg
+              if (ratio > 1.2)  return { bg: 'rgba(239,68,68,0.10)',  border: 'rgba(239,68,68,0.30)',  text: '#f87171' }
+              if (ratio > 1.0)  return { bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.30)', text: '#fbbf24' }
+              if (ratio >= 0.8) return { bg: 'rgba(34,197,94,0.10)',  border: 'rgba(34,197,94,0.30)',  text: '#4ade80' }
+              return { bg: 'rgba(100,116,139,0.06)', border: 'rgba(100,116,139,0.15)', text: '#64748b' }
+            }
+
+            return (
+              <div className="mt-4 pt-4 border-t border-white/5">
+                <div className="flex items-center gap-2 mb-3">
+                  <p className="text-[11px] text-slate-500 uppercase tracking-widest">إحصائيات التعيينات — {monthLabel}</p>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{background:'rgba(99,102,241,0.15)', color:'#a5b4fc', border:'1px solid rgba(99,102,241,0.3)'}}>
+                    avg {avg % 1 === 0 ? avg : avg.toFixed(1)}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {currentGroup.members.map((m, i) => {
+                    const memberDays = schedule
+                      .filter(s => s.user_id === m.user_id)
+                      .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
+                    const dotColor = getColor(i)
+                    const { bg, border, text } = getLoadColor(counts[i])
+                    return (
+                      <div
+                        key={m.user_id}
+                        className="rounded-xl px-3 py-3"
+                        style={{background: bg, border: `1px solid ${border}`}}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background: dotColor}} />
+                            <span className="text-sm font-semibold" style={{color: dotColor}}>
+                              {m.full_name || m.email}
+                            </span>
+                          </div>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:`${dotColor}22`, color: text}}>
+                            {memberDays.length} يوم
                           </span>
                         </div>
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:`${color}22`, color}}>
-                          {memberDays.length} يوم
-                        </span>
+                        {memberDays.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {memberDays.map(s => (
+                              <span
+                                key={s.id}
+                                className="text-[10px] font-medium px-1.5 py-0.5 rounded-md"
+                                style={{background:`${dotColor}18`, color: dotColor, border:`1px solid ${dotColor}35`}}
+                              >
+                                {new Date(s.scheduled_date).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      {memberDays.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {memberDays.map(s => (
-                            <span
-                              key={s.id}
-                              className="text-[10px] font-medium px-1.5 py-0.5 rounded-md"
-                              style={{background:`${color}18`, color, border:`1px solid ${color}35`}}
-                            >
-                              {new Date(s.scheduled_date).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
+                {avg > 0 && (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 pt-2 border-t border-white/5">
+                    <span className="text-[10px] flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-red-400"></span><span className="text-slate-500">مثقل (&gt;20% فوق المتوسط)</span></span>
+                    <span className="text-[10px] flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-amber-400"></span><span className="text-slate-500">فوق المتوسط</span></span>
+                    <span className="text-[10px] flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-400"></span><span className="text-slate-500">قريب من المتوسط</span></span>
+                    <span className="text-[10px] flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-slate-500"></span><span className="text-slate-500">أقل من المتوسط</span></span>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )
+          })()}
         </div>
       )}
 
