@@ -66,6 +66,15 @@ The project uses **Neon PostgreSQL** as its database, connected via the `NEON_DA
 
 _Populate as you build_
 
+## GitHub Auto-Sync
+
+Every commit (including Replit checkpoints) automatically pushes to `https://github.com/Basem-Samir-Ebeid/ticket-new` via a post-commit hook.
+
+- Hook script: `scripts/git-hooks/post-commit` → calls `scripts/github-sync.sh`
+- Requires `GITHUB_TOKEN` or `GITHUB_PERSONAL_ACCESS_TOKEN` to be set as a secret
+- Sync result is written to `.github-sync-status` in the project root
+- **Per-workspace activation**: `git config core.hooksPath` must point to `scripts/git-hooks`. Run `bash scripts/setup-git-hooks.sh` once in any fresh workspace/container to activate. This is called automatically by `scripts/post-merge.sh` after each task merge. Verify activation with: `git config --get core.hooksPath`
+
 ## Gotchas
 
 - Run `npm run db:push` after any schema changes in `shared/schema.ts`
