@@ -1248,10 +1248,17 @@ app.get('/api/leaves', requireAuth, async (req, res) => {
 
 app.post('/api/leaves', requireAuth, async (req, res) => {
   try {
-    const { start_date, end_date, reason, leave_type } = req.body
+    const { start_date, end_date, reason, leave_type, target_user_id } = req.body
     if (!start_date || !end_date) return res.status(400).json({ error: 'Dates required' })
     const db = getPool()
     const ltype = leave_type || 'annual'
+    const isAdmin = isAdminRole(req.profile.role)
+
+    // If admin is creating leave for another user, use that user's ID
+    const forUserId = (isAdmin && target_user_id && String(target_user_id) !== String(req.user.id))
+      ? target_user_id
+      : req.user.id
+    const isAdminOverride = isAdmin && forUserId !== req.user.id
 
     function calcWorkingDays(s, e) {
       let count = 0
@@ -1261,36 +1268,49 @@ app.post('/api/leaves', requireAuth, async (req, res) => {
     }
     const days = calcWorkingDays(start_date, end_date)
 
-    const { rows: profRows } = await db.query('SELECT leave_balance, sick_leave_balance, emergency_leave_balance FROM profiles WHERE id=$1', [req.user.id])
-    const prof = profRows[0] || {}
-    const balanceMap = { annual: prof.leave_balance || 0, sick: prof.sick_leave_balance || 0, emergency: prof.emergency_leave_balance || 0, unpaid: 999 }
-
-    const { rows: pendingLeaves } = await db.query("SELECT days_count FROM leave_requests WHERE user_id=$1 AND leave_type=$2 AND status='pending'", [req.user.id, ltype])
-    const pendingDays = pendingLeaves.reduce((s, l) => s + (l.days_count || 1), 0)
-    const available = (balanceMap[ltype] ?? 0) - pendingDays
-
-    if (ltype !== 'unpaid' && days > available) {
-      return res.status(400).json({ error: `رصيد الإجازة غير كافٍ. المتاح: ${available} يوم، المطلوب: ${days} يوم.` })
+    // Check balance for the target user (skip balance check for admin override)
+    if (!isAdminOverride) {
+      const { rows: profRows } = await db.query('SELECT leave_balance, sick_leave_balance, emergency_leave_balance FROM profiles WHERE id=$1', [forUserId])
+      const prof = profRows[0] || {}
+      const balanceMap = { annual: prof.leave_balance || 0, sick: prof.sick_leave_balance || 0, emergency: prof.emergency_leave_balance || 0, unpaid: 999 }
+      const { rows: pendingLeaves } = await db.query("SELECT days_count FROM leave_requests WHERE user_id=$1 AND leave_type=$2 AND status='pending'", [forUserId, ltype])
+      const pendingDays = pendingLeaves.reduce((s, l) => s + (l.days_count || 1), 0)
+      const available = (balanceMap[ltype] ?? 0) - pendingDays
+      if (ltype !== 'unpaid' && days > available) {
+        return res.status(400).json({ error: `رصيد الإجازة غير كافٍ. المتاح: ${available} يوم، المطلوب: ${days} يوم.` })
+      }
     }
 
     const { rows: conflicting } = await db.query(
       "SELECT id FROM leave_requests WHERE user_id=$1 AND status='approved' AND start_date<=$2 AND end_date>=$3",
-      [req.user.id, end_date, start_date]
+      [forUserId, end_date, start_date]
     )
 
+    // Admin override: insert as approved directly
+    const insertStatus = isAdminOverride ? 'approved' : 'pending'
+
     const { rows } = await db.query(
-      "INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, reason, days_count, status) VALUES ($1,$2,$3,$4,$5,$6,'pending') RETURNING *",
-      [req.user.id, ltype, start_date, end_date, reason || null, days]
+      "INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, reason, days_count, status) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+      [forUserId, ltype, start_date, end_date, reason || null, days, insertStatus]
     )
+
     const senderName = req.profile.full_name || req.profile.email
     const { rows: admins } = await db.query("SELECT id FROM profiles WHERE role IN ('admin','super_admin')")
     const typeLabel = { annual: 'سنوية', sick: 'مرضية', emergency: 'طارئة', unpaid: 'بدون راتب' }
     const conflictNote = conflicting.length > 0 ? ` ⚠️ تعارض مع ${conflicting.length} إجازة أخرى!` : ''
-    for (const admin of admins) {
+
+    if (!isAdminOverride) {
+      for (const admin of admins) {
+        await db.query('INSERT INTO notifications (user_id, message) VALUES ($1,$2)',
+          [admin.id, `🌴 طلب إجازة ${typeLabel[ltype] || ltype} من ${senderName} (${start_date} → ${end_date} | ${days} أيام)${conflictNote}`])
+      }
+      sendWhatsAppToAdmins(`🌴 طلب إجازة ${typeLabel[ltype] || ltype} من ${senderName} (${start_date} → ${end_date} | ${days} أيام)${conflictNote}`).catch(() => {})
+    } else {
+      // Notify the target user that admin created a leave for them
       await db.query('INSERT INTO notifications (user_id, message) VALUES ($1,$2)',
-        [admin.id, `🌴 طلب إجازة ${typeLabel[ltype] || ltype} من ${senderName} (${start_date} → ${end_date} | ${days} أيام)${conflictNote}`])
+        [forUserId, `🌴 تم تسجيل إجازة ${typeLabel[ltype] || ltype} بواسطة الإدارة (${start_date} → ${end_date} | ${days} أيام)`])
     }
-    sendWhatsAppToAdmins(`🌴 طلب إجازة ${typeLabel[ltype] || ltype} من ${senderName} (${start_date} → ${end_date} | ${days} أيام)${conflictNote}`).catch(() => {})
+
     res.json({ ...rows[0], conflict_count: conflicting.length })
   } catch (err) {
     console.error('[POST /leaves] Error:', err.message)
