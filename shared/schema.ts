@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, date, doublePrecision, integer } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, boolean, timestamp, date, doublePrecision, integer, jsonb } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 export const profiles = pgTable('profiles', {
@@ -12,6 +12,7 @@ export const profiles = pgTable('profiles', {
   can_view_attendance: boolean('can_view_attendance').notNull().default(false),
   can_view_assets: boolean('can_view_assets').notNull().default(false),
   can_view_whatsapp_contacts: boolean('can_view_whatsapp_contacts').notNull().default(false),
+  permissions: jsonb('permissions').default(sql`'{}'::jsonb`),
   must_change_password: boolean('must_change_password').notNull().default(true),
   leave_balance: integer('leave_balance').notNull().default(14),
   sick_leave_balance: integer('sick_leave_balance').notNull().default(7),

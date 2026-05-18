@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth } from '../auth'
+import { requireAuth, checkPermission } from '../auth'
 import { db } from '../db'
 import { tickets, profiles, loginTimes, assets } from '../../shared/schema'
 import { sql, gte, lte, and, isNotNull, eq } from 'drizzle-orm'
@@ -35,7 +35,7 @@ function dateRange(range: string): { from: Date; to: Date } {
 
 router.get('/tickets', requireAuth as any, async (req: any, res) => {
   try {
-    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    if (!isAdmin(req.profile.role) && !checkPermission(req.profile, 'can_view_reports')) return res.status(403).json({ error: 'Admin only' })
     const range = String(req.query.range || 'month')
     const { from, to } = dateRange(range)
 

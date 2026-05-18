@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs'
 import { db } from '../db'
 import { profiles, sessionRevocations, tickets, loginTimes, leaveRequests, assets, penalties } from '../../shared/schema'
 import { eq, desc, and, gte } from 'drizzle-orm'
-import { requireAuth, requireAdmin } from '../auth'
+import { requireAuth, requireAdmin, checkPermission } from '../auth'
 import { broadcast } from '../ws'
 import { sendWhatsAppToPhone } from '../whatsappConfig'
 
@@ -81,7 +81,7 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
       leave_balance, sick_leave_balance, emergency_leave_balance, work_start_hour,
       department, job_title, phone, national_id, hire_date, birth_date,
       gender, address, employment_type, employee_code, direct_manager, notes,
-      whatsapp_phone,
+      whatsapp_phone, permissions,
     } = req.body
 
     console.log('[PATCH /users/:id] body:', { can_view_whatsapp_contacts, can_view_attendance, can_view_assets, role })
@@ -106,6 +106,11 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
 
     // WhatsApp fields
     if (whatsapp_phone !== undefined) updateData.whatsapp_phone = whatsapp_phone?.trim() || null
+
+    // Fine-grained JSONB permissions
+    if (permissions !== undefined && typeof permissions === 'object' && permissions !== null) {
+      updateData.permissions = permissions
+    }
 
     if (Object.keys(updateData).length === 0) return res.status(400).json({ error: 'No fields to update' })
 

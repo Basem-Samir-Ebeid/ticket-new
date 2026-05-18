@@ -52,3 +52,28 @@ export async function requireAdmin(req: Request & { profile?: any }, res: Respon
   }
   next()
 }
+
+export function checkPermission(profile: any, permission: string): boolean {
+  if (!profile) return false
+  if (profile.role === 'admin' || profile.role === 'super_admin') return true
+
+  // Legacy boolean columns
+  if (permission === 'can_view_attendance' && profile.can_view_attendance) return true
+  if (permission === 'can_view_assets' && profile.can_view_assets) return true
+  if (permission === 'can_view_whatsapp_contacts' && profile.can_view_whatsapp_contacts) return true
+
+  // JSONB permissions object
+  const perms = profile.permissions
+  if (perms && typeof perms === 'object' && perms[permission] === true) return true
+
+  return false
+}
+
+export function requirePermission(permission: string) {
+  return (req: Request & { profile?: any }, res: Response, next: NextFunction) => {
+    if (!checkPermission(req.profile, permission)) {
+      return res.status(403).json({ error: 'Permission denied' })
+    }
+    next()
+  }
+}
