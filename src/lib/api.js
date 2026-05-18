@@ -329,6 +329,7 @@ export const api = {
   generateOvertimeSchedule: (group_id, from_date, to_date) => request('POST', '/overtime-rotation/generate', { group_id, from_date, to_date }),
   getMyNextOvertime: () => request('GET', '/overtime-rotation/my-next'),
   overrideOvertimeEntry: (id, user_id) => request('PUT', `/overtime-rotation/schedule/${id}`, { user_id }),
+  assignOvertimeEntry: (group_id, user_id, scheduled_date) => request('POST', '/overtime-rotation/schedule/assign', { group_id, user_id, scheduled_date }),
 }
 
 // ─── CSV Export helper ───────────────────────────────────────────────────────

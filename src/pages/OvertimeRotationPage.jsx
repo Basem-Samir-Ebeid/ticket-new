@@ -55,6 +55,9 @@ function AdminView() {
   const [genForm, setGenForm] = useState({ group_id: '', from_date: '', to_date: '' })
   const [overrideEntry, setOverrideEntry] = useState(null)
   const [overrideUser, setOverrideUser] = useState('')
+  const [assignDay, setAssignDay] = useState(null)
+  const [assignUser, setAssignUser] = useState('')
+  const [assignSaving, setAssignSaving] = useState(false)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const [success, setSuccess] = useState('')
@@ -119,6 +122,20 @@ function AdminView() {
       if (genForm.group_id === selectedGroup) loadSchedule(selectedGroup, monthOffset)
     } catch (e) { setErr(e.message) }
     setGenerating(false)
+  }
+
+  async function handleAssign() {
+    if (!assignUser || !assignDay) return
+    setAssignSaving(true)
+    setErr('')
+    try {
+      await api.assignOvertimeEntry(selectedGroup, assignUser, assignDay)
+      await loadSchedule(selectedGroup, monthOffset)
+      setAssignDay(null)
+      setAssignUser('')
+      setSuccess('تم تعيين الموظف بنجاح')
+    } catch (e) { setErr(e.message) }
+    setAssignSaving(false)
   }
 
   async function handleOverride() {
@@ -279,8 +296,12 @@ function AdminView() {
               return (
                 <div
                   key={dateStr}
-                  onClick={() => entry && setOverrideEntry(entry)}
-                  className={`rounded-lg p-1 min-h-[52px] flex flex-col items-center justify-start transition-all ${entry ? 'cursor-pointer hover:opacity-80' : ''}`}
+                  onClick={() => {
+                    if (isWeekend) return
+                    if (entry) setOverrideEntry(entry)
+                    else setAssignDay(dateStr)
+                  }}
+                  className={`rounded-lg p-1 min-h-[52px] flex flex-col items-center justify-start transition-all group ${!isWeekend ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
                   style={{
                     background: isToday ? 'rgba(180,83,9,0.15)' : isTomorrow ? 'rgba(180,83,9,0.08)' : isWeekend ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.03)',
                     border: isToday ? '1px solid rgba(245,158,11,0.5)' : '1px solid rgba(255,255,255,0.04)',
@@ -359,6 +380,38 @@ function AdminView() {
                 {generating ? 'جارٍ التوليد...' : 'توليد'}
               </button>
               <button onClick={() => setShowGenerateModal(false)} className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm border border-white/10 hover:border-white/20 transition-all">
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Modal (empty day) */}
+      {assignDay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.7)', backdropFilter:'blur(6px)'}}>
+          <div className="w-full max-w-sm rounded-2xl p-6 shadow-2xl" style={{background:'linear-gradient(135deg,#1a0c00,#1a1000)', border:'1px solid rgba(245,158,11,0.3)'}}>
+            <h3 className="text-white font-semibold text-base mb-1" dir="rtl">➕ تعيين موظف</h3>
+            <p className="text-slate-400 text-xs mb-4" dir="rtl">{assignDay} — لا يوجد موظف مُعيَّن</p>
+            <div dir="rtl">
+              <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest">اختر موظفاً</label>
+              <select value={assignUser} onChange={e => setAssignUser(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
+                <option value="">اختر موظفاً</option>
+                {currentGroup?.members?.map(m => (
+                  <option key={m.user_id} value={m.user_id}>{m.full_name || m.email}</option>
+                ))}
+              </select>
+            </div>
+            {err && <p className="text-red-400 text-xs mt-3 text-right">{err}</p>}
+            <div className="flex gap-3 mt-5">
+              <button onClick={handleAssign} disabled={assignSaving || !assignUser}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-all"
+                style={{background:'linear-gradient(135deg,#b45309,#f59e0b)'}}>
+                {assignSaving ? 'جارٍ الحفظ...' : 'تعيين'}
+              </button>
+              <button onClick={() => { setAssignDay(null); setAssignUser(''); setErr('') }}
+                className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm border border-white/10 hover:border-white/20 transition-all">
                 إلغاء
               </button>
             </div>
