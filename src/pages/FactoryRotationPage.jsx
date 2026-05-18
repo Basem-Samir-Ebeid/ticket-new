@@ -304,7 +304,7 @@ function AdminView() {
                     if (entry) setOverrideEntry(entry)
                     else setAssignDay(dateStr)
                   }}
-                  className={`rounded-lg p-1 min-h-[52px] flex flex-col items-center justify-start transition-all group ${!isWeekend ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+                  className={`rounded-lg p-1 min-h-[60px] flex flex-col items-center justify-start transition-all group ${!isWeekend ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
                   style={{
                     background: isToday ? 'rgba(8,145,178,0.15)' : isTomorrow ? 'rgba(8,145,178,0.08)' : isWeekend ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.03)',
                     border: isToday ? '1px solid rgba(8,145,178,0.5)' : '1px solid rgba(255,255,255,0.04)',
@@ -314,8 +314,9 @@ function AdminView() {
                     {new Date(dateStr).getDate()}
                   </span>
                   {entry && (
-                    <span className="text-[9px] font-medium px-1 py-0.5 rounded text-center leading-tight w-full truncate"
-                      style={{background:`${color}22`, color, border:`1px solid ${color}33`}}>
+                    <span
+                      className="text-[10px] font-semibold px-1 py-0.5 rounded-md text-center leading-tight w-full truncate block mt-0.5"
+                      style={{background:`${color}25`, color, border:`1px solid ${color}40`}}>
                       {entry.full_name?.split(' ')[0] || entry.email?.split('@')[0]}
                     </span>
                   )}
@@ -341,21 +342,42 @@ function AdminView() {
           {currentGroup.members?.length > 0 && (
             <div className="mt-4 pt-4 border-t border-white/5">
               <p className="text-[11px] text-slate-500 uppercase tracking-widest mb-3">إحصائيات التعيينات — {monthLabel}</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+              <div className="flex flex-col gap-3">
                 {currentGroup.members.map((m, i) => {
-                  const count = schedule.filter(s => s.user_id === m.user_id).length
+                  const memberDays = schedule
+                    .filter(s => s.user_id === m.user_id)
+                    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
                   const color = getColor(i)
                   return (
                     <div
                       key={m.user_id}
-                      className="rounded-xl px-3 py-2.5 flex items-center justify-between gap-2"
-                      style={{background:`${color}11`, border:`1px solid ${color}33`}}
+                      className="rounded-xl px-3 py-3"
+                      style={{background:`${color}0d`, border:`1px solid ${color}30`}}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background: color}} />
-                        <span className="text-[11px] text-slate-300 truncate">{m.full_name?.split(' ')[0] || m.email?.split('@')[0]}</span>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background: color}} />
+                          <span className="text-sm font-semibold" style={{color}}>
+                            {m.full_name || m.email}
+                          </span>
+                        </div>
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:`${color}22`, color}}>
+                          {memberDays.length} يوم
+                        </span>
                       </div>
-                      <span className="text-sm font-bold flex-shrink-0" style={{color}}>{count}</span>
+                      {memberDays.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {memberDays.map(s => (
+                            <span
+                              key={s.id}
+                              className="text-[10px] font-medium px-1.5 py-0.5 rounded-md"
+                              style={{background:`${color}18`, color, border:`1px solid ${color}35`}}
+                            >
+                              {new Date(s.scheduled_date).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
