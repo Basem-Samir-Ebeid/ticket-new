@@ -11,7 +11,6 @@ import ComplaintsPage from './ComplaintsPage'
 import AssetsPage from './AssetsPage'
 import FactoryRotationPage from './FactoryRotationPage'
 import OvertimeRotationPage from './OvertimeRotationPage'
-import MobileNav from '../components/MobileNav'
 import KnowledgeSuggest from '../components/KnowledgeSuggest'
 import { TagPills } from '../components/TagChipInput'
 
@@ -1324,7 +1323,6 @@ export default function EmployeeDashboard() {
         )}
       </div>
       </div>
-      <MobileNav tabs={employeeTabs} activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   )
 }

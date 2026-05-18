@@ -19,7 +19,6 @@ import MaintenancePage from './MaintenancePage'
 import AuditLogsPage from './AuditLogsPage'
 import GlobalSearch from '../components/GlobalSearch'
 import TagChipInput, { TagPills } from '../components/TagChipInput'
-import MobileNav from '../components/MobileNav'
 import { exportTicketsToExcel, exportAttendanceToExcel } from '../lib/exportUtils'
 import KnowledgeSuggest from '../components/KnowledgeSuggest'
 import FactoryRotationPage from './FactoryRotationPage'
@@ -4699,7 +4698,6 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
           </div>
         </div>
       )}
-      <MobileNav tabs={adminTabs} activeTab={tab} onTabChange={handleAdminTabChange} />
     </div>
   )
 }
