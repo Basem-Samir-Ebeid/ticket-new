@@ -1,0 +1,73 @@
+**Bug: Leave days are being miscounted**
+
+Example: Diaa's leave from 17/05/2026 to 18/05/2026 shows as 1 day instead of 2.
+
+**Root cause:** The `calcWorkingDays` function treats Sunday (day 0) and Saturday (day 6) as weekends — this is the Western work week. But our system uses the **Egyptian work week** where Friday (day 5) and Saturday (day 6) are the weekend, and Sunday is a normal working day.
+
+So May 17 (Sunday) gets excluded wrongly, making a 2-day leave count as 1 day.
+
+---
+
+## Fix 1 — `server/routes/leaves.ts`
+
+Find this function at the top of the file:
+
+```ts
+function calcWorkingDays(startDate: string, endDate: string): number {
+  let count = 0
+  const cur = new Date(startDate)
+  const end = new Date(endDate)
+  while (cur <= end) {
+    const dow = cur.getDay()
+    if (dow !== 0 && dow !== 6) count++
+    cur.setDate(cur.getDate() + 1)
+  }
+  return Math.max(1, count)
+}
+```
+
+Change `dow !== 0 && dow !== 6` to `dow !== 5 && dow !== 6`:
+
+```ts
+function calcWorkingDays(startDate: string, endDate: string): number {
+  let count = 0
+  const cur = new Date(startDate)
+  const end = new Date(endDate)
+  while (cur <= end) {
+    const dow = cur.getDay()
+    if (dow !== 5 && dow !== 6) count++
+    cur.setDate(cur.getDate() + 1)
+  }
+  return Math.max(1, count)
+}
+```
+
+---
+
+## Fix 2 — `api/index.js`
+
+Find this function (used in the Vercel production serverless handler):
+
+```js
+function calcWorkingDays(s, e) {
+  let count = 0
+  const cur = new Date(s), end = new Date(e)
+  while (cur <= end) { const d = cur.getDay(); if (d !== 0 && d !== 6) count++; cur.setDate(cur.getDate() + 1) }
+  return Math.max(1, count)
+}
+```
+
+Change `d !== 0 && d !== 6` to `d !== 5 && d !== 6`:
+
+```js
+function calcWorkingDays(s, e) {
+  let count = 0
+  const cur = new Date(s), end = new Date(e)
+  while (cur <= end) { const d = cur.getDay(); if (d !== 5 && d !== 6) count++; cur.setDate(cur.getDate() + 1) }
+  return Math.max(1, count)
+}
+```
+
+---
+
+**Only modify these two files: `server/routes/leaves.ts` and `api/index.js`. Do not touch anything else.**

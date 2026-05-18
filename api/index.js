@@ -1256,7 +1256,7 @@ app.post('/api/leaves', requireAuth, async (req, res) => {
     function calcWorkingDays(s, e) {
       let count = 0
       const cur = new Date(s), end = new Date(e)
-      while (cur <= end) { const d = cur.getDay(); if (d !== 0 && d !== 6) count++; cur.setDate(cur.getDate() + 1) }
+      while (cur <= end) { const d = cur.getDay(); if (d !== 5 && d !== 6) count++; cur.setDate(cur.getDate() + 1) }
       return Math.max(1, count)
     }
     const days = calcWorkingDays(start_date, end_date)

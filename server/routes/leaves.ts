@@ -15,7 +15,7 @@ function calcWorkingDays(startDate: string, endDate: string): number {
   const end = new Date(endDate)
   while (cur <= end) {
     const dow = cur.getDay()
-    if (dow !== 0 && dow !== 6) count++
+    if (dow !== 5 && dow !== 6) count++
     cur.setDate(cur.getDate() + 1)
   }
   return Math.max(1, count)
