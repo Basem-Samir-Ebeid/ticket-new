@@ -10,6 +10,7 @@ import MemberDashboard from './pages/MemberDashboard'
 import ForceChangePassword from './components/ForceChangePassword'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
+import OfflineBanner from './components/OfflineBanner'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -34,6 +35,8 @@ export default function App() {
   if (loading) return <div className="flex items-center justify-center h-screen text-slate-400">Loading...</div>
 
   return (
+    <>
+    <OfflineBanner />
     <Routes>
       <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
       <Route path="/forgot-password" element={!user ? <ForgotPassword /> : <Navigate to="/" />} />
@@ -41,5 +44,6 @@ export default function App() {
       <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
+    </>
   )
 }

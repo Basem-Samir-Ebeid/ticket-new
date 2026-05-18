@@ -218,6 +218,7 @@ export const api = {
   getTicketReports: (range = 'month') => request('GET', `/reports/tickets?range=${range}`),
   getAssetReports: () => request('GET', '/reports/assets'),
   getAttendanceReports: (range = 'month') => request('GET', `/reports/attendance?range=${range}`),
+  getAnalytics: (range = 'month') => request('GET', `/reports/analytics?range=${range}`),
 
   // Knowledge Base
   getKnowledgeArticles: (params = {}) => {
@@ -233,9 +234,13 @@ export const api = {
 
   // Audit Logs
   getAuditLogs: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
+    const filtered = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== ''))
+    const qs = new URLSearchParams(filtered).toString()
     return request('GET', `/audit-logs${qs ? '?' + qs : ''}`)
   },
+
+  // AI Ticket Categorization
+  aiSuggest: (title, description) => request('POST', '/tickets/ai/suggest', { title, description }),
 
   // Maintenance Schedules
   getMaintenanceSchedules: () => request('GET', '/maintenance'),

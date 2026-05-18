@@ -4,7 +4,7 @@ import { setupWebSocket } from './ws'
 import app from './app'
 import { db } from './db'
 import { tickets, profiles, notifications, systemSettings } from '../shared/schema'
-import { eq, and, lt, isNotNull, inArray } from 'drizzle-orm'
+import { eq, and, lt, lte, gt, isNotNull, inArray } from 'drizzle-orm'
 import { broadcast } from './ws'
 import { sendEmail } from './email'
 import { sendWhatsAppNotification, startWhatsAppKeepAlive } from './whatsappConfig'
@@ -67,6 +67,55 @@ async function runSlaEscalation() {
 
 setInterval(runSlaEscalation, 15 * 60 * 1000)
 setTimeout(runSlaEscalation, 30000)
+
+// ─── SLA Early Warning (every 15 min) ────────────────────────────────────────
+async function runSlaWarnings() {
+  try {
+    const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000)
+    const atRiskTickets = await db.select({
+      id: tickets.id, title: tickets.title, priority: tickets.priority,
+      sla_deadline: tickets.sla_deadline, status: tickets.status,
+      assigned_to: tickets.assigned_to,
+    }).from(tickets)
+      .where(and(
+        isNotNull(tickets.sla_deadline),
+        eq(tickets.sla_escalated, false),
+        eq(tickets.sla_warned, false),
+        gt(tickets.sla_deadline, new Date()),
+        lte(tickets.sla_deadline, twoHoursFromNow),
+      ))
+
+    if (!atRiskTickets.length) return
+
+    const admins = await db.select({ id: profiles.id, email: profiles.email, role: profiles.role })
+      .from(profiles).where(inArray(profiles.role, ['admin', 'super_admin']))
+
+    for (const ticket of atRiskTickets) {
+      await db.update(tickets).set({ sla_warned: true }).where(eq(tickets.id, ticket.id))
+      const msg = `⚠️ SLA at risk: ticket #${ticket.id.slice(0, 8)} — "${ticket.title}" will breach in less than 2 hours`
+
+      // Notify assignee
+      if (ticket.assigned_to) {
+        await db.insert(notifications).values({ user_id: ticket.assigned_to, ticket_id: ticket.id, message: msg })
+        broadcast(ticket.assigned_to, 'notification', { ticket_id: ticket.id, message: msg })
+      }
+
+      // Notify admins
+      for (const admin of admins) {
+        if (admin.id === ticket.assigned_to) continue
+        await db.insert(notifications).values({ user_id: admin.id, ticket_id: ticket.id, message: msg })
+        broadcast(admin.id, 'notification', { ticket_id: ticket.id, message: msg })
+        sendEmail(admin.email, '⚠️ SLA Warning', `<p>${msg}</p>`).catch(() => {})
+      }
+    }
+    if (atRiskTickets.length) console.log(`[SLA] Warned ${atRiskTickets.length} at-risk ticket(s)`)
+  } catch (err) {
+    console.error('[SLA warning error]', err)
+  }
+}
+
+setInterval(runSlaWarnings, 15 * 60 * 1000)
+setTimeout(runSlaWarnings, 45000)
 
 // ─── Cairo time helper ────────────────────────────────────────────────────────
 function shouldRunAt(hour: number, minute: number = 0): boolean {

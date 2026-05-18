@@ -65,6 +65,8 @@ export const tickets = pgTable('tickets', {
   rating_comment: text('rating_comment'),
   merged_into: uuid('merged_into'),
   sla_escalated: boolean('sla_escalated').notNull().default(false),
+  sla_warned: boolean('sla_warned').notNull().default(false),
+  ai_assisted: boolean('ai_assisted').notNull().default(false),
   opened_at: timestamp('opened_at', { withTimezone: true }),
   pending_at: timestamp('pending_at', { withTimezone: true }),
   solved_at: timestamp('solved_at', { withTimezone: true }),
@@ -317,6 +319,8 @@ export const auditLogs = pgTable('audit_logs', {
   entity_type: text('entity_type'),
   entity_id: text('entity_id'),
   description: text('description').notNull(),
+  before: jsonb('before'),
+  after: jsonb('after'),
   ip_address: text('ip_address'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })

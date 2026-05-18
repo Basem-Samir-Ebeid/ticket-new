@@ -23,6 +23,7 @@ import { exportTicketsToExcel, exportAttendanceToExcel } from '../lib/exportUtil
 import KnowledgeSuggest from '../components/KnowledgeSuggest'
 import FactoryRotationPage from './FactoryRotationPage'
 import OvertimeRotationPage from './OvertimeRotationPage'
+import AnalyticsPage from './AnalyticsPage'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -45,6 +46,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [replies, setReplies] = useState([])
   const [showCreateUser, setShowCreateUser] = useState(false)
   const [showCreateTicket, setShowCreateTicket] = useState(false)
+  const [aiSuggestion, setAiSuggestion] = useState(null)
+  const [aiLoading, setAiLoading] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, can_view_assets: false, can_view_whatsapp_contacts: false, permissions: { can_manage_tickets: false, can_view_reports: false, can_manage_leaves: false, can_view_all_tickets: false }, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '', is_leaving: false })
   const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', affected_user_id: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', subcategory: '', due_date: '', asset_id: '' })
@@ -1292,6 +1295,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     { key: 'licenses',    label: 'Licenses',    icon: 'assets' },
     { key: 'knowledge',         label: 'Knowledge',       icon: 'dashboard' },
     { key: 'reports',           label: 'Reports',         icon: 'performance' },
+    { key: 'analytics',         label: 'Analytics',       icon: 'performance' },
     { key: 'factory-rotation',  label: 'تناوب المصنع',    icon: 'factory' },
     { key: 'overtime-rotation', label: 'تناوب الأوفر',    icon: 'overtime' },
     ...(isSuperAdmin ? [{ key: 'audit-logs', label: 'Audit Logs', icon: 'settings' }] : []),
@@ -1794,9 +1798,42 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
             {showCreateTicket && (
               <form onSubmit={createTicket} className="glass-card rounded-2xl p-5 mb-4 space-y-4 animate-scaleIn" style={{border:'1px solid rgba(99,102,241,0.2)'}}>
+                {/* AI suggestion banner */}
+                {aiSuggestion && (
+                  <div className="rounded-xl p-3 flex flex-wrap gap-3 items-start" style={{background:'rgba(139,92,246,0.08)',border:'1px solid rgba(139,92,246,0.25)'}}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-violet-400 text-[10px] uppercase tracking-widest font-bold mb-1.5">🤖 AI Suggestion</p>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize" style={{background:'rgba(245,158,11,0.15)',color:'#fbbf24',border:'1px solid rgba(245,158,11,0.3)'}}>Priority: {aiSuggestion.priority}</span>
+                        {aiSuggestion.category && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{background:'rgba(99,102,241,0.15)',color:'#a5b4fc',border:'1px solid rgba(99,102,241,0.3)'}}>{aiSuggestion.category}</span>}
+                        {aiSuggestion.tags?.map(t=><span key={t} className="px-2 py-0.5 rounded-full text-[10px]" style={{background:'rgba(255,255,255,0.06)',color:'#94a3b8'}}>#{t}</span>)}
+                      </div>
+                      {aiSuggestion.reasoning && <p className="text-slate-500 text-[10px] mt-1.5 italic">{aiSuggestion.reasoning}</p>}
+                      {aiSuggestion.relatedArticles?.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {aiSuggestion.relatedArticles.map(a=><span key={a.id} className="text-[10px] text-sky-400 underline cursor-pointer">📄 {a.title}</span>)}
+                        </div>
+                      )}
+                    </div>
+                    <button type="button" onClick={()=>setTicketForm(f=>({...f,priority:aiSuggestion.priority,category:aiSuggestion.category||f.category}))}
+                      className="text-xs px-3 py-1.5 rounded-xl font-medium transition-all flex-shrink-0"
+                      style={{background:'rgba(139,92,246,0.2)',border:'1px solid rgba(139,92,246,0.35)',color:'#c4b5fd'}}>
+                      Apply suggestions
+                    </button>
+                    <button type="button" onClick={()=>setAiSuggestion(null)} className="text-slate-600 hover:text-slate-400 flex-shrink-0 text-sm">✕</button>
+                  </div>
+                )}
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Title</label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-[11px] text-slate-500 uppercase tracking-widest font-semibold">Title</label>
+                      <button type="button" disabled={aiLoading || !ticketForm.title.trim()}
+                        onClick={async()=>{setAiLoading(true);try{const r=await api.aiSuggest(ticketForm.title,ticketForm.description);setAiSuggestion(r)}catch{}setAiLoading(false)}}
+                        className="text-[10px] px-2.5 py-1 rounded-lg font-medium transition-all disabled:opacity-40"
+                        style={{background:'rgba(139,92,246,0.12)',border:'1px solid rgba(139,92,246,0.25)',color:'#c4b5fd'}}>
+                        {aiLoading ? '⏳ Analyzing...' : '🤖 AI Suggest'}
+                      </button>
+                    </div>
                     <input required value={ticketForm.title} onChange={e=>setTicketForm(f=>({...f,title:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" placeholder="Issue title" />
                     <KnowledgeSuggest query={ticketForm.title} />
                   </div>
@@ -2914,6 +2951,30 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">📱 رقم واتساب</label>
                     <input value={userForm.whatsapp_phone} onChange={e=>setUserForm(f=>({...f,whatsapp_phone:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/40 placeholder-slate-600 transition-all" placeholder="+201023588751" dir="ltr" />
                     <p className="text-[10px] text-slate-600 mt-1">أدخل الرقم مع كود الدولة — ستصله الإشعارات تلقائياً عبر Green API</p>
+                  </div>
+                </div>
+
+                {/* ── Fine-Grained Permissions ── */}
+                <div>
+                  <p className="text-[10px] text-violet-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5"><span className="w-4 h-px bg-violet-500/40 inline-block"/>الصلاحيات الدقيقة (Permissions)</p>
+                  <div className="rounded-2xl p-4 grid sm:grid-cols-2 gap-2" style={{background:'rgba(139,92,246,0.04)',border:'1px solid rgba(139,92,246,0.12)'}}>
+                    {[
+                      { key: 'can_manage_tickets',   label: 'إدارة التيكتات',   desc: 'Create, edit, assign, and close tickets' },
+                      { key: 'can_view_reports',     label: 'عرض التقارير',     desc: 'View analytics and reports dashboards' },
+                      { key: 'can_manage_leaves',    label: 'إدارة الإجازات',   desc: 'Approve or reject leave requests' },
+                      { key: 'can_view_all_tickets', label: 'عرض جميع التيكتات', desc: 'See all tickets regardless of assignment' },
+                    ].map(p => (
+                      <label key={p.key} className="flex items-start gap-3 cursor-pointer rounded-xl p-3 transition-all hover:bg-violet-500/5">
+                        <input type="checkbox"
+                          checked={!!(userForm.permissions?.[p.key])}
+                          onChange={e => setUserForm(f => ({...f, permissions: {...(f.permissions || {}), [p.key]: e.target.checked}}))}
+                          className="mt-0.5 w-4 h-4 rounded accent-violet-500 flex-shrink-0" />
+                        <div>
+                          <span className="text-slate-300 text-sm font-medium">{p.label}</span>
+                          <p className="text-slate-600 text-[10px] mt-0.5">{p.desc}</p>
+                        </div>
+                      </label>
+                    ))}
                   </div>
                 </div>
 
@@ -4587,6 +4648,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Reports Tab */}
         {tab === 'reports' && (
           <ReportsPage />
+        )}
+
+        {/* Analytics Tab */}
+        {tab === 'analytics' && (
+          <AnalyticsPage />
         )}
 
         {/* Knowledge Tab */}

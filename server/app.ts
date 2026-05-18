@@ -28,6 +28,7 @@ import licensesRoutes from './routes/licenses'
 import searchRoutes from './routes/search'
 import factoryRotationRoutes from './routes/factory-rotation'
 import overtimeRotationRoutes from './routes/overtime-rotation'
+import aiTicketsRoutes from './routes/ai-tickets'
 
 const app = express()
 
@@ -64,6 +65,7 @@ app.use('/api/licenses', licensesRoutes)
 app.use('/api/search', searchRoutes)
 app.use('/api/factory-rotation', factoryRotationRoutes)
 app.use('/api/overtime-rotation', overtimeRotationRoutes)
+app.use('/api/tickets/ai', aiTicketsRoutes)
 
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(process.cwd(), 'dist')))

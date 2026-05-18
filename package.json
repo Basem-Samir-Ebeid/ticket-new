@@ -12,7 +12,8 @@
     "db:push": "drizzle-kit push",
     "sync:github": "bash scripts/github-sync.sh",
     "sync:status": "bash scripts/sync-status.sh",
-    "hooks:setup": "bash scripts/setup-git-hooks.sh"
+    "hooks:setup": "bash scripts/setup-git-hooks.sh",
+    "test": "jest --config jest.config.cjs --runInBand"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
@@ -45,16 +46,21 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.25",
+    "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^1.4.13",
     "@types/pg": "^8.20.0",
+    "@types/supertest": "^7.2.0",
     "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.5.0",
     "drizzle-kit": "^0.30.6",
+    "jest": "^30.4.2",
     "postcss": "^8.5.14",
+    "supertest": "^7.2.2",
     "tailwindcss": "^3.4.19",
+    "ts-jest": "^29.4.9",
     "vite": "^5.4.21"
   }
 }

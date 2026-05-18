@@ -1,0 +1,32 @@
+{
+  "name": "Finest IT Management",
+  "short_name": "Finest",
+  "description": "IT Ticket Management, Attendance & HR System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05050a",
+  "theme_color": "#4f46e5",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "My Tickets",
+      "url": "/",
+      "description": "View your tickets"
+    }
+  ]
+}
