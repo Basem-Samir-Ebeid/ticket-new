@@ -172,7 +172,7 @@ router.post('/', requireAuth as any, async (req: any, res) => {
     const isAdmin = req.profile.role === 'admin' || req.profile.role === 'super_admin'
     const { start_date, end_date, reason, leave_type, target_user_id } = req.body
     const forUserId = (isAdmin && target_user_id) ? target_user_id : req.user.id
-    const isAdminOverride = isAdmin && !!target_user_id && target_user_id !== req.user.id
+    const isAdminOverride = isAdmin && !!target_user_id && String(target_user_id) !== String(req.user.id)
     if (!start_date || !end_date) return res.status(400).json({ error: 'Dates required' })
 
     const ltype = leave_type || 'annual'
