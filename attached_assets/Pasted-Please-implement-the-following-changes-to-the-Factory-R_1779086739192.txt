@@ -1,0 +1,66 @@
+Please implement the following changes to the Factory Rotation module. Read carefully before starting.
+
+---
+
+## CHANGE 1: Manual Day Assignment on Calendar (Admin)
+
+Currently, the calendar only shows already-generated entries and allows overriding them. We need to also allow clicking on **empty days** to assign an employee to that day.
+
+In `src/pages/FactoryRotationPage.jsx`, in the `AdminView` component:
+
+- When the admin clicks on **any workday cell** (not just cells that already have an entry), open the override/assignment modal.
+- If the day already has an entry → show the current employee and allow changing them (existing behavior).
+- If the day is **empty** (no entry yet) → open a modal to assign an employee from the current group's members.
+- On save, call a **new API endpoint** `POST /api/factory-rotation/schedule/assign` with `{ group_id, user_id, scheduled_date }` which inserts a single entry into `factory_rotation_schedule`.
+- Do NOT allow assigning on Friday (day 5) or Saturday (day 6).
+
+Add this new backend route to `server/routes/factory-rotation.ts`:
+```
+POST /assign
+body: { group_id, user_id, scheduled_date }
+- requireAuth + admin only
+- upsert: if an entry exists for that group+date, update user_id; otherwise insert new
+- return the saved row
+```
+
+Use drizzle upsert or a delete+insert pattern since the table has no unique constraint on (group_id, scheduled_date). Check if a row exists first, then update or insert accordingly.
+
+---
+
+## CHANGE 2: Employee Calendar View (My Schedule)
+
+Currently, the `EmployeeView` in `FactoryRotationPage.jsx` shows a simple list of upcoming factory days. Replace this with a **full monthly calendar view** similar to the admin calendar, but:
+
+- Shows **only the logged-in employee's assigned days** highlighted.
+- Employee cannot click or edit anything — read-only view.
+- Show the current month by default with prev/next month navigation.
+- On days assigned to the employee, show a highlighted cell (use cyan color like today's highlight style).
+- Days not assigned to the employee are shown as empty calendar cells.
+- Below the calendar, keep a small section showing upcoming days as a list (today, tomorrow, next entries).
+
+For the data, use the existing `GET /api/factory-rotation/schedule` endpoint but filter by the logged-in user's ID. The employee view should call:
+```
+GET /api/factory-rotation/schedule?from=<first of month>&to=<last of month>
+```
+Then filter the results client-side to only show entries where `user_id === profile.id`.
+
+Make sure the backend route `GET /schedule` does NOT restrict to admin only — employees should be able to call it (it already doesn't have an admin check, just verify this).
+
+---
+
+## CHANGE 3: Assign Button on Empty Calendar Days
+
+In the admin calendar, update the empty workday cells to show a subtle `+` icon on hover so the admin knows they're clickable for assignment. Weekend cells (Fri/Sat) should remain non-clickable and show no hover effect.
+
+Update the cell style:
+- Empty workday: add `cursor-pointer` and a faint `+` icon that appears on hover
+- Weekend: keep `cursor-default`, no hover effect, slightly dimmer
+
+---
+
+## Summary of files to modify:
+1. `src/pages/FactoryRotationPage.jsx` — AdminView calendar (empty cell click), EmployeeView (monthly calendar)
+2. `server/routes/factory-rotation.ts` — add `POST /assign` endpoint
+3. `src/lib/api.js` — add `assignFactoryEntry(group_id, user_id, scheduled_date)` function that calls `POST /api/factory-rotation/assign`
+
+Do not change anything else. Do not break existing generate/override/group management functionality.

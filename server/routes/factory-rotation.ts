@@ -247,6 +247,42 @@ router.get('/my-next', requireAuth as any, async (req: any, res) => {
   }
 })
 
+// ── POST /schedule/assign (assign empty day) ──────────────────────────────────
+router.post('/schedule/assign', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { group_id, user_id, scheduled_date } = req.body
+    if (!group_id || !user_id || !scheduled_date)
+      return res.status(400).json({ error: 'group_id, user_id and scheduled_date are required' })
+
+    const dow = new Date(scheduled_date).getDay()
+    if (dow === 5 || dow === 6) return res.status(400).json({ error: 'Cannot assign on weekend' })
+
+    const existing = await db
+      .select()
+      .from(factoryRotationSchedule)
+      .where(and(eq(factoryRotationSchedule.group_id, group_id), eq(factoryRotationSchedule.scheduled_date, scheduled_date)))
+      .limit(1)
+
+    let row
+    if (existing.length > 0) {
+      ;[row] = await db
+        .update(factoryRotationSchedule)
+        .set({ user_id, notified: false })
+        .where(eq(factoryRotationSchedule.id, existing[0].id))
+        .returning()
+    } else {
+      ;[row] = await db
+        .insert(factoryRotationSchedule)
+        .values({ group_id, user_id, scheduled_date })
+        .returning()
+    }
+    res.json(row)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to assign entry' })
+  }
+})
+
 // ── PUT /schedule/:id (manual override) ──────────────────────────────────────
 router.put('/schedule/:id', requireAuth as any, async (req: any, res) => {
   try {

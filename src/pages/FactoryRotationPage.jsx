@@ -55,6 +55,9 @@ function AdminView() {
   const [genForm, setGenForm] = useState({ group_id: '', from_date: '', to_date: '' })
   const [overrideEntry, setOverrideEntry] = useState(null)
   const [overrideUser, setOverrideUser] = useState('')
+  const [assignDay, setAssignDay] = useState(null)
+  const [assignUser, setAssignUser] = useState('')
+  const [assignSaving, setAssignSaving] = useState(false)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const [success, setSuccess] = useState('')
@@ -132,6 +135,19 @@ function AdminView() {
       setSuccess('تم تغيير الموظف بنجاح')
     } catch (e) { setErr(e.message) }
     setSaving(false)
+  }
+
+  async function handleAssign() {
+    if (!assignUser || !assignDay) return
+    setAssignSaving(true)
+    try {
+      await api.assignFactoryEntry(selectedGroup, assignUser, assignDay)
+      setAssignDay(null)
+      setAssignUser('')
+      loadSchedule(selectedGroup, monthOffset)
+      setSuccess('تم تعيين الموظف بنجاح')
+    } catch (e) { setErr(e.message) }
+    setAssignSaving(false)
   }
 
   const currentGroup = groups.find(g => g.id === selectedGroup)
@@ -279,8 +295,12 @@ function AdminView() {
               return (
                 <div
                   key={dateStr}
-                  onClick={() => entry && setOverrideEntry(entry)}
-                  className={`rounded-lg p-1 min-h-[52px] flex flex-col items-center justify-start transition-all ${entry ? 'cursor-pointer hover:opacity-80' : ''}`}
+                  onClick={() => {
+                    if (isWeekend) return
+                    if (entry) setOverrideEntry(entry)
+                    else setAssignDay(dateStr)
+                  }}
+                  className={`rounded-lg p-1 min-h-[52px] flex flex-col items-center justify-start transition-all group ${!isWeekend ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
                   style={{
                     background: isToday ? 'rgba(8,145,178,0.15)' : isTomorrow ? 'rgba(8,145,178,0.08)' : isWeekend ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.03)',
                     border: isToday ? '1px solid rgba(8,145,178,0.5)' : '1px solid rgba(255,255,255,0.04)',
@@ -294,6 +314,9 @@ function AdminView() {
                       style={{background:`${color}22`, color, border:`1px solid ${color}33`}}>
                       {entry.full_name?.split(' ')[0] || entry.email?.split('@')[0]}
                     </span>
+                  )}
+                  {!entry && !isWeekend && (
+                    <span className="text-slate-700 group-hover:text-slate-400 transition-colors text-base leading-none opacity-0 group-hover:opacity-100 mt-0.5">+</span>
                   )}
                 </div>
               )
@@ -359,6 +382,37 @@ function AdminView() {
                 {generating ? 'جارٍ التوليد...' : 'توليد'}
               </button>
               <button onClick={() => setShowGenerateModal(false)} className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm border border-white/10 hover:border-white/20 transition-all">
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Modal (empty day) */}
+      {assignDay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.7)', backdropFilter:'blur(6px)'}}>
+          <div className="w-full max-w-sm rounded-2xl p-6 shadow-2xl" style={{background:'linear-gradient(135deg,#0c1a2e,#0a1628)', border:'1px solid rgba(8,145,178,0.3)'}}>
+            <h3 className="text-white font-semibold text-base mb-1" dir="rtl">➕ تعيين موظف</h3>
+            <p className="text-slate-400 text-xs mb-4" dir="rtl">{assignDay} — لا يوجد موظف مُعيَّن</p>
+            <div dir="rtl">
+              <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest">اختر موظفاً</label>
+              <select value={assignUser} onChange={e => setAssignUser(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500">
+                <option value="">اختر موظفاً</option>
+                {currentGroup?.members?.map(m => (
+                  <option key={m.user_id} value={m.user_id}>{m.full_name || m.email}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={handleAssign} disabled={assignSaving || !assignUser}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-all"
+                style={{background:'linear-gradient(135deg,#0891b2,#06b6d4)'}}>
+                {assignSaving ? 'جارٍ الحفظ...' : 'تعيين'}
+              </button>
+              <button onClick={() => { setAssignDay(null); setAssignUser('') }}
+                className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm border border-white/10 hover:border-white/20 transition-all">
                 إلغاء
               </button>
             </div>
@@ -501,15 +555,41 @@ function GroupModal({ group, users, onSave, onClose, saving }) {
 
 // ─────────────────────────────── EMPLOYEE VIEW ───────────────────────────────
 function EmployeeView() {
-  const [entries, setEntries] = useState([])
+  const { profile } = useAuth()
+  const [monthOffset, setMonthOffset] = useState(0)
+  const [schedule, setSchedule] = useState([])
+  const [upcoming, setUpcoming] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.getMyNextFactory().then(setEntries).catch(() => {}).finally(() => setLoading(false))
+    const from = firstOfMonth(monthOffset)
+    const to = lastOfMonth(monthOffset)
+    api.getFactoryScheduleForUser(from, to)
+      .then(rows => setSchedule(rows.filter(r => r.user_id === profile?.id)))
+      .catch(() => {})
+  }, [monthOffset, profile?.id])
+
+  useEffect(() => {
+    api.getMyNextFactory()
+      .then(setUpcoming)
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   const today = todayStr()
   const tomorrow = tomorrowStr()
+  const monthLabel = new Date(firstOfMonth(monthOffset)).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })
+
+  const assignedDates = new Set(schedule.map(s => s.scheduled_date))
+
+  const firstDay = new Date(firstOfMonth(monthOffset))
+  const lastDay = new Date(lastOfMonth(monthOffset))
+  const calDays = []
+  const startPad = firstDay.getDay()
+  for (let i = 0; i < startPad; i++) calDays.push(null)
+  for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
+    calDays.push(d.toISOString().slice(0, 10))
+  }
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">
@@ -521,54 +601,114 @@ function EmployeeView() {
     <div dir="rtl" className="space-y-5">
       <div>
         <h2 className="text-white text-lg font-bold flex items-center gap-2">
-          <span className="text-2xl">🏭</span> أيام المصنع القادمة
+          <span className="text-2xl">🏭</span> جدول المصنع الخاص بي
         </h2>
-        <p className="text-slate-400 text-sm mt-0.5">هذه هي أيام دورتك في المصنع</p>
+        <p className="text-slate-400 text-sm mt-0.5">أيام دورتك في المصنع — للعرض فقط</p>
       </div>
 
-      {entries.length === 0 ? (
-        <div className="rounded-2xl p-10 text-center" style={{background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)'}}>
-          <div className="text-4xl mb-3">🏭</div>
-          <p className="text-slate-400 text-sm">لا توجد أيام مصنع مجدولة لك حالياً</p>
+      {/* Monthly Calendar */}
+      <div className="rounded-2xl p-5" style={{background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)'}}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white font-semibold text-sm">📅 {monthLabel}</h3>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setMonthOffset(m => m - 1)} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/8 transition-all">‹</button>
+            <button onClick={() => setMonthOffset(0)} className="text-xs text-slate-500 hover:text-slate-300 px-2 transition-colors">اليوم</button>
+            <button onClick={() => setMonthOffset(m => m + 1)} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/8 transition-all">›</button>
+          </div>
         </div>
-      ) : (
-        <div className="space-y-3">
-          {entries.map(entry => {
-            const isTomorrow = entry.scheduled_date === tomorrow
-            const isToday = entry.scheduled_date === today
+
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {['أح','إث','ث','أر','خ','ج','س'].map(d => (
+            <div key={d} className="text-center text-[10px] font-semibold text-slate-500 py-1">{d}</div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-1">
+          {calDays.map((dateStr, i) => {
+            if (!dateStr) return <div key={`pad-${i}`} />
+            const isAssigned = assignedDates.has(dateStr)
+            const isToday = dateStr === today
+            const dayNum = new Date(dateStr).getDay()
+            const isWeekend = dayNum === 5 || dayNum === 6
+
             return (
-              <div key={entry.id} className="rounded-2xl p-4 transition-all"
+              <div
+                key={dateStr}
+                className="rounded-lg p-1 min-h-[48px] flex flex-col items-center justify-start"
                 style={{
-                  background: isToday ? 'rgba(8,145,178,0.15)' : isTomorrow ? 'rgba(8,145,178,0.1)' : 'rgba(255,255,255,0.03)',
-                  border: isToday || isTomorrow ? '1px solid rgba(8,145,178,0.4)' : '1px solid rgba(255,255,255,0.07)',
-                }}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
-                      style={{background: isToday || isTomorrow ? 'rgba(8,145,178,0.2)' : 'rgba(255,255,255,0.05)'}}>
-                      🏭
-                    </div>
-                    <div>
-                      <p className="text-white font-semibold text-sm">
-                        {new Date(entry.scheduled_date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                      </p>
-                      {isToday && <span className="text-[11px] text-cyan-400 font-medium">● اليوم</span>}
-                      {isTomorrow && <span className="text-[11px] text-cyan-300 font-medium">◎ غداً</span>}
-                      {!isToday && !isTomorrow && <span className="text-slate-500 text-xs">قادم</span>}
-                    </div>
-                  </div>
-                  {(isToday || isTomorrow) && (
-                    <span className="text-[11px] font-medium px-3 py-1.5 rounded-full"
-                      style={{background:'rgba(8,145,178,0.2)', color:'#06b6d4', border:'1px solid rgba(8,145,178,0.3)'}}>
-                      {isToday ? 'اليوم 🏭' : 'غداً 🏭'}
-                    </span>
-                  )}
-                </div>
+                  background: isAssigned
+                    ? 'rgba(8,145,178,0.18)'
+                    : isToday
+                    ? 'rgba(8,145,178,0.08)'
+                    : isWeekend
+                    ? 'rgba(255,255,255,0.01)'
+                    : 'rgba(255,255,255,0.03)',
+                  border: isAssigned
+                    ? '1px solid rgba(8,145,178,0.5)'
+                    : isToday
+                    ? '1px solid rgba(8,145,178,0.3)'
+                    : '1px solid rgba(255,255,255,0.04)',
+                }}
+              >
+                <span className={`text-[11px] font-semibold mb-1 ${isAssigned ? 'text-cyan-300' : isToday ? 'text-cyan-500' : isWeekend ? 'text-slate-600' : 'text-slate-400'}`}>
+                  {new Date(dateStr).getDate()}
+                </span>
+                {isAssigned && (
+                  <span className="text-[8px] text-cyan-400 font-bold">🏭</span>
+                )}
               </div>
             )
           })}
         </div>
-      )}
+
+        <div className="mt-3 flex items-center gap-2 text-[11px] text-slate-500 border-t border-white/5 pt-3">
+          <div className="w-3 h-3 rounded" style={{background:'rgba(8,145,178,0.4)', border:'1px solid rgba(8,145,178,0.5)'}} />
+          <span>أيام دورتك في المصنع</span>
+        </div>
+      </div>
+
+      {/* Upcoming list */}
+      <div>
+        <h3 className="text-slate-300 text-sm font-semibold mb-3">الأيام القادمة</h3>
+        {upcoming.length === 0 ? (
+          <div className="rounded-2xl p-8 text-center" style={{background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)'}}>
+            <div className="text-3xl mb-2">🏭</div>
+            <p className="text-slate-400 text-sm">لا توجد أيام مصنع مجدولة لك حالياً</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {upcoming.map(entry => {
+              const isTomorrow = entry.scheduled_date === tomorrow
+              const isToday2 = entry.scheduled_date === today
+              return (
+                <div key={entry.id} className="rounded-xl p-3.5 flex items-center justify-between transition-all"
+                  style={{
+                    background: isToday2 ? 'rgba(8,145,178,0.15)' : isTomorrow ? 'rgba(8,145,178,0.1)' : 'rgba(255,255,255,0.03)',
+                    border: isToday2 || isTomorrow ? '1px solid rgba(8,145,178,0.4)' : '1px solid rgba(255,255,255,0.06)',
+                  }}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">🏭</span>
+                    <div>
+                      <p className="text-white text-sm font-medium">
+                        {new Date(entry.scheduled_date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                      {isToday2 && <span className="text-[11px] text-cyan-400 font-medium">● اليوم</span>}
+                      {isTomorrow && <span className="text-[11px] text-cyan-300 font-medium">◎ غداً</span>}
+                      {!isToday2 && !isTomorrow && <span className="text-slate-500 text-xs">قادم</span>}
+                    </div>
+                  </div>
+                  {(isToday2 || isTomorrow) && (
+                    <span className="text-[11px] font-medium px-3 py-1 rounded-full"
+                      style={{background:'rgba(8,145,178,0.2)', color:'#06b6d4', border:'1px solid rgba(8,145,178,0.3)'}}>
+                      {isToday2 ? 'اليوم' : 'غداً'}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
