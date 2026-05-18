@@ -24,20 +24,42 @@ export async function getWhatsAppConfig(): Promise<WhatsAppConfig> {
       .from(systemSettings)
       .where(eq(systemSettings.key, 'whatsapp_config'))
       .limit(1)
-    if (row?.value) return { ...DEFAULT_CONFIG, ...JSON.parse(row.value) }
-  } catch {}
+    if (row?.value) {
+      const parsed = typeof row.value === 'string' ? JSON.parse(row.value) : row.value
+      const result: WhatsAppConfig = {
+        ...DEFAULT_CONFIG,
+        ...parsed,
+        enabled: parsed.enabled === true || parsed.enabled === 'true' || parsed.enabled === 1,
+      }
+      console.log('[WhatsApp] getWhatsAppConfig:', JSON.stringify(result))
+      return result
+    }
+  } catch (err: any) {
+    console.error('[WhatsApp] getWhatsAppConfig error:', err?.message)
+  }
   return { ...DEFAULT_CONFIG }
 }
 
 export async function saveWhatsAppConfig(config: Partial<WhatsAppConfig>): Promise<WhatsAppConfig> {
   const existing = await getWhatsAppConfig()
-  const merged: WhatsAppConfig = { ...existing, ...config }
-  if (typeof merged.enabled !== 'boolean') {
-    merged.enabled = merged.enabled === true || (merged.enabled as any) === 'true'
+  const merged: WhatsAppConfig = {
+    ...existing,
+    ...config,
+    enabled:
+      config.enabled === true || config.enabled === ('true' as any) || config.enabled === (1 as any)
+        ? true
+        : config.enabled === false || config.enabled === ('false' as any)
+        ? false
+        : existing.enabled,
   }
+  const valueToStore = JSON.stringify(merged)
+  console.log('[WhatsApp] saveWhatsAppConfig storing:', valueToStore)
   await db.insert(systemSettings)
-    .values({ key: 'whatsapp_config', value: JSON.stringify(merged) })
-    .onConflictDoUpdate({ target: systemSettings.key, set: { value: JSON.stringify(merged), updated_at: new Date() } })
+    .values({ key: 'whatsapp_config', value: valueToStore })
+    .onConflictDoUpdate({
+      target: systemSettings.key,
+      set: { value: valueToStore, updated_at: new Date() },
+    })
   return merged
 }
 
@@ -68,9 +90,13 @@ export async function getGreenApiState(instanceId: string, token: string): Promi
 
 async function sendViaGreenApi(phone: string, text: string, attempt = 1): Promise<void> {
   const config = await getWhatsAppConfig()
+  if (!config.enabled) {
+    console.warn('[WhatsApp] sendViaGreenApi called but enabled=false, skipping')
+    return
+  }
   if (!config.greenapi_instance_id || !config.greenapi_token) {
     console.error('[WhatsApp] MISSING config — instance_id:', config.greenapi_instance_id, 'token:', !!config.greenapi_token)
-    throw new Error('Green API غير مُفعَّل')
+    throw new Error('Green API غير مُفعَّل — يرجى إدخال Instance ID و Token في الإعدادات')
   }
   const chatId = toGreenApiChatId(phone)
   const url = `https://api.green-api.com/waInstance${config.greenapi_instance_id}/sendMessage/${config.greenapi_token}`

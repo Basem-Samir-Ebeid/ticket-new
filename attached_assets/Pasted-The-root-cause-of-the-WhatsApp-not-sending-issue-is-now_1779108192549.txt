@@ -1,0 +1,107 @@
+The root cause of the WhatsApp not sending issue is now confirmed from the logs: `config.enabled` always returns `false` after a server restart, even though it is toggled ON in the UI. The value is not being read back correctly from the database.
+
+Please make the following changes to `server/whatsappConfig.ts` only. Do not change any other file.
+
+---
+
+**CHANGE 1:** Replace the entire `getWhatsAppConfig` function with this:
+
+```typescript
+export async function getWhatsAppConfig(): Promise<WhatsAppConfig> {
+  try {
+    const [row] = await db.select({ value: systemSettings.value })
+      .from(systemSettings)
+      .where(eq(systemSettings.key, 'whatsapp_config'))
+      .limit(1)
+    if (row?.value) {
+      const parsed = typeof row.value === 'string' ? JSON.parse(row.value) : row.value
+      const result: WhatsAppConfig = {
+        ...DEFAULT_CONFIG,
+        ...parsed,
+        enabled: parsed.enabled === true || parsed.enabled === 'true' || parsed.enabled === 1,
+      }
+      console.log('[WhatsApp] getWhatsAppConfig:', JSON.stringify(result))
+      return result
+    }
+  } catch (err: any) {
+    console.error('[WhatsApp] getWhatsAppConfig error:', err?.message)
+  }
+  return { ...DEFAULT_CONFIG }
+}
+```
+
+---
+
+**CHANGE 2:** Replace the entire `saveWhatsAppConfig` function with this:
+
+```typescript
+export async function saveWhatsAppConfig(config: Partial<WhatsAppConfig>): Promise<WhatsAppConfig> {
+  const existing = await getWhatsAppConfig()
+  const merged: WhatsAppConfig = {
+    ...existing,
+    ...config,
+    enabled:
+      config.enabled === true || config.enabled === ('true' as any) || config.enabled === (1 as any)
+        ? true
+        : config.enabled === false || config.enabled === ('false' as any)
+        ? false
+        : existing.enabled,
+  }
+  const valueToStore = JSON.stringify(merged)
+  console.log('[WhatsApp] saveWhatsAppConfig storing:', valueToStore)
+  await db.insert(systemSettings)
+    .values({ key: 'whatsapp_config', value: valueToStore })
+    .onConflictDoUpdate({
+      target: systemSettings.key,
+      set: { value: valueToStore, updated_at: new Date() },
+    })
+  return merged
+}
+```
+
+---
+
+**CHANGE 3:** Replace the entire `sendViaGreenApi` function with this:
+
+```typescript
+async function sendViaGreenApi(phone: string, text: string, attempt = 1): Promise<void> {
+  const config = await getWhatsAppConfig()
+  if (!config.enabled) {
+    console.warn('[WhatsApp] sendViaGreenApi called but enabled=false, skipping')
+    return
+  }
+  if (!config.greenapi_instance_id || !config.greenapi_token) {
+    console.error('[WhatsApp] MISSING config — instance_id:', config.greenapi_instance_id, 'token:', !!config.greenapi_token)
+    throw new Error('Green API غير مُفعَّل — يرجى إدخال Instance ID و Token في الإعدادات')
+  }
+  const chatId = toGreenApiChatId(phone)
+  const url = `https://api.green-api.com/waInstance${config.greenapi_instance_id}/sendMessage/${config.greenapi_token}`
+  console.log(`[WhatsApp] attempt=${attempt} phone=${phone} chatId=${chatId}`)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, message: text }),
+      signal: AbortSignal.timeout(12000),
+    })
+    const body = await res.text()
+    console.log(`[WhatsApp] response status=${res.status} body=${body}`)
+    if (!res.ok) {
+      const status = res.status
+      if (attempt === 1 && (status === 401 || status === 466 || status === 429)) {
+        console.warn(`[WhatsApp] waking instance and retrying...`)
+        await wakeGreenApiInstance(config.greenapi_instance_id, config.greenapi_token)
+        return sendViaGreenApi(phone, text, 2)
+      }
+      throw new Error(`Green API error ${status}: ${body}`)
+    }
+  } catch (err: any) {
+    console.error(`[WhatsApp] fetch error attempt=${attempt}:`, err?.message)
+    throw err
+  }
+}
+```
+
+---
+
+After applying all three changes, restart the server, go to Settings → WhatsApp, toggle it ON and click Save, then create a test ticket and paste the console logs here.
