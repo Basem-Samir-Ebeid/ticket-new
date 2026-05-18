@@ -69,25 +69,33 @@ export async function getGreenApiState(instanceId: string, token: string): Promi
 async function sendViaGreenApi(phone: string, text: string, attempt = 1): Promise<void> {
   const config = await getWhatsAppConfig()
   if (!config.greenapi_instance_id || !config.greenapi_token) {
-    throw new Error('Green API غير مُفعَّل — يرجى إدخال Instance ID و Token في الإعدادات')
+    console.error('[WhatsApp] MISSING config — instance_id:', config.greenapi_instance_id, 'token:', !!config.greenapi_token)
+    throw new Error('Green API غير مُفعَّل')
   }
   const chatId = toGreenApiChatId(phone)
   const url = `https://api.green-api.com/waInstance${config.greenapi_instance_id}/sendMessage/${config.greenapi_token}`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chatId, message: text }),
-    signal: AbortSignal.timeout(12000),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    const status = res.status
-    if (attempt === 1 && (status === 401 || status === 466 || status === 429)) {
-      console.warn(`[WhatsApp] Instance returned ${status} on attempt 1 — waking up and retrying...`)
-      await wakeGreenApiInstance(config.greenapi_instance_id, config.greenapi_token)
-      return sendViaGreenApi(phone, text, 2)
+  console.log(`[WhatsApp] attempt=${attempt} phone=${phone} chatId=${chatId}`)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, message: text }),
+      signal: AbortSignal.timeout(12000),
+    })
+    const body = await res.text()
+    console.log(`[WhatsApp] response status=${res.status} body=${body}`)
+    if (!res.ok) {
+      const status = res.status
+      if (attempt === 1 && (status === 401 || status === 466 || status === 429)) {
+        console.warn(`[WhatsApp] waking instance and retrying...`)
+        await wakeGreenApiInstance(config.greenapi_instance_id, config.greenapi_token)
+        return sendViaGreenApi(phone, text, 2)
+      }
+      throw new Error(`Green API error ${status}: ${body}`)
     }
-    throw new Error(`Green API error ${status}: ${body}`)
+  } catch (err: any) {
+    console.error(`[WhatsApp] fetch error attempt=${attempt}:`, err?.message)
+    throw err
   }
 }
 
