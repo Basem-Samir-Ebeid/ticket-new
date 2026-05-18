@@ -46,6 +46,12 @@ export default function MemberDashboard() {
   const [review, setReview] = useState('')
   const [submittingReview, setSubmittingReview] = useState(false)
   const [activeTab, setActiveTab] = useState('tickets')
+  const [profileForm, setProfileForm] = useState({ full_name: '', email: '', phone: '' })
+  const [updatingProfile, setUpdatingProfile] = useState(false)
+  const [profileMsg, setProfileMsg] = useState('')
+  const [changePasswordForm, setChangePasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [changePasswordMsg, setChangePasswordMsg] = useState('')
   const [todayLogin, setTodayLogin] = useState(null)
   const [loggingIn, setLoggingIn] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -257,6 +263,38 @@ export default function MemberDashboard() {
   async function fetchLeaveRequests() {
     try { setLeaveRequests(await api.getLeaves()) } catch {}
   }
+
+  useEffect(() => {
+    if (profile) {
+      setProfileForm({ full_name: profile.full_name || '', email: profile.email || '', phone: profile.phone || '' })
+    }
+  }, [profile])
+
+  async function handleUpdateProfile(e) {
+    e.preventDefault(); setUpdatingProfile(true); setProfileMsg('')
+    try {
+      await api.updateProfile({ full_name: profileForm.full_name, phone: profileForm.phone })
+      setProfileMsg('✓ Profile updated!')
+    } catch (err) { setProfileMsg('Error: ' + err.message) }
+    setUpdatingProfile(false)
+  }
+
+  async function handleChangePassword(e) {
+    e.preventDefault()
+    if (changePasswordForm.new_password !== changePasswordForm.confirm_password) {
+      setChangePasswordMsg('Error: Passwords do not match'); return
+    }
+    if (changePasswordForm.new_password.length < 6) {
+      setChangePasswordMsg('Error: Password must be at least 6 characters'); return
+    }
+    setChangingPassword(true); setChangePasswordMsg('')
+    try {
+      await api.changePassword(changePasswordForm.current_password, changePasswordForm.new_password)
+      setChangePasswordMsg('✓ Password changed successfully!')
+      setChangePasswordForm({ current_password: '', new_password: '', confirm_password: '' })
+    } catch (err) { setChangePasswordMsg('Error: ' + err.message) }
+    setChangingPassword(false)
+  }
   async function fetchTemplates() {
     try { setTemplates(await api.getTemplates()) } catch {}
   }
@@ -410,6 +448,7 @@ export default function MemberDashboard() {
     ...(profile?.can_view_whatsapp_contacts ? [{ key: 'whatsappContacts', label: 'WhatsApp', icon: 'whatsapp' }] : []),
     { key: 'factory-rotation',  label: 'Factory Rotation', icon: 'factory' },
     { key: 'overtime-rotation', label: 'Overtime Rotation', icon: 'overtime' },
+    { key: 'profile',           label: 'Profile',           icon: 'profile' },
   ]
 
   if (selectedTicket) {
@@ -1092,6 +1131,56 @@ export default function MemberDashboard() {
 
         {activeTab === 'overtime-rotation' && (
           <OvertimeRotationPage />
+        )}
+
+        {activeTab === 'profile' && (
+          <div className="space-y-4">
+            <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(99,102,241,0.15)'}}>
+              <h2 className="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.2)'}}>👤</span>
+                Edit Profile
+              </h2>
+              <form onSubmit={handleUpdateProfile} className="space-y-4">
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Full Name</label>
+                  <input value={profileForm.full_name} onChange={e=>setProfileForm(f=>({...f,full_name:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" placeholder="Your full name" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Email</label>
+                  <input value={profileForm.email} disabled className="w-full bg-white/3 border border-white/5 rounded-xl px-3 py-2.5 text-slate-500 text-sm cursor-not-allowed" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">رقم الواتساب</label>
+                  <input value={profileForm.phone} onChange={e=>setProfileForm(f=>({...f,phone:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 transition-all" placeholder="مثال: 01012345678" dir="ltr" />
+                </div>
+                {profileMsg && <p className={`text-sm rounded-xl px-3 py-2 ${profileMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{profileMsg}</p>}
+                <button type="submit" disabled={updatingProfile} className="btn-primary disabled:opacity-50 text-sm px-4 py-2">{updatingProfile ? 'Saving...' : 'Save Changes'}</button>
+              </form>
+            </div>
+
+            <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(245,158,11,0.15)'}}>
+              <h2 className="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{background:'rgba(245,158,11,0.15)',border:'1px solid rgba(245,158,11,0.2)'}}>🔐</span>
+                Change Password
+              </h2>
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Current Password</label>
+                  <input type="password" value={changePasswordForm.current_password} onChange={e=>setChangePasswordForm(f=>({...f,current_password:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 transition-all" autoComplete="current-password" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">New Password</label>
+                  <input type="password" value={changePasswordForm.new_password} onChange={e=>setChangePasswordForm(f=>({...f,new_password:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 transition-all" autoComplete="new-password" placeholder="Min. 6 characters" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Confirm New Password</label>
+                  <input type="password" value={changePasswordForm.confirm_password} onChange={e=>setChangePasswordForm(f=>({...f,confirm_password:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500/50 transition-all" autoComplete="new-password" />
+                </div>
+                {changePasswordMsg && <p className={`text-sm rounded-xl px-3 py-2 ${changePasswordMsg.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>{changePasswordMsg}</p>}
+                <button type="submit" disabled={changingPassword} className="bg-amber-900/50 hover:bg-amber-800/70 border border-amber-500/25 disabled:opacity-40 text-amber-300 text-sm font-semibold py-2 px-4 rounded-xl transition-all">{changingPassword ? 'Updating...' : 'Update Password'}</button>
+              </form>
+            </div>
+          </div>
         )}
 
         {activeTab === 'whatsappContacts' && profile?.can_view_whatsapp_contacts && (
