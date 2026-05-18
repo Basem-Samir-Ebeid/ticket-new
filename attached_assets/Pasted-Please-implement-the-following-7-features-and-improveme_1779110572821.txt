@@ -1,0 +1,105 @@
+Please implement the following 7 features and improvements in this project. Read each section carefully before starting. Implement them one at a time, test each before moving on, and do not break any existing functionality.
+
+---
+
+## 1. RBAC — Fine-Grained Permissions System
+
+Replace the current role-only checks (admin / super_admin / member / employee) with a granular permissions system.
+
+- Add a `permissions` JSONB column to the `profiles` table (e.g. `{ can_view_reports: true, can_manage_assets: false, can_approve_leaves: true }`)
+- Create a `checkPermission(profile, permission)` helper used across all route guards
+- Update the admin UI so super_admin can toggle individual permissions per user
+- Keep existing role checks working as defaults (admin role gets all permissions by default)
+- Add a Permissions tab in the user edit modal
+
+---
+
+## 2. Ticket Analytics Dashboard
+
+Add a dedicated Analytics page accessible to admins.
+
+- Use the existing `recharts` library (already installed)
+- Charts to include:
+  - Tickets created vs resolved per week (BarChart)
+  - Average resolution time by priority (BarChart)
+  - SLA compliance rate over time (LineChart)
+  - Ticket distribution by category/type (PieChart)
+  - Top assignees by ticket count and resolution speed
+- Add a date range filter (last 7 days / 30 days / 90 days / custom)
+- Add the page to the admin sidebar under a new "Analytics" section
+- Data should come from a new `GET /api/reports/analytics` endpoint
+
+---
+
+## 3. Smart SLA Prediction
+
+Instead of only alerting on SLA breach, predict and warn proactively.
+
+- In the SLA escalation cron (server/index.ts), add a second check: tickets that will breach within the next 2 hours
+- Calculate predicted breach based on: current time, sla_deadline, and the assignee's average resolution time (derived from closed tickets)
+- Send an early warning notification (in-app + email) to the assignee and admins: "⚠️ Ticket #X is at risk of breaching SLA in less than 2 hours"
+- Add a `sla_warned` boolean column to the tickets table to avoid duplicate warnings
+- Show a yellow "At Risk" SLA badge in the ticket list when this warning has been triggered (alongside the existing SLA badges)
+
+---
+
+## 4. Mobile PWA — Full Offline Support
+
+Improve the existing PWA (sw.js already exists) with real offline capability.
+
+- Update `public/sw.js` to use a Cache-First strategy for static assets and a Network-First strategy for API calls
+- Cache the last-fetched list of open tickets assigned to the current user so they're viewable offline
+- Show a clear "You are offline — showing cached data" banner when the app detects no connection
+- Add a background sync: any action taken offline (e.g. adding a reply) gets queued and synced when back online
+- Make sure the app installs correctly as a PWA (valid manifest, correct icons, start_url)
+
+---
+
+## 5. AI-Powered Ticket Categorization (Claude API)
+
+When a user creates a new ticket, use Claude to assist with categorization.
+
+- After the user fills in the title and description, call a new endpoint `POST /api/tickets/ai-suggest` that sends the title + description to the Claude API (claude-sonnet-4-20250514)
+- Claude should return: suggested priority, suggested category/tags, and 1–3 related Knowledge Base article IDs (matched by title similarity)
+- Display the suggestions inline in the ticket creation form with "Apply" buttons next to each suggestion
+- The user can accept or ignore any suggestion — nothing is applied automatically
+- Show a small "AI suggested" label on tickets where the suggestion was accepted (store a `ai_assisted: boolean` column)
+- Use the existing `ANTHROPIC_API_KEY` environment variable (or prompt to add it if missing)
+
+---
+
+## 6. Audit Log with Diff Viewer
+
+Enhance the existing audit log system to show before/after diffs.
+
+- Update all audit log insert calls across routes to include `before` and `after` JSONB fields capturing the relevant record state before and after the change
+- In the Audit Logs page (AuditLogsPage.jsx), add an expandable row — clicking a log entry shows a side-by-side diff of what changed
+- Highlight changed fields in amber, removed fields in red, added fields in green
+- Focus on high-value actions: ticket status changes, leave approvals/rejections, user role/permission changes, asset assignments
+- Add filters: by action type, by user, and by date range
+
+---
+
+## 7. Automated Testing Suite
+
+Add a test suite covering the most critical API routes.
+
+- Install and configure `jest` + `supertest` + `ts-jest`
+- Add a `test` script to package.json: `"test": "jest"`
+- Write tests for the following endpoints (use an in-memory or test DB, or mock the db module):
+  - `POST /api/auth/login` — correct credentials, wrong password, non-existent user
+  - `GET /api/tickets` — returns tickets for the authenticated user only
+  - `POST /api/tickets` — creates a ticket, validates required fields
+  - `PATCH /api/leaves/:id/approve` — only admins can approve, balance is deducted correctly
+  - `POST /api/users` — password is hashed, plain_password is NOT stored
+- Place all test files in a `tests/` directory at the project root
+- Make sure tests can run without a real database connection
+
+---
+
+## General Rules
+
+- Do not remove or break any existing feature
+- Keep all new DB columns optional or with defaults so existing data is not affected
+- Use the existing tech stack only: Express, Drizzle ORM, React, Tailwind, recharts — do not add new heavy dependencies unless absolutely necessary
+- After finishing all 7 features, run the app and confirm there are no console errors on startup
