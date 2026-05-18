@@ -1,0 +1,255 @@
+في ملف `server/whatsappConfig.ts` — عندنا مشكلتين محددتين:
+
+---
+
+**المشكلة 1:** دالة `getWhatsAppConfig` لما بترجع error أو ماتلاقيش row في DB بترجع `DEFAULT_CONFIG` اللي فيه `enabled: false` — وده بيحصل بعد كل restart لو في أي مشكلة بسيطة في الـ DB connection.
+
+**المشكلة 2:** في `saveWhatsAppConfig`، الـ `onConflictDoUpdate` بيحاول يحدّث `updated_at` بـ `new Date()` لكن في بعض الحالات ده ممكن يفشل صامتاً لو الـ Drizzle client اتعاد تهيئته.
+
+---
+
+**الإصلاح المطلوب — استبدل الملف كله بالكود ده:**
+
+```typescript
+import { db } from './db'
+import { profiles, systemSettings } from '../shared/schema'
+import { eq } from 'drizzle-orm'
+
+export interface WhatsAppConfig {
+  enabled: boolean
+  greenapi_instance_id: string
+  greenapi_token: string
+  phone: string
+  apikey: string
+}
+
+const DEFAULT_CONFIG: WhatsAppConfig = {
+  enabled: false,
+  greenapi_instance_id: '',
+  greenapi_token: '',
+  phone: '',
+  apikey: '',
+}
+
+export async function getWhatsAppConfig(): Promise<WhatsAppConfig> {
+  try {
+    const rows = await db.select({ value: systemSettings.value })
+      .from(systemSettings)
+      .where(eq(systemSettings.key, 'whatsapp_config'))
+      .limit(1)
+    const row = rows[0]
+    console.log('[WhatsApp] RAW DB row:', JSON.stringify(row))
+    if (row?.value) {
+      let parsed: any
+      if (typeof row.value === 'string') {
+        try { parsed = JSON.parse(row.value) } catch { parsed = {} }
+      } else {
+        parsed = row.value
+      }
+      const enabledRaw = parsed.enabled
+      const enabledBool = enabledRaw === true || enabledRaw === 'true' || enabledRaw === 1 || enabledRaw === '1'
+      const result: WhatsAppConfig = {
+        ...DEFAULT_CONFIG,
+        ...parsed,
+        enabled: enabledBool,
+      }
+      console.log('[WhatsApp] getWhatsAppConfig result:', JSON.stringify(result))
+      return result
+    }
+  } catch (err: any) {
+    console.error('[WhatsApp] getWhatsAppConfig error:', err?.message)
+  }
+  console.warn('[WhatsApp] No config found in DB — returning defaults (enabled=false)')
+  return { ...DEFAULT_CONFIG }
+}
+
+export async function saveWhatsAppConfig(config: Partial<WhatsAppConfig>): Promise<WhatsAppConfig> {
+  const existing = await getWhatsAppConfig()
+  let enabledFinal: boolean
+  if (config.enabled === true || config.enabled === ('true' as any) || config.enabled === (1 as any)) {
+    enabledFinal = true
+  } else if (config.enabled === false || config.enabled === ('false' as any) || config.enabled === (0 as any)) {
+    enabledFinal = false
+  } else {
+    enabledFinal = existing.enabled
+  }
+  const merged: WhatsAppConfig = {
+    ...existing,
+    ...config,
+    enabled: enabledFinal,
+  }
+  const valueToStore = JSON.stringify(merged)
+  console.log('[WhatsApp] saveWhatsAppConfig storing:', valueToStore)
+  try {
+    await db.insert(systemSettings)
+      .values({ key: 'whatsapp_config', value: valueToStore })
+      .onConflictDoUpdate({
+        target: systemSettings.key,
+        set: { value: valueToStore },
+      })
+    // Verify the save worked
+    const verify = await getWhatsAppConfig()
+    console.log('[WhatsApp] VERIFY after save — enabled:', verify.enabled, 'instance_id:', verify.greenapi_instance_id)
+  } catch (err: any) {
+    console.error('[WhatsApp] saveWhatsAppConfig DB error:', err?.message)
+    throw err
+  }
+  return merged
+}
+
+function toGreenApiChatId(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  return `${digits}@c.us`
+}
+
+async function wakeGreenApiInstance(instanceId: string, token: string): Promise<void> {
+  try {
+    const url = `https://api.green-api.com/waInstance${instanceId}/getStateInstance/${token}`
+    await fetch(url, { signal: AbortSignal.timeout(8000) })
+    await new Promise(resolve => setTimeout(resolve, 3000))
+  } catch {}
+}
+
+export async function getGreenApiState(instanceId: string, token: string): Promise<string> {
+  try {
+    const url = `https://api.green-api.com/waInstance${instanceId}/getStateInstance/${token}`
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return 'unknown'
+    const data = await res.json()
+    return data?.stateInstance ?? 'unknown'
+  } catch {
+    return 'unreachable'
+  }
+}
+
+async function sendViaGreenApi(phone: string, text: string, attempt = 1): Promise<void> {
+  const config = await getWhatsAppConfig()
+  if (!config.enabled) {
+    console.warn('[WhatsApp] sendViaGreenApi called but enabled=false, skipping')
+    return
+  }
+  if (!config.greenapi_instance_id || !config.greenapi_token) {
+    console.error('[WhatsApp] MISSING config — instance_id:', config.greenapi_instance_id, 'token:', !!config.greenapi_token)
+    throw new Error('Green API غير مُفعَّل — يرجى إدخال Instance ID و Token في الإعدادات')
+  }
+  const chatId = toGreenApiChatId(phone)
+  const url = `https://api.green-api.com/waInstance${config.greenapi_instance_id}/sendMessage/${config.greenapi_token}`
+  console.log(`[WhatsApp] attempt=${attempt} phone=${phone} chatId=${chatId}`)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, message: text }),
+      signal: AbortSignal.timeout(12000),
+    })
+    const body = await res.text()
+    console.log(`[WhatsApp] response status=${res.status} body=${body}`)
+    if (!res.ok) {
+      const status = res.status
+      if (attempt === 1 && (status === 401 || status === 466 || status === 429)) {
+        console.warn(`[WhatsApp] waking instance and retrying...`)
+        await wakeGreenApiInstance(config.greenapi_instance_id, config.greenapi_token)
+        return sendViaGreenApi(phone, text, 2)
+      }
+      throw new Error(`Green API error ${status}: ${body}`)
+    }
+  } catch (err: any) {
+    console.error(`[WhatsApp] fetch error attempt=${attempt}:`, err?.message)
+    throw err
+  }
+}
+
+async function sendViaCallMeBot(phone: string, apikey: string, text: string): Promise<void> {
+  const encoded = encodeURIComponent(text)
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${encoded}&apikey=${apikey}`
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+  if (!res.ok) {
+    console.error('[WhatsApp] CallMeBot status:', res.status)
+  }
+}
+
+let keepAliveTimer: ReturnType<typeof setInterval> | null = null
+
+export function startWhatsAppKeepAlive(): void {
+  if (keepAliveTimer) return
+  keepAliveTimer = setInterval(async () => {
+    try {
+      const config = await getWhatsAppConfig()
+      if (!config.enabled || !config.greenapi_instance_id || !config.greenapi_token) return
+      const state = await getGreenApiState(config.greenapi_instance_id, config.greenapi_token)
+      if (state === 'sleepMode' || state === 'starting') {
+        console.log(`[WhatsApp] Keep-alive: instance is "${state}" — sending wake-up ping`)
+        await wakeGreenApiInstance(config.greenapi_instance_id, config.greenapi_token)
+      } else {
+        console.log(`[WhatsApp] Keep-alive: instance state = ${state}`)
+      }
+    } catch (err: any) {
+      console.error('[WhatsApp] Keep-alive check failed:', err?.message)
+    }
+  }, 4 * 60 * 1000)
+  console.log('[WhatsApp] Keep-alive started (every 4 min)')
+}
+
+export function stopWhatsAppKeepAlive(): void {
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer)
+    keepAliveTimer = null
+    console.log('[WhatsApp] Keep-alive stopped')
+  }
+}
+
+export async function sendWhatsAppToPhone(phone: string, _apikey: string, text: string): Promise<void> {
+  if (!phone) return
+  await sendViaGreenApi(phone, text)
+}
+
+export async function sendWhatsAppToUser(userId: string, text: string): Promise<void> {
+  try {
+    const config = await getWhatsAppConfig()
+    if (!config.enabled) {
+      console.warn('[WhatsApp] sendWhatsAppToUser skipped — enabled=false, userId:', userId)
+      return
+    }
+    const [prof] = await db.select({
+      whatsapp_phone: profiles.whatsapp_phone,
+    }).from(profiles).where(eq(profiles.id, userId)).limit(1)
+    if (!prof?.whatsapp_phone) {
+      console.warn('[WhatsApp] sendWhatsAppToUser — no phone for userId:', userId)
+      return
+    }
+    await sendViaGreenApi(prof.whatsapp_phone, text)
+  } catch (err: any) {
+    console.error('[WhatsApp] Failed to send to user:', userId, err?.message)
+  }
+}
+
+export async function sendWhatsAppNotification(text: string): Promise<void> {
+  const config = await getWhatsAppConfig()
+  if (!config.enabled) {
+    console.warn('[WhatsApp] sendWhatsAppNotification skipped — enabled=false')
+    return
+  }
+  try {
+    if (config.greenapi_instance_id && config.greenapi_token && config.phone) {
+      await sendViaGreenApi(config.phone, text)
+    } else if (config.phone && config.apikey) {
+      await sendViaCallMeBot(config.phone, config.apikey, text)
+    } else {
+      console.warn('[WhatsApp] sendWhatsAppNotification — no valid provider config')
+    }
+  } catch (err: any) {
+    console.error('[WhatsApp] Failed to send admin notification:', err?.message)
+  }
+}
+```
+
+---
+
+**ملخص التغييرات:**
+1. أضفت `console.log('[WhatsApp] RAW DB row:')` عشان نشوف إيه الموجود فعلاً في DB
+2. حسّنت الـ JSON.parse بـ try/catch عشان لو الـ value تالف مايكسرش
+3. حذفت `updated_at: new Date()` من الـ `onConflictDoUpdate` — ده كان ممكن يسبب فشل صامت
+4. أضفت VERIFY log بعد الحفظ للتأكيد
+5. أضفت logs أوضح في `sendWhatsAppToUser` و`sendWhatsAppNotification`
+
+بعد التطبيق: روح Settings → WhatsApp، احفظ الإعدادات، وشاركني الـ console logs.

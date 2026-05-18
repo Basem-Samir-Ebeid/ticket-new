@@ -20,46 +20,67 @@ const DEFAULT_CONFIG: WhatsAppConfig = {
 
 export async function getWhatsAppConfig(): Promise<WhatsAppConfig> {
   try {
-    const [row] = await db.select({ value: systemSettings.value })
+    const rows = await db.select({ value: systemSettings.value })
       .from(systemSettings)
       .where(eq(systemSettings.key, 'whatsapp_config'))
       .limit(1)
+    const row = rows[0]
+    console.log('[WhatsApp] RAW DB row:', JSON.stringify(row))
     if (row?.value) {
-      const parsed = typeof row.value === 'string' ? JSON.parse(row.value) : row.value
+      let parsed: any
+      if (typeof row.value === 'string') {
+        try { parsed = JSON.parse(row.value) } catch { parsed = {} }
+      } else {
+        parsed = row.value
+      }
+      const enabledRaw = parsed.enabled
+      const enabledBool = enabledRaw === true || enabledRaw === 'true' || enabledRaw === 1 || enabledRaw === '1'
       const result: WhatsAppConfig = {
         ...DEFAULT_CONFIG,
         ...parsed,
-        enabled: parsed.enabled === true || parsed.enabled === 'true' || parsed.enabled === 1,
+        enabled: enabledBool,
       }
-      console.log('[WhatsApp] getWhatsAppConfig:', JSON.stringify(result))
+      console.log('[WhatsApp] getWhatsAppConfig result:', JSON.stringify(result))
       return result
     }
   } catch (err: any) {
     console.error('[WhatsApp] getWhatsAppConfig error:', err?.message)
   }
+  console.warn('[WhatsApp] No config found in DB — returning defaults (enabled=false)')
   return { ...DEFAULT_CONFIG }
 }
 
 export async function saveWhatsAppConfig(config: Partial<WhatsAppConfig>): Promise<WhatsAppConfig> {
   const existing = await getWhatsAppConfig()
+  let enabledFinal: boolean
+  if (config.enabled === true || config.enabled === ('true' as any) || config.enabled === (1 as any)) {
+    enabledFinal = true
+  } else if (config.enabled === false || config.enabled === ('false' as any) || config.enabled === (0 as any)) {
+    enabledFinal = false
+  } else {
+    enabledFinal = existing.enabled
+  }
   const merged: WhatsAppConfig = {
     ...existing,
     ...config,
-    enabled:
-      config.enabled === true || config.enabled === ('true' as any) || config.enabled === (1 as any)
-        ? true
-        : config.enabled === false || config.enabled === ('false' as any)
-        ? false
-        : existing.enabled,
+    enabled: enabledFinal,
   }
   const valueToStore = JSON.stringify(merged)
   console.log('[WhatsApp] saveWhatsAppConfig storing:', valueToStore)
-  await db.insert(systemSettings)
-    .values({ key: 'whatsapp_config', value: valueToStore })
-    .onConflictDoUpdate({
-      target: systemSettings.key,
-      set: { value: valueToStore, updated_at: new Date() },
-    })
+  try {
+    await db.insert(systemSettings)
+      .values({ key: 'whatsapp_config', value: valueToStore })
+      .onConflictDoUpdate({
+        target: systemSettings.key,
+        set: { value: valueToStore },
+      })
+    // Verify the save worked
+    const verify = await getWhatsAppConfig()
+    console.log('[WhatsApp] VERIFY after save — enabled:', verify.enabled, 'instance_id:', verify.greenapi_instance_id)
+  } catch (err: any) {
+    console.error('[WhatsApp] saveWhatsAppConfig DB error:', err?.message)
+    throw err
+  }
   return merged
 }
 
@@ -172,11 +193,17 @@ export async function sendWhatsAppToPhone(phone: string, _apikey: string, text: 
 export async function sendWhatsAppToUser(userId: string, text: string): Promise<void> {
   try {
     const config = await getWhatsAppConfig()
-    if (!config.enabled) return
+    if (!config.enabled) {
+      console.warn('[WhatsApp] sendWhatsAppToUser skipped — enabled=false, userId:', userId)
+      return
+    }
     const [prof] = await db.select({
       whatsapp_phone: profiles.whatsapp_phone,
     }).from(profiles).where(eq(profiles.id, userId)).limit(1)
-    if (!prof?.whatsapp_phone) return
+    if (!prof?.whatsapp_phone) {
+      console.warn('[WhatsApp] sendWhatsAppToUser — no phone for userId:', userId)
+      return
+    }
     await sendViaGreenApi(prof.whatsapp_phone, text)
   } catch (err: any) {
     console.error('[WhatsApp] Failed to send to user:', userId, err?.message)
@@ -185,12 +212,17 @@ export async function sendWhatsAppToUser(userId: string, text: string): Promise<
 
 export async function sendWhatsAppNotification(text: string): Promise<void> {
   const config = await getWhatsAppConfig()
-  if (!config.enabled) return
+  if (!config.enabled) {
+    console.warn('[WhatsApp] sendWhatsAppNotification skipped — enabled=false')
+    return
+  }
   try {
     if (config.greenapi_instance_id && config.greenapi_token && config.phone) {
       await sendViaGreenApi(config.phone, text)
     } else if (config.phone && config.apikey) {
       await sendViaCallMeBot(config.phone, config.apikey, text)
+    } else {
+      console.warn('[WhatsApp] sendWhatsAppNotification — no valid provider config')
     }
   } catch (err: any) {
     console.error('[WhatsApp] Failed to send admin notification:', err?.message)
