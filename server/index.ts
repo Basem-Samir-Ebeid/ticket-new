@@ -7,7 +7,7 @@ import { tickets, profiles, notifications, systemSettings } from '../shared/sche
 import { eq, and, lt, isNotNull, inArray } from 'drizzle-orm'
 import { broadcast } from './ws'
 import { sendEmail } from './email'
-import { sendWhatsAppNotification } from './whatsappConfig'
+import { sendWhatsAppNotification, startWhatsAppKeepAlive } from './whatsappConfig'
 import { runFactoryRotationNotifications } from './routes/factory-rotation'
 import { runOvertimeRotationNotifications } from './routes/overtime-rotation'
 
@@ -84,6 +84,7 @@ setInterval(() => {
 const PORT = parseInt(process.env.PORT || '3000')
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`)
+  startWhatsAppKeepAlive()
 })
 
 export default app

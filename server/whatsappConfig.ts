@@ -4,10 +4,8 @@ import { eq } from 'drizzle-orm'
 
 export interface WhatsAppConfig {
   enabled: boolean
-  // Green API (primary — send to any number without recipient activation)
   greenapi_instance_id: string
   greenapi_token: string
-  // Admin global notification phone
   phone: string
   apikey: string
 }
@@ -43,14 +41,32 @@ export async function saveWhatsAppConfig(config: Partial<WhatsAppConfig>): Promi
   return merged
 }
 
-// Normalize phone → Green API chatId format (e.g. +201023588751 → 201023588751@c.us)
 function toGreenApiChatId(phone: string): string {
   const digits = phone.replace(/\D/g, '')
   return `${digits}@c.us`
 }
 
-// Send via Green API (no recipient activation needed — just add phone number)
-async function sendViaGreenApi(phone: string, text: string): Promise<void> {
+async function wakeGreenApiInstance(instanceId: string, token: string): Promise<void> {
+  try {
+    const url = `https://api.green-api.com/waInstance${instanceId}/getStateInstance/${token}`
+    await fetch(url, { signal: AbortSignal.timeout(8000) })
+    await new Promise(resolve => setTimeout(resolve, 3000))
+  } catch {}
+}
+
+export async function getGreenApiState(instanceId: string, token: string): Promise<string> {
+  try {
+    const url = `https://api.green-api.com/waInstance${instanceId}/getStateInstance/${token}`
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return 'unknown'
+    const data = await res.json()
+    return data?.stateInstance ?? 'unknown'
+  } catch {
+    return 'unreachable'
+  }
+}
+
+async function sendViaGreenApi(phone: string, text: string, attempt = 1): Promise<void> {
   const config = await getWhatsAppConfig()
   if (!config.greenapi_instance_id || !config.greenapi_token) {
     throw new Error('Green API غير مُفعَّل — يرجى إدخال Instance ID و Token في الإعدادات')
@@ -61,15 +77,20 @@ async function sendViaGreenApi(phone: string, text: string): Promise<void> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chatId, message: text }),
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(12000),
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new Error(`Green API error ${res.status}: ${body}`)
+    const status = res.status
+    if (attempt === 1 && (status === 401 || status === 466 || status === 429)) {
+      console.warn(`[WhatsApp] Instance returned ${status} on attempt 1 — waking up and retrying...`)
+      await wakeGreenApiInstance(config.greenapi_instance_id, config.greenapi_token)
+      return sendViaGreenApi(phone, text, 2)
+    }
+    throw new Error(`Green API error ${status}: ${body}`)
   }
 }
 
-// Legacy CallMeBot (kept for backward compat — admin global notifications)
 async function sendViaCallMeBot(phone: string, apikey: string, text: string): Promise<void> {
   const encoded = encodeURIComponent(text)
   const url = `https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${encoded}&apikey=${apikey}`
@@ -79,26 +100,48 @@ async function sendViaCallMeBot(phone: string, apikey: string, text: string): Pr
   }
 }
 
-// Send to a specific phone number via Green API
+let keepAliveTimer: ReturnType<typeof setInterval> | null = null
+
+export function startWhatsAppKeepAlive(): void {
+  if (keepAliveTimer) return
+  keepAliveTimer = setInterval(async () => {
+    try {
+      const config = await getWhatsAppConfig()
+      if (!config.enabled || !config.greenapi_instance_id || !config.greenapi_token) return
+      const state = await getGreenApiState(config.greenapi_instance_id, config.greenapi_token)
+      if (state === 'sleepMode' || state === 'starting') {
+        console.log(`[WhatsApp] Keep-alive: instance is "${state}" — sending wake-up ping`)
+        await wakeGreenApiInstance(config.greenapi_instance_id, config.greenapi_token)
+      } else {
+        console.log(`[WhatsApp] Keep-alive: instance state = ${state}`)
+      }
+    } catch (err: any) {
+      console.error('[WhatsApp] Keep-alive check failed:', err?.message)
+    }
+  }, 4 * 60 * 1000)
+  console.log('[WhatsApp] Keep-alive started (every 4 min)')
+}
+
+export function stopWhatsAppKeepAlive(): void {
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer)
+    keepAliveTimer = null
+    console.log('[WhatsApp] Keep-alive stopped')
+  }
+}
+
 export async function sendWhatsAppToPhone(phone: string, _apikey: string, text: string): Promise<void> {
   if (!phone) return
   await sendViaGreenApi(phone, text)
 }
 
-// Send to a specific user (only needs whatsapp_phone in profile)
 export async function sendWhatsAppToUser(userId: string, text: string): Promise<void> {
   try {
     const config = await getWhatsAppConfig()
-    console.log('[WA-DEBUG] sendWhatsAppToUser called, userId:', userId, 'enabled:', config.enabled, 'token exists:', !!config.greenapi_token)
-    if (!config.enabled) {
-      console.log('[WA-DEBUG] WhatsApp disabled, skipping')
-      return
-    }
-
+    if (!config.enabled) return
     const [prof] = await db.select({
       whatsapp_phone: profiles.whatsapp_phone,
     }).from(profiles).where(eq(profiles.id, userId)).limit(1)
-
     if (!prof?.whatsapp_phone) return
     await sendViaGreenApi(prof.whatsapp_phone, text)
   } catch (err: any) {
@@ -106,14 +149,9 @@ export async function sendWhatsAppToUser(userId: string, text: string): Promise<
   }
 }
 
-// Legacy: global admin notification (tries Green API first, falls back to CallMeBot)
 export async function sendWhatsAppNotification(text: string): Promise<void> {
   const config = await getWhatsAppConfig()
-  console.log('[WA-DEBUG] sendWhatsAppNotification called, enabled:', config.enabled, 'token exists:', !!config.greenapi_token, 'phone:', config.phone)
-  if (!config.enabled) {
-    console.log('[WA-DEBUG] WhatsApp disabled, skipping')
-    return
-  }
+  if (!config.enabled) return
   try {
     if (config.greenapi_instance_id && config.greenapi_token && config.phone) {
       await sendViaGreenApi(config.phone, text)
