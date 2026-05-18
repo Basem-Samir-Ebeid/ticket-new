@@ -2390,6 +2390,36 @@ app.put('/api/factory-rotation/schedule/:id', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+app.post('/api/factory-rotation/schedule/assign', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { group_id, user_id, scheduled_date } = req.body
+    if (!group_id || !user_id || !scheduled_date)
+      return res.status(400).json({ error: 'group_id, user_id and scheduled_date are required' })
+    const dow = new Date(scheduled_date).getDay()
+    if (dow === 5 || dow === 6) return res.status(400).json({ error: 'Cannot assign on weekend' })
+    const { rows: existing } = await getPool().query(
+      'SELECT id FROM factory_rotation_schedule WHERE group_id=$1 AND scheduled_date=$2',
+      [group_id, scheduled_date]
+    )
+    let row
+    if (existing.length > 0) {
+      const { rows } = await getPool().query(
+        'UPDATE factory_rotation_schedule SET user_id=$1, notified=false WHERE id=$2 RETURNING *',
+        [user_id, existing[0].id]
+      )
+      row = rows[0]
+    } else {
+      const { rows } = await getPool().query(
+        'INSERT INTO factory_rotation_schedule (group_id, user_id, scheduled_date) VALUES ($1, $2, $3) RETURNING *',
+        [group_id, user_id, scheduled_date]
+      )
+      row = rows[0]
+    }
+    res.json(row)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // ── OVERTIME ROTATION ─────────────────────────────────────────────────────────
 app.get('/api/overtime-rotation/groups', requireAuth, async (req, res) => {
   try {
@@ -2493,6 +2523,34 @@ app.put('/api/overtime-rotation/schedule/:id', requireAuth, async (req, res) => 
     if (!user_id) return res.status(400).json({ error: 'user_id required' })
     const { rows } = await getPool().query('UPDATE overtime_rotation_schedule SET user_id=$1, notified=false WHERE id=$2 RETURNING *', [user_id, req.params.id])
     res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/overtime-rotation/schedule/assign', requireAuth, async (req, res) => {
+  try {
+    if (!isAdminRole(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { group_id, user_id, scheduled_date } = req.body
+    if (!group_id || !user_id || !scheduled_date)
+      return res.status(400).json({ error: 'group_id, user_id and scheduled_date are required' })
+    const { rows: existing } = await getPool().query(
+      'SELECT id FROM overtime_rotation_schedule WHERE group_id=$1 AND scheduled_date=$2',
+      [group_id, scheduled_date]
+    )
+    let row
+    if (existing.length > 0) {
+      const { rows } = await getPool().query(
+        'UPDATE overtime_rotation_schedule SET user_id=$1, notified=false WHERE id=$2 RETURNING *',
+        [user_id, existing[0].id]
+      )
+      row = rows[0]
+    } else {
+      const { rows } = await getPool().query(
+        'INSERT INTO overtime_rotation_schedule (group_id, user_id, scheduled_date) VALUES ($1, $2, $3) RETURNING *',
+        [group_id, user_id, scheduled_date]
+      )
+      row = rows[0]
+    }
+    res.json(row)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
