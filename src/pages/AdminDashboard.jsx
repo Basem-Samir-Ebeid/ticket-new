@@ -1944,42 +1944,60 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     </select>
                     <input value={ticketForm.affected_person} onChange={e=>setTicketForm(f=>({...f,affected_person:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all mt-2" placeholder="أو اكتب الاسم يدوياً" />
                   </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Assign To</label>
-                    <div className="rounded-xl p-2.5 max-h-36 overflow-y-auto space-y-0.5" style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)'}}>
-                      {users.filter(u => u.role === 'admin' || u.role === 'super_admin' || u.role === 'member').map(u => (
-                        <label key={u.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer transition-all">
+                  <div className="sm:col-span-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-[11px] text-slate-500 uppercase tracking-widest font-semibold">Assign To</label>
+                      <span className="text-[10px] text-indigo-400/70">يمكن اختيار أكثر من شخص ✓</span>
+                    </div>
+                    {assignedToIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {assignedToIds.map(uid => {
+                          const u = users.find(x => x.id === uid)
+                          return u ? (
+                            <span key={uid} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium"
+                              style={{background:'rgba(99,102,241,0.2)',color:'#a5b4fc',border:'1px solid rgba(99,102,241,0.35)'}}>
+                              ✓ {u.full_name || u.email}
+                              <button type="button" onClick={() => setAssignedToIds(prev => prev.filter(id => id !== uid))}
+                                className="text-indigo-300 hover:text-red-400 transition-colors leading-none ml-0.5 text-sm">×</button>
+                            </span>
+                          ) : null
+                        })}
+                      </div>
+                    )}
+                    <div className="rounded-xl overflow-hidden" style={{border:'1px solid rgba(99,102,241,0.25)'}}>
+                      {users.filter(u => u.role === 'admin' || u.role === 'super_admin' || u.role === 'member').length === 0 && (
+                        <p className="text-slate-600 text-xs px-3 py-3">No IT members available</p>
+                      )}
+                      {users.filter(u => u.role === 'admin' || u.role === 'super_admin' || u.role === 'member').map((u, i, arr) => (
+                        <label key={u.id}
+                          className="flex items-center gap-3 px-3 py-3 cursor-pointer transition-all"
+                          style={{
+                            background: assignedToIds.includes(u.id) ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.02)',
+                            borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                          }}>
+                          <div className="flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all"
+                            style={{
+                              background: assignedToIds.includes(u.id) ? 'rgba(99,102,241,0.9)' : 'transparent',
+                              borderColor: assignedToIds.includes(u.id) ? '#6366f1' : 'rgba(255,255,255,0.2)',
+                            }}>
+                            {assignedToIds.includes(u.id) && <span className="text-white text-xs font-bold">✓</span>}
+                          </div>
                           <input
                             type="checkbox"
                             checked={assignedToIds.includes(u.id)}
                             onChange={e => setAssignedToIds(prev =>
                               e.target.checked ? [...prev, u.id] : prev.filter(id => id !== u.id)
                             )}
-                            className="accent-indigo-500 w-3.5 h-3.5 flex-shrink-0"
+                            className="sr-only"
                           />
-                          <span className="text-slate-300 text-xs truncate">{u.full_name || u.email}</span>
-                          <span className="text-slate-600 text-[10px] flex-shrink-0">({u.role})</span>
+                          <span className="text-sm flex-1" style={{color: assignedToIds.includes(u.id) ? '#c7d2fe' : '#94a3b8'}}>{u.full_name || u.email}</span>
+                          <span className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0"
+                            style={{background:'rgba(255,255,255,0.06)',color:'#64748b'}}>
+                            {u.role}
+                          </span>
                         </label>
                       ))}
-                      {users.filter(u => u.role === 'admin' || u.role === 'super_admin' || u.role === 'member').length === 0 && (
-                        <p className="text-slate-600 text-xs px-2 py-1">No IT members available</p>
-                      )}
                     </div>
-                    {assignedToIds.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {assignedToIds.map(uid => {
-                          const u = users.find(x => x.id === uid)
-                          return u ? (
-                            <span key={uid} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
-                              style={{background:'rgba(99,102,241,0.12)',color:'#a5b4fc',border:'1px solid rgba(99,102,241,0.2)'}}>
-                              {u.full_name || u.email}
-                              <button type="button" onClick={() => setAssignedToIds(prev => prev.filter(id => id !== uid))}
-                                className="text-slate-500 hover:text-slate-300 transition-colors leading-none ml-0.5">×</button>
-                            </span>
-                          ) : null
-                        })}
-                      </div>
-                    )}
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Related Asset</label>
