@@ -485,6 +485,7 @@ export default function MemberDashboard() {
             <h2 className="text-white text-xl font-semibold mb-2">{selectedTicket.title}</h2>
             {selectedTicket.description && <p className="text-slate-400">{selectedTicket.description}</p>}
             {selectedTicket.affected_person && <p className="text-slate-500 text-sm mt-2">👤 {selectedTicket.affected_person}</p>}
+            <p className="text-slate-500 text-sm mt-2">🧑‍💻 Assigned to: <span className="text-slate-300 font-medium">{selectedTicket.assignees?.length > 0 ? selectedTicket.assignees.map(a => a.profile?.full_name || a.profile?.email || '?').join(', ') : 'Unassigned'}</span></p>
 
             {(isMyTicket(selectedTicket) || isAssignee) && (
               <div className="mt-4 pt-4 border-t border-white/10">
@@ -798,6 +799,7 @@ export default function MemberDashboard() {
                       </div>
                       <h3 className="text-white text-sm font-medium group-hover:text-blue-200 transition-colors leading-snug">{t.title}</h3>
                       {t.description && <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 leading-relaxed">{t.description}</p>}
+                      <p className="text-slate-500 text-xs mt-1.5">🧑‍💻 <span className="text-slate-400">{t.assignees?.length > 0 ? t.assignees.map(a => a.profile?.full_name || a.profile?.email).join(', ') : 'Unassigned'}</span></p>
                       {t.created_by_profile?.full_name && (
                         <div className="flex items-center gap-2 mt-2 flex-wrap" onClick={e => e.stopPropagation()}>
                           <span className="text-slate-500 text-xs">👤 From: <span className="text-slate-300 font-medium">{t.created_by_profile.full_name}</span></span>
@@ -982,6 +984,7 @@ export default function MemberDashboard() {
                           </div>
                           <h3 className="text-slate-100 text-sm font-semibold group-hover:text-white transition-colors leading-snug">{t.title}</h3>
                           {t.description && <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 leading-relaxed">{t.description}</p>}
+                          <p className="text-slate-500 text-xs mt-1.5">🧑‍💻 <span className="text-slate-400">{t.assignees?.length > 0 ? t.assignees.map(a => a.profile?.full_name || a.profile?.email).join(', ') : 'Unassigned'}</span></p>
                         </div>
                         <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 flex-shrink-0 mt-0.5 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
