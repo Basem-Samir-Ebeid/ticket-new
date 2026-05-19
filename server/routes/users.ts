@@ -6,6 +6,7 @@ import { eq, desc, and, gte } from 'drizzle-orm'
 import { requireAuth, requireAdmin, checkPermission } from '../auth'
 import { broadcast } from '../ws'
 import { sendWhatsAppToPhone } from '../whatsappConfig'
+import { logAudit } from './audit-logs'
 
 const router = Router()
 
@@ -45,7 +46,6 @@ router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) 
     const [user] = await db.insert(profiles).values({
       email: email.toLowerCase(),
       password_hash,
-      plain_password: password,
       full_name: full_name || null,
       role: role || 'employee',
       can_view_attendance: can_view_attendance || false,
@@ -65,6 +65,15 @@ router.post('/', requireAuth as any, requireAdmin as any, async (req: any, res) 
       direct_manager: direct_manager || null,
       notes: notes || null,
     }).returning()
+
+    logAudit({
+      user_id: req.user.id,
+      user_name: req.profile?.full_name,
+      action_type: 'user_created',
+      entity_type: 'user',
+      entity_id: user.id,
+      description: `User created: ${email}`,
+    }).catch(() => {})
 
     const { password_hash: _, ...safeUser } = user
     res.json(safeUser)
@@ -123,6 +132,18 @@ router.patch('/:id', requireAuth as any, requireAdmin as any, async (req: any, r
 
     if (!user) return res.status(404).json({ error: 'User not found' })
     console.log('[PATCH /users/:id] saved can_view_whatsapp_contacts:', user.can_view_whatsapp_contacts)
+
+    logAudit({
+      user_id: req.user.id,
+      user_name: req.profile?.full_name,
+      action_type: 'user_updated',
+      entity_type: 'user',
+      entity_id: user.id,
+      description: `User updated: ${user.email}`,
+      before: { role: updateData.role !== undefined ? undefined : user.role, permissions: updateData.permissions !== undefined ? undefined : user.permissions },
+      after: { role: updateData.role, permissions: updateData.permissions },
+    }).catch(() => {})
+
     const { password_hash, ...safeUser } = user
     res.json(safeUser)
   } catch (err: any) {
@@ -166,8 +187,16 @@ router.post('/:id/reset-password', requireAuth as any, requireAdmin as any, asyn
     if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
 
     const password_hash = await bcrypt.hash(newPassword, 10)
-    const [user] = await db.update(profiles).set({ password_hash, plain_password: newPassword, must_change_password: true }).where(eq(profiles.id, req.params.id)).returning()
+    const [user] = await db.update(profiles).set({ password_hash, must_change_password: true }).where(eq(profiles.id, req.params.id)).returning()
     if (!user) return res.status(404).json({ error: 'User not found' })
+    logAudit({
+      user_id: req.user.id,
+      user_name: req.profile?.full_name,
+      action_type: 'password_reset_by_admin',
+      entity_type: 'user',
+      entity_id: req.params.id,
+      description: `Admin reset password for user: ${req.params.id}`,
+    }).catch(() => {})
     res.json({ success: true })
   } catch (err: any) {
     console.error('POST /users/:id/reset-password error:', err)
@@ -208,6 +237,14 @@ router.delete('/:id', requireAuth as any, requireAdmin as any, async (req: any, 
     broadcast(userId, 'session_revoked', { reason: 'account_deleted' })
     await new Promise(r => setTimeout(r, 700))
     await db.delete(profiles).where(eq(profiles.id, userId))
+    logAudit({
+      user_id: req.user.id,
+      user_name: req.profile?.full_name,
+      action_type: 'user_deleted',
+      entity_type: 'user',
+      entity_id: userId,
+      description: `User deleted: ${userId}`,
+    }).catch(() => {})
     res.json({ success: true })
   } catch (err: any) {
     console.error('DELETE /users/:id error:', err)

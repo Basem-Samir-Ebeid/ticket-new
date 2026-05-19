@@ -6,6 +6,7 @@ import { requireAuth } from '../auth'
 import { broadcast, broadcastAll } from '../ws'
 import { sendWhatsAppToUser } from '../whatsappConfig'
 import { sendEmail } from '../email'
+import { logAudit } from './audit-logs'
 
 const router = Router()
 
@@ -270,6 +271,15 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       console.error('WhatsApp leave notification error:', waErr)
     }
 
+    logAudit({
+      user_id: req.user.id,
+      user_name: req.profile?.full_name,
+      action_type: 'leave_created',
+      entity_type: 'leave',
+      entity_id: leave.id,
+      description: `Leave request created: ${ltype} (${start_date} → ${end_date})`,
+    }).catch(() => {})
+
     broadcastAll('leave_update', { action: 'created', leave_id: leave.id })
     res.json({ ...leave, conflict_count: conflicting.length })
   } catch (err: any) {
@@ -285,23 +295,35 @@ router.patch('/:id/approve', requireAuth as any, async (req: any, res) => {
     const [existing] = await db.select().from(leaveRequests).where(eq(leaveRequests.id, req.params.id))
     if (!existing) return res.status(404).json({ error: 'Leave request not found' })
 
-    const [leave] = await db.update(leaveRequests).set({
-      status: 'approved',
-      admin_note: null,
-      decided_by: req.user.id,
-      decided_at: new Date(),
-    }).where(eq(leaveRequests.id, req.params.id)).returning()
+    let leave: any
+    await db.transaction(async (tx) => {
+      const [updated] = await tx.update(leaveRequests).set({
+        status: 'approved',
+        admin_note: null,
+        decided_by: req.user.id,
+        decided_at: new Date(),
+      }).where(eq(leaveRequests.id, req.params.id)).returning()
+      leave = updated
+
+      if (updated && existing.status !== 'approved') {
+        const days = updated.days_count || 1
+        const ltype = updated.leave_type || 'annual'
+        if (ltype === 'annual') {
+          const [prof] = await tx.select({ lb: profiles.leave_balance }).from(profiles).where(eq(profiles.id, updated.user_id))
+          await tx.update(profiles).set({ leave_balance: Math.max(0, (prof?.lb || 0) - days) }).where(eq(profiles.id, updated.user_id))
+        } else if (ltype === 'sick') {
+          const [prof] = await tx.select({ lb: profiles.sick_leave_balance }).from(profiles).where(eq(profiles.id, updated.user_id))
+          await tx.update(profiles).set({ sick_leave_balance: Math.max(0, (prof?.lb || 0) - days) }).where(eq(profiles.id, updated.user_id))
+        } else if (ltype === 'emergency') {
+          const [prof] = await tx.select({ lb: profiles.emergency_leave_balance }).from(profiles).where(eq(profiles.id, updated.user_id))
+          await tx.update(profiles).set({ emergency_leave_balance: Math.max(0, (prof?.lb || 0) - days) }).where(eq(profiles.id, updated.user_id))
+        }
+      }
+    })
 
     if (leave && existing.status !== 'approved') {
       const days = leave.days_count || 1
       const ltype = leave.leave_type || 'annual'
-      if (ltype === 'annual') {
-        await db.update(profiles).set({ leave_balance: Math.max(0, (await db.select({ lb: profiles.leave_balance }).from(profiles).where(eq(profiles.id, leave.user_id)))[0]?.lb - days || 0) }).where(eq(profiles.id, leave.user_id))
-      } else if (ltype === 'sick') {
-        await db.update(profiles).set({ sick_leave_balance: Math.max(0, (await db.select({ lb: profiles.sick_leave_balance }).from(profiles).where(eq(profiles.id, leave.user_id)))[0]?.lb - days || 0) }).where(eq(profiles.id, leave.user_id))
-      } else if (ltype === 'emergency') {
-        await db.update(profiles).set({ emergency_leave_balance: Math.max(0, (await db.select({ lb: profiles.emergency_leave_balance }).from(profiles).where(eq(profiles.id, leave.user_id)))[0]?.lb - days || 0) }).where(eq(profiles.id, leave.user_id))
-      }
 
       const typeLabel: Record<string, string> = { annual: 'سنوية', sick: 'مرضية', emergency: 'طارئة', unpaid: 'بدون راتب' }
       const [notif] = await db.insert(notifications).values({
@@ -337,6 +359,17 @@ router.patch('/:id/approve', requireAuth as any, async (req: any, res) => {
         console.error('WhatsApp admin leave approval notification error:', waErr)
       }
 
+      logAudit({
+        user_id: req.user.id,
+        user_name: req.profile?.full_name,
+        action_type: 'leave_approved',
+        entity_type: 'leave',
+        entity_id: leave.id,
+        description: `Leave approved: ${leave.start_date} → ${leave.end_date}`,
+        before: { status: existing.status },
+        after: { status: 'approved' },
+      }).catch(() => {})
+
       broadcastAll('leave_update', { action: 'approved', leave_id: leave.id })
     }
 
@@ -355,29 +388,33 @@ router.patch('/:id/reject', requireAuth as any, async (req: any, res) => {
     const [existing] = await db.select().from(leaveRequests).where(eq(leaveRequests.id, req.params.id))
     if (!existing) return res.status(404).json({ error: 'Leave request not found' })
 
-    const [leave] = await db.update(leaveRequests).set({
-      status: 'rejected',
-      admin_note: note || null,
-      decided_by: req.user.id,
-      decided_at: new Date(),
-    }).where(eq(leaveRequests.id, req.params.id)).returning()
+    let leave: any
+    await db.transaction(async (tx) => {
+      const [updated] = await tx.update(leaveRequests).set({
+        status: 'rejected',
+        admin_note: note || null,
+        decided_by: req.user.id,
+        decided_at: new Date(),
+      }).where(eq(leaveRequests.id, req.params.id)).returning()
+      leave = updated
 
-    if (leave) {
-      // If the leave was previously approved, restore the balance
-      if (existing.status === 'approved') {
-        const days = leave.days_count || 1
-        const ltype = leave.leave_type || 'annual'
+      if (updated && existing.status === 'approved') {
+        const days = updated.days_count || 1
+        const ltype = updated.leave_type || 'annual'
         if (ltype === 'annual') {
-          const [prof] = await db.select({ lb: profiles.leave_balance }).from(profiles).where(eq(profiles.id, leave.user_id))
-          await db.update(profiles).set({ leave_balance: (prof?.lb || 0) + days }).where(eq(profiles.id, leave.user_id))
+          const [prof] = await tx.select({ lb: profiles.leave_balance }).from(profiles).where(eq(profiles.id, updated.user_id))
+          await tx.update(profiles).set({ leave_balance: (prof?.lb || 0) + days }).where(eq(profiles.id, updated.user_id))
         } else if (ltype === 'sick') {
-          const [prof] = await db.select({ lb: profiles.sick_leave_balance }).from(profiles).where(eq(profiles.id, leave.user_id))
-          await db.update(profiles).set({ sick_leave_balance: (prof?.lb || 0) + days }).where(eq(profiles.id, leave.user_id))
+          const [prof] = await tx.select({ lb: profiles.sick_leave_balance }).from(profiles).where(eq(profiles.id, updated.user_id))
+          await tx.update(profiles).set({ sick_leave_balance: (prof?.lb || 0) + days }).where(eq(profiles.id, updated.user_id))
         } else if (ltype === 'emergency') {
-          const [prof] = await db.select({ lb: profiles.emergency_leave_balance }).from(profiles).where(eq(profiles.id, leave.user_id))
-          await db.update(profiles).set({ emergency_leave_balance: (prof?.lb || 0) + days }).where(eq(profiles.id, leave.user_id))
+          const [prof] = await tx.select({ lb: profiles.emergency_leave_balance }).from(profiles).where(eq(profiles.id, updated.user_id))
+          await tx.update(profiles).set({ emergency_leave_balance: (prof?.lb || 0) + days }).where(eq(profiles.id, updated.user_id))
         }
       }
+    })
+
+    if (leave) {
 
       const [notif] = await db.insert(notifications).values({
         user_id: leave.user_id,
@@ -410,6 +447,17 @@ router.patch('/:id/reject', requireAuth as any, async (req: any, res) => {
       } catch (waErr) {
         console.error('WhatsApp admin leave rejection notification error:', waErr)
       }
+
+      logAudit({
+        user_id: req.user.id,
+        user_name: req.profile?.full_name,
+        action_type: 'leave_rejected',
+        entity_type: 'leave',
+        entity_id: leave.id,
+        description: `Leave rejected: ${leave.start_date} → ${leave.end_date}`,
+        before: { status: existing.status },
+        after: { status: 'rejected' },
+      }).catch(() => {})
 
       broadcastAll('leave_update', { action: 'rejected', leave_id: leave.id })
     }

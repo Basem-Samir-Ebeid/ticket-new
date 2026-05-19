@@ -1,0 +1,204 @@
+Please implement multi-assignee support for tickets. A ticket should support assigning one or more users (IT members/admins). Read everything carefully before starting.
+
+---
+
+## Step 1 — Add `ticket_assignees` table to the schema
+
+**File: `shared/schema.ts`**
+
+Add a new join table after the `tickets` table definition:
+
+```ts
+export const ticketAssignees = pgTable('ticket_assignees', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ticket_id: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  assigned_at: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
+  assigned_by: uuid('assigned_by').references(() => profiles.id, { onDelete: 'set null' }),
+})
+```
+
+Also export its type:
+```ts
+export type TicketAssignee = typeof ticketAssignees.$inferSelect
+```
+
+Then run: `npm run db:push` to apply the migration.
+
+---
+
+## Step 2 — Update the backend
+
+**File: `server/routes/tickets.ts`**
+
+### 2a — Import the new table
+```ts
+import { tickets, ticketReplies, profiles, notifications, ticketTemplates, ticketHistory, assets, ticketAssignees } from '../../shared/schema'
+```
+
+### 2b — Update `withProfiles()` to include assignees list
+
+In the `withProfiles()` function, after fetching the profileMap, also fetch all assignee records for the returned ticket IDs:
+
+```ts
+async function withProfiles(rows: any[]) {
+  const allProfiles = await db.select({
+    id: profiles.id, full_name: profiles.full_name, email: profiles.email,
+    role: profiles.role, whatsapp_phone: profiles.whatsapp_phone
+  }).from(profiles)
+  const profileMap = new Map(allProfiles.map(p => [p.id, p]))
+
+  // Fetch multi-assignees
+  const ticketIds = rows.map(t => t.id)
+  let assigneesMap = new Map<string, any[]>()
+  if (ticketIds.length > 0) {
+    const assigneeRows = await db.select().from(ticketAssignees)
+      .where(inArray(ticketAssignees.ticket_id, ticketIds))
+    for (const a of assigneeRows) {
+      if (!assigneesMap.has(a.ticket_id)) assigneesMap.set(a.ticket_id, [])
+      assigneesMap.get(a.ticket_id)!.push({
+        ...a,
+        profile: profileMap.get(a.user_id) || null
+      })
+    }
+  }
+
+  // ... rest of asset fetching ...
+
+  return rows.map(t => ({
+    ...t,
+    created_by_profile: profileMap.get(t.created_by) || null,
+    assigned_to_profile: profileMap.get(t.assigned_to) || null,
+    assignees: assigneesMap.get(t.id) || [],   // <-- new field
+    asset: t.asset_id ? assetMap.get(t.asset_id) || null : null,
+  }))
+}
+```
+
+### 2c — Add a dedicated PATCH endpoint for multi-assign
+
+Add this new route (before the existing `PATCH /:id`):
+
+```ts
+// PATCH /api/tickets/:id/assignees — set the full list of assignees (super_admin/admin only)
+router.patch('/:id/assignees', requireAuth as any, async (req: any, res) => {
+  try {
+    if (req.profile.role !== 'admin' && req.profile.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Admin only' })
+    }
+    const { user_ids } = req.body  // array of user UUIDs
+    if (!Array.isArray(user_ids)) return res.status(400).json({ error: 'user_ids must be an array' })
+
+    const [ticket] = await db.select().from(tickets).where(eq(tickets.id, req.params.id))
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
+
+    // Replace all assignees atomically
+    await db.transaction(async (tx) => {
+      await tx.delete(ticketAssignees).where(eq(ticketAssignees.ticket_id, req.params.id))
+      if (user_ids.length > 0) {
+        await tx.insert(ticketAssignees).values(
+          user_ids.map((uid: string) => ({
+            ticket_id: req.params.id,
+            user_id: uid,
+            assigned_by: req.user.id,
+          }))
+        )
+      }
+      // Keep legacy assigned_to pointing to the first assignee (for backward compat)
+      await tx.update(tickets)
+        .set({ assigned_to: user_ids[0] || null })
+        .where(eq(tickets.id, req.params.id))
+    })
+
+    // Notify each new assignee
+    for (const uid of user_ids) {
+      const msg = `🎫 You have been assigned to ticket: "${ticket.title}"`
+      await db.insert(notifications).values({ user_id: uid, ticket_id: ticket.id, message: msg })
+      broadcast(uid, 'notification', { ticket_id: ticket.id, message: msg })
+      sendWhatsAppToUser(uid, msg).catch(() => {})
+    }
+
+    const [updated] = await db.select().from(tickets).where(eq(tickets.id, req.params.id))
+    const result = await withProfiles([updated])
+    res.json(result[0])
+  } catch (err: any) {
+    console.error('PATCH /tickets/:id/assignees error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to update assignees' })
+  }
+})
+```
+
+---
+
+## Step 3 — Update the frontend
+
+### 3a — Add `api.updateTicketAssignees()` to the API client
+
+**File: `src/lib/api.js`**
+
+Add:
+```js
+updateTicketAssignees: (id, userIds) =>
+  fetchJSON(`/api/tickets/${id}/assignees`, {
+    method: 'PATCH',
+    body: JSON.stringify({ user_ids: userIds })
+  }),
+```
+
+### 3b — Update the ticket detail panel in AdminDashboard
+
+**File: `src/pages/AdminDashboard.jsx`**
+
+In the ticket detail/edit panel, find where `assigned_to` is shown (currently a single `<select>`). Replace it with a multi-select UI:
+
+- Show a list of all IT members (role = 'member' or 'admin')
+- Each member has a checkbox next to their name
+- Pre-check the members who are already in `selectedTicket.assignees`
+- Show each currently assigned member as a small badge/chip (with their name and an × to remove)
+- Add a "Save assignees" button that calls `api.updateTicketAssignees(selectedTicket.id, selectedUserIds)`
+- After saving, refresh the ticket data and show a success toast
+
+The UI should look like this (use Tailwind + the existing dark theme):
+```
+Assigned to
+[ ] Ahmed Mohamed
+[x] Sara Ali           ×
+[x] Mohamed Hassan     ×
+[ ] Khaled Ibrahim
+         [Save assignees]
+```
+
+Also update any place that shows "Assigned to: [name]" to show all assignees: e.g. "Sara Ali, Mohamed Hassan" or chips.
+
+### 3c — Update ticket list display
+
+In the ticket list/cards (both AdminDashboard and MemberDashboard), where it currently shows:
+```
+Assigned to: Sara Ali
+```
+
+Change it to use `ticket.assignees` if it has items, otherwise fall back to `ticket.assigned_to_profile`:
+```jsx
+const assigneeNames = ticket.assignees?.length > 0
+  ? ticket.assignees.map(a => a.profile?.full_name || a.profile?.email).join(', ')
+  : ticket.assigned_to_profile?.full_name || 'Unassigned'
+```
+
+---
+
+## Step 4 — Update ticket creation form
+
+**File: `src/pages/AdminDashboard.jsx`** — the new ticket form
+
+Change the current single `<select>` for assigned_to to a multi-select checkboxes list. Store selected IDs as an array `assignedToIds`. On ticket creation:
+1. Create the ticket with `assigned_to: assignedToIds[0] || null` (first pick for backward compat)
+2. If `assignedToIds.length > 1`, immediately call `api.updateTicketAssignees(newTicket.id, assignedToIds)`
+
+---
+
+## General Rules
+
+- Keep `assigned_to` column on the tickets table working — always keep it equal to the first assignee for backward compatibility with notifications, SLA checks, and member visibility
+- Do not break any existing ticket functionality
+- The multi-assignee feature is only available to admin and super_admin roles
+- After finishing, test by: creating a ticket with 2 assignees, verifying both show in the list, and verifying both receive notifications

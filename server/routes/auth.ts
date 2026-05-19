@@ -66,7 +66,7 @@ router.post('/change-password', requireAuth as any, async (req: any, res) => {
     if (!valid) return res.status(401).json({ error: 'Current password incorrect' })
 
     const password_hash = await bcrypt.hash(newPassword, 10)
-    await db.update(profiles).set({ password_hash, plain_password: newPassword, must_change_password: false }).where(eq(profiles.id, req.user.id))
+    await db.update(profiles).set({ password_hash, must_change_password: false }).where(eq(profiles.id, req.user.id))
     res.json({ success: true })
   } catch (err: any) {
     console.error('POST /change-password error:', err)
@@ -82,7 +82,7 @@ router.post('/force-change-password', requireAuth as any, async (req: any, res) 
     if (newPassword.length < 6) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.' })
 
     const password_hash = await bcrypt.hash(newPassword, 10)
-    await db.update(profiles).set({ password_hash, plain_password: newPassword, must_change_password: false }).where(eq(profiles.id, req.user.id))
+    await db.update(profiles).set({ password_hash, must_change_password: false }).where(eq(profiles.id, req.user.id))
     res.json({ success: true })
   } catch (err: any) {
     console.error('POST /force-change-password error:', err)

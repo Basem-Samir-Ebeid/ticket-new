@@ -3,6 +3,7 @@ import { db } from '../db'
 import { tickets, ticketReplies, profiles, notifications, ticketTemplates, ticketHistory, assets } from '../../shared/schema'
 import { eq, and, desc, or, inArray, sql as drizzleSql } from 'drizzle-orm'
 import { requireAuth } from '../auth'
+import { logAudit } from './audit-logs'
 import { broadcast, broadcastAll } from '../ws'
 import { sendPushToAdmins } from './push'
 import { sendWhatsAppNotification, sendWhatsAppToUser } from '../whatsappConfig'
@@ -259,6 +260,15 @@ router.post('/', requireAuth as any, async (req: any, res) => {
       console.error('WhatsApp admin ticket notification error:', waErr)
     }
 
+    logAudit({
+      user_id: req.user.id,
+      user_name: req.profile?.full_name,
+      action_type: 'ticket_created',
+      entity_type: 'ticket',
+      entity_id: ticket.id,
+      description: `Ticket created: ${ticket.title}`,
+    }).catch(() => {})
+
     broadcastAll('ticket_update', { action: 'created', ticket_id: ticket.id, is_request: ticket.is_request })
     res.json(ticket)
   } catch (err: any) {
@@ -390,6 +400,19 @@ router.patch('/:id', requireAuth as any, async (req: any, res) => {
       })().catch(() => {})
     }
 
+    if (status !== undefined && existing.status !== status) {
+      logAudit({
+        user_id: req.user.id,
+        user_name: req.profile?.full_name,
+        action_type: 'ticket_status_changed',
+        entity_type: 'ticket',
+        entity_id: ticket.id,
+        description: `Ticket status changed from ${existing.status} to ${status}`,
+        before: { status: existing.status },
+        after: { status },
+      }).catch(() => {})
+    }
+
     broadcastAll('ticket_update', { action: 'updated', ticket_id: ticket.id, status: ticket.status })
     res.json(ticket)
   } catch (err: any) {
@@ -441,6 +464,14 @@ router.post('/:id/rate', requireAuth as any, async (req: any, res) => {
 router.delete('/:id', requireAuth as any, async (req: any, res) => {
   try {
     await db.delete(tickets).where(eq(tickets.id, req.params.id))
+    logAudit({
+      user_id: req.user.id,
+      user_name: req.profile?.full_name,
+      action_type: 'ticket_deleted',
+      entity_type: 'ticket',
+      entity_id: req.params.id,
+      description: `Ticket deleted: ${req.params.id}`,
+    }).catch(() => {})
     broadcastAll('ticket_update', { action: 'deleted', ticket_id: req.params.id })
     res.json({ success: true })
   } catch (err: any) {
