@@ -545,14 +545,43 @@ router.delete('/:id', requireAuth as any, async (req: any, res) => {
 
 router.post('/:id/accept', requireAuth as any, async (req: any, res) => {
   try {
-    const { assigned_to } = req.body
+    if (req.profile.role !== 'admin' && req.profile.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Admin only' })
+    }
+
+    // Support both single assigned_to (legacy) and assigned_to_ids array (new)
+    const { assigned_to, assigned_to_ids } = req.body
+    const assigneeIds: string[] = assigned_to_ids?.length
+      ? assigned_to_ids
+      : assigned_to ? [assigned_to] : []
+
+    if (assigneeIds.length === 0) {
+      return res.status(400).json({ error: 'At least one assignee is required' })
+    }
+
+    // Use first assignee for legacy assigned_to column
+    const primaryAssignee = assigneeIds[0]
+
     const [ticket] = await db.update(tickets).set({
       request_status: 'accepted',
-      assigned_to,
+      assigned_to: primaryAssignee,
       is_request: false,
       opened_at: new Date(),
     }).where(eq(tickets.id, req.params.id)).returning()
 
+    // Insert into ticket_assignees table for all assignees
+    if (ticket && assigneeIds.length > 0) {
+      await db.delete(ticketAssignees).where(eq(ticketAssignees.ticket_id, ticket.id))
+      await db.insert(ticketAssignees).values(
+        assigneeIds.map((uid: string) => ({
+          ticket_id: ticket.id,
+          user_id: uid,
+          assigned_by: req.user.id,
+        }))
+      )
+    }
+
+    // Notify the requester
     if (ticket?.created_by) {
       const [notif] = await db.insert(notifications).values({
         user_id: ticket.created_by,
@@ -563,8 +592,16 @@ router.post('/:id/accept', requireAuth as any, async (req: any, res) => {
       sendWhatsAppToUser(ticket.created_by, `✅ تم قبول طلبك\nالتيكت: "${ticket.title}"\nتم قبوله وإسناده`).catch(() => {})
     }
 
-    notifyTicketAccepted(ticket).catch(() => {})
+    // Notify each assigned member
+    for (const uid of assigneeIds) {
+      if (uid === ticket?.created_by) continue
+      const msg = `🎫 You have been assigned to ticket: "${ticket?.title}"`
+      await db.insert(notifications).values({ user_id: uid, ticket_id: ticket?.id, message: msg })
+      broadcast(uid, 'notification', { ticket_id: ticket?.id, message: msg })
+      sendWhatsAppToUser(uid, msg).catch(() => {})
+    }
 
+    notifyTicketAccepted(ticket).catch(() => {})
     broadcastAll('ticket_update', { action: 'accepted', ticket_id: ticket?.id })
     res.json(ticket)
   } catch (err: any) {

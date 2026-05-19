@@ -59,7 +59,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [loading, setLoading] = useState(false)
   const [requests, setRequests] = useState([])
   const [acceptingRequest, setAcceptingRequest] = useState(null)
-  const [assignTo, setAssignTo] = useState('')
+  const [assignToIds, setAssignToIds] = useState([])
   const [loginTimes, setLoginTimes] = useState([])
   const [selectedDate, setSelectedDate] = useState(getLocalDateString())
   const [todayLogin, setTodayLogin] = useState(null)
@@ -814,11 +814,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   }
 
   async function acceptRequest(request) {
-    if (!assignTo) return
+    if (!assignToIds.length) return
     setLoading(true)
     try {
-      await api.acceptRequest(request.id, assignTo)
-      setAcceptingRequest(null); setAssignTo('')
+      await api.acceptRequest(request.id, assignToIds)
+      setAcceptingRequest(null); setAssignToIds([])
       fetchRequests(); fetchTickets()
     } catch (e) { setMsg('Error: ' + e.message) }
     setLoading(false)
@@ -2202,7 +2202,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   <div className="flex flex-col gap-1.5 min-w-fit">
                     {r.request_status === 'pending_review' && (
                       <>
-                        <button onClick={()=>{setAcceptingRequest(r);setAssignTo('')}} className="bg-emerald-800/60 hover:bg-emerald-700/70 text-emerald-300 text-xs px-3 py-1.5 rounded-xl border border-emerald-600/20 transition-all">Accept</button>
+                        <button onClick={()=>{setAcceptingRequest(r);setAssignToIds([])}} className="bg-emerald-800/60 hover:bg-emerald-700/70 text-emerald-300 text-xs px-3 py-1.5 rounded-xl border border-emerald-600/20 transition-all">Accept</button>
                         <button onClick={()=>refuseRequest(r)} disabled={loading} className="bg-red-900/30 hover:bg-red-800/50 text-red-400 text-xs px-3 py-1.5 rounded-xl border border-red-500/20 transition-all">Refuse</button>
                       </>
                     )}
@@ -2213,13 +2213,48 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 {acceptingRequest?.id === r.id && (
                   <div className="mt-4 pt-4 border-t border-white/8 animate-scaleIn">
                     <label className="block text-[11px] text-slate-500 mb-2 uppercase tracking-widest font-semibold">Assign to</label>
+
+                    {assignToIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        {assignToIds.map(uid => {
+                          const u = users.find(x => x.id === uid)
+                          return (
+                            <span key={uid} className="inline-flex items-center gap-1.5 bg-emerald-900/40 border border-emerald-600/30 text-emerald-300 text-xs px-2.5 py-1 rounded-full">
+                              {u?.full_name || u?.email}
+                              <button type="button" onClick={() => setAssignToIds(prev => prev.filter(id => id !== uid))} className="text-emerald-400 hover:text-red-400 transition-colors leading-none">×</button>
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    <div className="max-h-44 overflow-y-auto rounded-xl border border-white/8 bg-white/3 divide-y divide-white/5 mb-3">
+                      {users.filter(u => u.role !== 'super_admin').map(u => (
+                        <label key={u.id} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-white/5 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={assignToIds.includes(u.id)}
+                            onChange={e => {
+                              if (e.target.checked) setAssignToIds(prev => [...prev, u.id])
+                              else setAssignToIds(prev => prev.filter(id => id !== u.id))
+                            }}
+                            className="w-4 h-4 rounded accent-emerald-500"
+                          />
+                          <span className="text-slate-300 text-sm flex-1">{u.full_name || u.email}</span>
+                          <span className="text-slate-500 text-xs">{u.role}</span>
+                        </label>
+                      ))}
+                    </div>
+
                     <div className="flex gap-2">
-                      <select value={assignTo} onChange={e=>setAssignTo(e.target.value)} className="flex-1 bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-emerald-500/50 transition-all">
-                        <option value="">— Select a member —</option>
-                        {users.filter(u=>u.role!=='admin').map(u => <option key={u.id} value={u.id}>{u.full_name||u.email} ({u.role})</option>)}
-                      </select>
-                      <button onClick={()=>acceptRequest(r)} disabled={!assignTo||loading} className="bg-emerald-800/60 hover:bg-emerald-700/70 disabled:opacity-40 text-emerald-300 text-sm px-4 py-2 rounded-xl border border-emerald-600/20 transition-all">{loading ? 'Saving...' : 'Confirm'}</button>
-                      <button onClick={()=>setAcceptingRequest(null)} className="btn-ghost text-sm px-3 py-2">Cancel</button>
+                      <button
+                        onClick={() => acceptRequest(r)}
+                        disabled={!assignToIds.length || loading}
+                        className="bg-emerald-800/60 hover:bg-emerald-700/70 disabled:opacity-40 text-emerald-300 text-sm px-4 py-2 rounded-xl border border-emerald-600/20 transition-all"
+                      >
+                        {loading ? 'Saving...' : `Confirm (${assignToIds.length} selected)`}
+                      </button>
+                      <button onClick={() => { setAcceptingRequest(null); setAssignToIds([]) }} className="btn-ghost text-sm px-3 py-2">Cancel</button>
                     </div>
                   </div>
                 )}

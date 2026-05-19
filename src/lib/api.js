@@ -97,7 +97,10 @@ export const api = {
   updateTicket: (id, data) => request('PATCH', `/tickets/${id}`, data),
   updateTicketAssignees: (id, userIds) => request('PATCH', `/tickets/${id}/assignees`, { user_ids: userIds }),
   deleteTicket: (id) => request('DELETE', `/tickets/${id}`),
-  acceptRequest: (id, assigned_to) => request('POST', `/tickets/${id}/accept`, { assigned_to }),
+  acceptRequest: (id, assignedToIds) => request('POST', `/tickets/${id}/accept`, {
+    assigned_to: assignedToIds[0] || null,
+    assigned_to_ids: assignedToIds,
+  }),
   refuseRequest: (id) => request('POST', `/tickets/${id}/refuse`),
   getReplies: (ticketId) => request('GET', `/tickets/${ticketId}/replies`),
   createReply: (ticketId, data) => request('POST', `/tickets/${ticketId}/replies`, data),
