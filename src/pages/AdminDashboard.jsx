@@ -1235,7 +1235,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   function calculateMemberPerformance() {
     const members = users.filter(u => u.role === 'member')
     const memberStats = members.map(member => {
-      const memberTickets = tickets.filter(t => t.assigned_to === member.id)
+      const memberTickets = tickets.filter(t => t.assigned_to === member.id || t.assignees?.some(a => a.user_id === member.id))
       const solvedTickets = memberTickets.filter(t => t.status === 'solved' && t.solved_at)
       const totalTickets = memberTickets.length
       const openTickets = memberTickets.filter(t => t.status === 'opened').length

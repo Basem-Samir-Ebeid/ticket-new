@@ -62,9 +62,16 @@ router.get('/', requireAuth as any, async (req: any, res) => {
     if (isAdminRole(req.profile.role)) {
       rows = await db.select().from(tickets).where(eq(tickets.is_request, false)).orderBy(desc(tickets.created_at))
     } else {
+      const assigneeSubquery = db.select({ ticketId: ticketAssignees.ticket_id })
+        .from(ticketAssignees)
+        .where(eq(ticketAssignees.user_id, req.user.id))
       rows = await db.select().from(tickets)
         .where(and(
-          or(eq(tickets.assigned_to, req.user.id), eq(tickets.created_by, req.user.id)),
+          or(
+            eq(tickets.assigned_to, req.user.id),
+            eq(tickets.created_by, req.user.id),
+            inArray(tickets.id, assigneeSubquery)
+          ),
           eq(tickets.is_request, false)
         ))
         .orderBy(desc(tickets.created_at))
