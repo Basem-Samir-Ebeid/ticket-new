@@ -51,6 +51,9 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const [editingUser, setEditingUser] = useState(null)
   const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'member', can_view_attendance: false, can_view_assets: false, can_view_whatsapp_contacts: false, permissions: { can_manage_tickets: false, can_view_reports: false, can_manage_leaves: false, can_view_all_tickets: false }, profile_picture_url: '', leave_balance: 21, sick_leave_balance: 14, emergency_leave_balance: 7, department: '', job_title: '', phone: '', national_id: '', hire_date: '', birth_date: '', gender: '', address: '', employment_type: 'full_time', employee_code: '', direct_manager: '', notes: '', whatsapp_phone: '', is_leaving: false })
   const [ticketForm, setTicketForm] = useState({ title: '', description: '', affected_person: '', affected_user_id: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', subcategory: '', due_date: '', asset_id: '' })
+  const [assignedToIds, setAssignedToIds] = useState([])
+  const [savingAssignees, setSavingAssignees] = useState(false)
+  const [assigneeEditorIds, setAssigneeEditorIds] = useState([])
   const [ticketAssets, setTicketAssets] = useState([])
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
@@ -297,6 +300,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   }, [])
 
   useEffect(() => { if (selectedTicket) fetchReplies(selectedTicket.id) }, [selectedTicket])
+  useEffect(() => {
+    if (selectedTicket) {
+      setAssigneeEditorIds((selectedTicket.assignees || []).map(a => a.user_id))
+    }
+  }, [selectedTicket?.id])
   useEffect(() => { if (selectedDate) fetchLoginTimes() }, [selectedDate])
 
   useEffect(() => {
@@ -945,12 +953,12 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   async function createTicket(e) {
     e.preventDefault(); setLoading(true); setMsg('')
     try {
-      await api.createTicket({
+      const newTicket = await api.createTicket({
         title: ticketForm.title,
         description: ticketForm.description,
         affected_person: ticketForm.affected_person,
         affected_user_id: ticketForm.affected_user_id || null,
-        assigned_to: ticketForm.assigned_to || null,
+        assigned_to: assignedToIds[0] || null,
         status: ticketForm.status,
         priority: ticketForm.priority || 'medium',
         category: ticketForm.category || null,
@@ -958,12 +966,27 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         due_date: ticketForm.due_date || null,
         asset_id: ticketForm.asset_id || null,
       })
+      if (assignedToIds.length > 0 && newTicket?.id) {
+        await api.updateTicketAssignees(newTicket.id, assignedToIds)
+      }
       setMsg('✓ Ticket created!')
       setTicketForm({ title: '', description: '', affected_person: '', affected_user_id: '', assigned_to: '', status: 'opened', priority: 'medium', category: '', subcategory: '', due_date: '', asset_id: '' })
+      setAssignedToIds([])
       setShowCreateTicket(false)
       fetchTickets()
     } catch (e) { setMsg('Error: ' + e.message) }
     setLoading(false)
+  }
+
+  async function handleSaveAssignees() {
+    if (!selectedTicket) return
+    setSavingAssignees(true)
+    try {
+      const updated = await api.updateTicketAssignees(selectedTicket.id, assigneeEditorIds)
+      setSelectedTicket(updated)
+      setMsg('✓ Assignees updated!')
+    } catch (e) { setMsg('Error: ' + e.message) }
+    setSavingAssignees(false)
   }
 
   async function updateStatus(id, newStatus) {
@@ -1360,7 +1383,58 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 {selectedTicket.category && (
                   <p className="text-slate-500 text-xs mt-2">Category: <span className="text-slate-300">{selectedTicket.category}{selectedTicket.subcategory ? ` › ${selectedTicket.subcategory}` : ''}</span></p>
                 )}
-                <p className="text-slate-500 text-xs mt-2">Assigned to: <span className="text-slate-300">{selectedTicket.assigned_to_profile?.full_name || 'Unassigned'}</span></p>
+                {/* Assignees section */}
+                <div className="mt-3">
+                  <p className="text-slate-500 text-xs mb-1.5">Assigned to:
+                    {' '}{selectedTicket.assignees?.length > 0
+                      ? selectedTicket.assignees.map(a => a.profile?.full_name || a.profile?.email || '?').join(', ')
+                      : <span className="text-slate-400">Unassigned</span>}
+                  </p>
+                  <div className="rounded-xl p-3 space-y-1.5" style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)'}}>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-2">Edit Assignees</p>
+                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                      {users.filter(u => u.role === 'admin' || u.role === 'super_admin' || u.role === 'member').map(u => (
+                        <label key={u.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer transition-all">
+                          <input
+                            type="checkbox"
+                            checked={assigneeEditorIds.includes(u.id)}
+                            onChange={e => setAssigneeEditorIds(prev =>
+                              e.target.checked ? [...prev, u.id] : prev.filter(id => id !== u.id)
+                            )}
+                            className="accent-indigo-500 w-3.5 h-3.5 flex-shrink-0"
+                          />
+                          <span className="text-slate-300 text-xs flex-1 truncate">{u.full_name || u.email}</span>
+                          {assigneeEditorIds.includes(u.id) && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
+                              style={{background:'rgba(99,102,241,0.15)',color:'#818cf8',border:'1px solid rgba(99,102,241,0.25)'}}>assigned</span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button type="button" onClick={handleSaveAssignees} disabled={savingAssignees}
+                        className="text-xs px-3 py-1.5 rounded-xl font-semibold transition-all disabled:opacity-50"
+                        style={{background:'rgba(99,102,241,0.2)',color:'#818cf8',border:'1px solid rgba(99,102,241,0.3)'}}>
+                        {savingAssignees ? 'Saving…' : 'Save assignees'}
+                      </button>
+                      {assigneeEditorIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {assigneeEditorIds.map(uid => {
+                            const u = users.find(x => x.id === uid)
+                            return u ? (
+                              <span key={uid} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
+                                style={{background:'rgba(99,102,241,0.12)',color:'#a5b4fc',border:'1px solid rgba(99,102,241,0.2)'}}>
+                                {u.full_name || u.email}
+                                <button type="button" onClick={() => setAssigneeEditorIds(prev => prev.filter(id => id !== uid))}
+                                  className="text-slate-500 hover:text-slate-300 transition-colors leading-none ml-0.5">×</button>
+                              </span>
+                            ) : null
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
                 {/* Tags section */}
                 <div className="mt-3">
@@ -1746,7 +1820,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     <StatusBadge status={t.status} />
                     <div className="flex-1 min-w-0">
                       <p className="text-slate-200 text-sm font-medium truncate">{t.title}</p>
-                      <p className="text-slate-500 text-xs truncate">{t.assigned_to_profile?.full_name || 'Unassigned'}</p>
+                      <p className="text-slate-500 text-xs truncate">{t.assignees?.length > 0 ? t.assignees.map(a => a.profile?.full_name || a.profile?.email).join(', ') : (t.assigned_to_profile?.full_name || 'Unassigned')}</p>
                     </div>
                     <span className="text-slate-600 text-[11px] flex-shrink-0">{new Date(t.created_at).toLocaleDateString()}</span>
                   </div>
@@ -1847,10 +1921,40 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Assign To</label>
-                    <select value={ticketForm.assigned_to} onChange={e=>setTicketForm(f=>({...f,assigned_to:e.target.value}))} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 transition-all">
-                      <option value="">Unassigned</option>
-                      {users.map(u => <option key={u.id} value={u.id}>{u.full_name||u.email} ({u.role})</option>)}
-                    </select>
+                    <div className="rounded-xl p-2.5 max-h-36 overflow-y-auto space-y-0.5" style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                      {users.filter(u => u.role === 'admin' || u.role === 'super_admin' || u.role === 'member').map(u => (
+                        <label key={u.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer transition-all">
+                          <input
+                            type="checkbox"
+                            checked={assignedToIds.includes(u.id)}
+                            onChange={e => setAssignedToIds(prev =>
+                              e.target.checked ? [...prev, u.id] : prev.filter(id => id !== u.id)
+                            )}
+                            className="accent-indigo-500 w-3.5 h-3.5 flex-shrink-0"
+                          />
+                          <span className="text-slate-300 text-xs truncate">{u.full_name || u.email}</span>
+                          <span className="text-slate-600 text-[10px] flex-shrink-0">({u.role})</span>
+                        </label>
+                      ))}
+                      {users.filter(u => u.role === 'admin' || u.role === 'super_admin' || u.role === 'member').length === 0 && (
+                        <p className="text-slate-600 text-xs px-2 py-1">No IT members available</p>
+                      )}
+                    </div>
+                    {assignedToIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {assignedToIds.map(uid => {
+                          const u = users.find(x => x.id === uid)
+                          return u ? (
+                            <span key={uid} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
+                              style={{background:'rgba(99,102,241,0.12)',color:'#a5b4fc',border:'1px solid rgba(99,102,241,0.2)'}}>
+                              {u.full_name || u.email}
+                              <button type="button" onClick={() => setAssignedToIds(prev => prev.filter(id => id !== uid))}
+                                className="text-slate-500 hover:text-slate-300 transition-colors leading-none ml-0.5">×</button>
+                            </span>
+                          ) : null
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest font-semibold">Related Asset</label>
@@ -2004,7 +2108,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                       {t.affected_person && <p className="text-slate-600 text-xs mt-1.5 flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>{t.affected_person}</p>}
                       {t.tags?.length > 0 && <div className="mt-1.5"><TagPills tags={t.tags} /></div>}
                       {t.category && <span className="text-[10px] text-slate-500 mt-1 block">{t.category}{t.subcategory ? ` › ${t.subcategory}` : ''}</span>}
-                      <p className="text-slate-600 text-[11px] mt-1">→ <span className="text-slate-400">{t.assigned_to_profile?.full_name || 'Unassigned'}</span></p>
+                      <p className="text-slate-600 text-[11px] mt-1">→ <span className="text-slate-400">{t.assignees?.length > 0 ? t.assignees.map(a => a.profile?.full_name || a.profile?.email).join(', ') : (t.assigned_to_profile?.full_name || 'Unassigned')}</span></p>
                     </div>
                     <div className="flex flex-col gap-2 flex-shrink-0">
                       <select value={t.status} onChange={e=>updateStatus(t.id, e.target.value)}

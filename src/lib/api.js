@@ -95,6 +95,7 @@ export const api = {
   getWhatsappContacts: () => request('GET', '/tickets/whatsapp-contacts'),
   createTicket: (data) => request('POST', '/tickets', data),
   updateTicket: (id, data) => request('PATCH', `/tickets/${id}`, data),
+  updateTicketAssignees: (id, userIds) => request('PATCH', `/tickets/${id}/assignees`, { user_ids: userIds }),
   deleteTicket: (id) => request('DELETE', `/tickets/${id}`),
   acceptRequest: (id, assigned_to) => request('POST', `/tickets/${id}/accept`, { assigned_to }),
   refuseRequest: (id) => request('POST', `/tickets/${id}/refuse`),

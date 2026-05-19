@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { db } from '../db'
-import { tickets, ticketReplies, profiles, notifications, ticketTemplates, ticketHistory, assets } from '../../shared/schema'
+import { tickets, ticketReplies, profiles, notifications, ticketTemplates, ticketHistory, assets, ticketAssignees } from '../../shared/schema'
 import { eq, and, desc, or, inArray, sql as drizzleSql } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { logAudit } from './audit-logs'
@@ -26,6 +26,18 @@ async function withProfiles(rows: any[]) {
   }).from(profiles)
   const profileMap = new Map(allProfiles.map(p => [p.id, p]))
 
+  // Fetch multi-assignees
+  const ticketIds = rows.map(t => t.id)
+  const assigneesMap = new Map<string, any[]>()
+  if (ticketIds.length > 0) {
+    const assigneeRows = await db.select().from(ticketAssignees)
+      .where(inArray(ticketAssignees.ticket_id, ticketIds))
+    for (const a of assigneeRows) {
+      if (!assigneesMap.has(a.ticket_id)) assigneesMap.set(a.ticket_id, [])
+      assigneesMap.get(a.ticket_id)!.push({ ...a, profile: profileMap.get(a.user_id) || null })
+    }
+  }
+
   const assetIds = [...new Set(rows.map(t => t.asset_id).filter(Boolean))]
   let assetMap = new Map<string, any>()
   if (assetIds.length > 0) {
@@ -37,6 +49,7 @@ async function withProfiles(rows: any[]) {
     ...t,
     created_by_profile: profileMap.get(t.created_by) || null,
     assigned_to_profile: profileMap.get(t.assigned_to) || null,
+    assignees: assigneesMap.get(t.id) || [],
     asset: t.asset_id ? assetMap.get(t.asset_id) || null : null,
   }))
 }
@@ -274,6 +287,49 @@ router.post('/', requireAuth as any, async (req: any, res) => {
   } catch (err: any) {
     console.error('POST /tickets error:', err)
     res.status(500).json({ error: err?.message || 'Failed to create ticket' })
+  }
+})
+
+router.patch('/:id/assignees', requireAuth as any, async (req: any, res) => {
+  try {
+    if (req.profile.role !== 'admin' && req.profile.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Admin only' })
+    }
+    const { user_ids } = req.body
+    if (!Array.isArray(user_ids)) return res.status(400).json({ error: 'user_ids must be an array' })
+
+    const [ticket] = await db.select().from(tickets).where(eq(tickets.id, req.params.id))
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
+
+    await db.transaction(async (tx) => {
+      await tx.delete(ticketAssignees).where(eq(ticketAssignees.ticket_id, req.params.id))
+      if (user_ids.length > 0) {
+        await tx.insert(ticketAssignees).values(
+          user_ids.map((uid: string) => ({
+            ticket_id: req.params.id,
+            user_id: uid,
+            assigned_by: req.user.id,
+          }))
+        )
+      }
+      await tx.update(tickets)
+        .set({ assigned_to: user_ids[0] || null })
+        .where(eq(tickets.id, req.params.id))
+    })
+
+    for (const uid of user_ids) {
+      const msg = `🎫 You have been assigned to ticket: "${ticket.title}"`
+      await db.insert(notifications).values({ user_id: uid, ticket_id: ticket.id, message: msg })
+      broadcast(uid, 'notification', { ticket_id: ticket.id, message: msg })
+      sendWhatsAppToUser(uid, msg).catch(() => {})
+    }
+
+    const [updated] = await db.select().from(tickets).where(eq(tickets.id, req.params.id))
+    const result = await withProfiles([updated])
+    res.json(result[0])
+  } catch (err: any) {
+    console.error('PATCH /tickets/:id/assignees error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to update assignees' })
   }
 })
 

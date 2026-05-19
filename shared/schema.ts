@@ -73,6 +73,16 @@ export const tickets = pgTable('tickets', {
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+export const ticketAssignees = pgTable('ticket_assignees', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ticket_id: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  assigned_at: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
+  assigned_by: uuid('assigned_by').references(() => profiles.id, { onDelete: 'set null' }),
+})
+
+export type TicketAssignee = typeof ticketAssignees.$inferSelect
+
 export const ticketHistory = pgTable('ticket_history', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   ticket_id: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),

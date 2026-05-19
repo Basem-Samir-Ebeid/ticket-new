@@ -1,0 +1,147 @@
+Please fix all file attachment/upload bugs. Read everything before starting.
+
+---
+
+## Root Causes
+
+There are 4 bugs causing file upload failures:
+
+1. `uploadFile()` in `src/lib/api.js` runs `compressImage()` on **every** file including PDFs, Word docs, and ZIPs — this corrupts non-image files before uploading
+2. `uploadMultiple()` skips compression entirely, even for images
+3. The file input in `AdminDashboard.jsx` uses `accept="*/*"` — users can pick files the backend will reject, with no clear warning
+4. Error messages show raw technical errors instead of friendly Arabic/English messages
+
+---
+
+## FIX 1 — `src/lib/api.js` — Fix `uploadFile()` and `uploadMultiple()`
+
+Replace the current `uploadFile` function with this version that only compresses images:
+
+```js
+uploadFile: async (file) => {
+  // Only compress images — never touch PDFs, docs, zips, etc.
+  const fileToUpload = file.type.startsWith('image/') ? await compressImage(file) : file
+  const form = new FormData()
+  form.append('file', fileToUpload, file.name)
+  const res = await fetch(`${BASE}/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body: form,
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Upload failed')
+  return { url: data.url, name: data.name || file.name }
+},
+```
+
+Also update `uploadMultiple` to compress images too:
+
+```js
+uploadMultiple: async (files) => {
+  const form = new FormData()
+  for (const f of files) {
+    const fileToUpload = f.type.startsWith('image/') ? await compressImage(f) : f
+    form.append('files', fileToUpload, f.name)
+  }
+  const res = await fetch(`${BASE}/upload/multiple`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body: form,
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Upload failed')
+  return data
+},
+```
+
+---
+
+## FIX 2 — `src/pages/AdminDashboard.jsx` — Fix file input accept and error messages
+
+### 2a — Fix the file input `accept` attribute
+
+Find the file input for reply attachments (currently `accept="*/*"`) and replace with the exact types allowed by the backend:
+
+```jsx
+<input
+  type="file"
+  accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,application/zip"
+  multiple
+  className="hidden"
+  onChange={e => {
+    const files = Array.from(e.target.files)
+    const MAX_SIZE = 5 * 1024 * 1024
+    const oversized = files.filter(f => f.size > MAX_SIZE)
+    if (oversized.length > 0) {
+      setReplyError(`These files exceed the 5MB limit: ${oversized.map(f => f.name).join(', ')}`)
+      return
+    }
+    setReplyFiles(prev => [...prev, ...files].slice(0, 5))
+    setReplyError('')
+    e.target.value = ''
+  }}
+/>
+```
+
+### 2b — Improve error message in `submitReply`
+
+Find this block:
+```js
+setReplyError('File upload failed: ' + (err.message || 'Unknown error'))
+```
+
+Replace with a user-friendly message:
+```js
+const msg = err.message || ''
+if (msg.includes('نوع الملف') || msg.includes('not allowed')) {
+  setReplyError('❌ File type not allowed. Allowed types: images, PDF, Word, Excel, ZIP (max 5MB each)')
+} else if (msg.includes('5MB') || msg.includes('LIMIT_FILE_SIZE') || msg.includes('حجم')) {
+  setReplyError('❌ File is too large. Maximum size is 5MB per file.')
+} else {
+  setReplyError('❌ Upload failed. Please check your connection and try again.')
+}
+```
+
+---
+
+## FIX 3 — `src/pages/MemberDashboard.jsx` — Same fixes
+
+Apply the same two fixes to MemberDashboard:
+
+### 3a — Fix the file input (find the attach files input and add the same `accept` list as in Fix 2a)
+
+### 3b — Add file size validation in the onChange handler (same logic as Fix 2a)
+
+### 3c — Improve the error message in `submitReply` (same friendly messages as Fix 2b)
+
+---
+
+## FIX 4 — `server/routes/uploads.ts` — Better error messages from backend
+
+The backend error for rejected file types currently says:
+`نوع الملف غير مسموح به: application/octet-stream`
+
+Improve it to list what IS allowed:
+
+```ts
+fileFilter: (_req, file, cb) => {
+  if (ALLOWED_MIME.has(file.mimetype)) {
+    cb(null, true)
+  } else {
+    cb(new Error('File type not allowed. Accepted: images (JPG/PNG/GIF/WebP), PDF, Word, Excel, plain text, ZIP'))
+  }
+},
+```
+
+Also increase the limit slightly and make the error clearer:
+```ts
+limits: { fileSize: 5 * 1024 * 1024, files: 5 },
+```
+
+---
+
+## General Rules
+
+- Do not break existing upload functionality for images
+- Do not change the uploads directory or file naming logic
+- Test by: uploading a PNG (should work), uploading a PDF (should work), uploading an MP4 (should be rejected with a clear message), uploading a 6MB file (should be rejected with a clear message)
