@@ -1096,7 +1096,14 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         file_name = result.name
         attachments = [result.url]
       } catch (err) {
-        setReplyError('File upload failed: ' + (err.message || 'Unknown error'))
+        const msg = err.message || ''
+        if (msg.includes('not allowed') || msg.includes('نوع الملف')) {
+          setReplyError('❌ File type not allowed. Allowed types: images, PDF, Word, Excel, ZIP (max 5MB each)')
+        } else if (msg.includes('5MB') || msg.includes('LIMIT_FILE_SIZE') || msg.includes('حجم')) {
+          setReplyError('❌ File is too large. Maximum size is 5MB per file.')
+        } else {
+          setReplyError('❌ Upload failed. Please check your connection and try again.')
+        }
         setUploading(false)
         return
       }
@@ -1107,7 +1114,14 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         file_url = results[0].url
         file_name = results[0].name
       } catch (err) {
-        setReplyError('File upload failed: ' + (err.message || 'Unknown error'))
+        const msg = err.message || ''
+        if (msg.includes('not allowed') || msg.includes('نوع الملف')) {
+          setReplyError('❌ File type not allowed. Allowed types: images, PDF, Word, Excel, ZIP (max 5MB each)')
+        } else if (msg.includes('5MB') || msg.includes('LIMIT_FILE_SIZE') || msg.includes('حجم')) {
+          setReplyError('❌ File is too large. Maximum size is 5MB per file.')
+        } else {
+          setReplyError('❌ Upload failed. Please check your connection and try again.')
+        }
         setUploading(false)
         return
       }
@@ -1616,8 +1630,19 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 <label className="cursor-pointer flex items-center gap-2 text-sm px-4 py-2 rounded-xl border border-white/10 text-slate-400 hover:text-white hover:border-white/20 transition-all" style={{background:'rgba(255,255,255,0.04)'}}>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" /></svg>
                   {replyFiles.length ? `${replyFiles.length} file(s)` : 'Attach Files'}
-                  <input type="file" accept="*/*" multiple className="hidden"
-                    onChange={e => { setReplyFiles(prev => [...prev, ...Array.from(e.target.files)].slice(0,5)); setReplyError('') }} />
+                  <input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,application/zip" multiple className="hidden"
+                    onChange={e => {
+                      const files = Array.from(e.target.files)
+                      const MAX_SIZE = 5 * 1024 * 1024
+                      const oversized = files.filter(f => f.size > MAX_SIZE)
+                      if (oversized.length > 0) {
+                        setReplyError(`❌ These files exceed the 5MB limit: ${oversized.map(f => f.name).join(', ')}`)
+                        return
+                      }
+                      setReplyFiles(prev => [...prev, ...files].slice(0, 5))
+                      setReplyError('')
+                      e.target.value = ''
+                    }} />
                 </label>
                 {replyFiles.length > 0 && (
                   <button type="button" onClick={() => setReplyFiles([])} className="text-slate-500 hover:text-red-400 text-xs transition-colors">✕ Clear all</button>

@@ -144,9 +144,9 @@ export const api = {
 
   // Upload
   uploadFile: async (file) => {
-    const compressed = await compressImage(file)
+    const fileToUpload = file.type.startsWith('image/') ? await compressImage(file) : file
     const form = new FormData()
-    form.append('file', compressed, file.name)
+    form.append('file', fileToUpload, file.name)
     const res = await fetch(`${BASE}/upload`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${getToken()}` },
@@ -286,7 +286,10 @@ export const api = {
   // Upload multiple files
   uploadMultiple: async (files) => {
     const form = new FormData()
-    for (const f of files) form.append('files', f, f.name)
+    for (const f of files) {
+      const fileToUpload = f.type.startsWith('image/') ? await compressImage(f) : f
+      form.append('files', fileToUpload, f.name)
+    }
     const res = await fetch(`${BASE}/upload/multiple`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${getToken()}` },

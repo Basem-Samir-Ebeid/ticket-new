@@ -35,7 +35,7 @@ const upload = multer({
     if (ALLOWED_MIME.has(file.mimetype)) {
       cb(null, true)
     } else {
-      cb(new Error(`نوع الملف غير مسموح به: ${file.mimetype}`))
+      cb(new Error('File type not allowed. Accepted: images (JPG/PNG/GIF/WebP), PDF, Word, Excel, plain text, ZIP'))
     }
   },
 })
