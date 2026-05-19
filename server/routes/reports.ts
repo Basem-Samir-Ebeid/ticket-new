@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireAuth, checkPermission } from '../auth'
 import { db } from '../db'
-import { tickets, profiles, loginTimes, assets } from '../../shared/schema'
+import { tickets, profiles, loginTimes, assets, ticketAssignees } from '../../shared/schema'
 import { sql, gte, lte, and, isNotNull, eq } from 'drizzle-orm'
 
 const router = Router()
@@ -408,6 +408,91 @@ router.get('/analytics', requireAuth as any, async (req: any, res) => {
   } catch (err: any) {
     console.error('GET /reports/analytics error:', err)
     res.status(500).json({ error: err?.message || 'Failed to load analytics' })
+  }
+})
+
+// GET /api/reports/staff-overview — super_admin only
+router.get('/staff-overview', requireAuth as any, async (req: any, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+
+    const allUsers = await db.select({
+      id: profiles.id,
+      full_name: profiles.full_name,
+      email: profiles.email,
+      role: profiles.role,
+      avatar_url: profiles.avatar_url,
+      department: profiles.department,
+    }).from(profiles).orderBy(profiles.full_name)
+
+    const allTickets = await db.select({
+      id: tickets.id,
+      title: tickets.title,
+      status: tickets.status,
+      priority: tickets.priority,
+      category: tickets.category,
+      assigned_to: tickets.assigned_to,
+      created_at: tickets.created_at,
+      resolved_at: tickets.resolved_at,
+      sla_deadline: tickets.sla_deadline,
+    }).from(tickets).where(eq(tickets.is_request, false))
+
+    const allAssignees = await db.select().from(ticketAssignees)
+
+    const userTicketMap = new Map<string, typeof allTickets>()
+    for (const u of allUsers) userTicketMap.set(u.id, [])
+
+    for (const t of allTickets) {
+      if (t.assigned_to && userTicketMap.has(t.assigned_to)) {
+        userTicketMap.get(t.assigned_to)!.push(t)
+      }
+      const extra = allAssignees.filter(a => a.ticket_id === t.id && a.user_id !== t.assigned_to)
+      for (const a of extra) {
+        if (userTicketMap.has(a.user_id)) userTicketMap.get(a.user_id)!.push(t)
+      }
+    }
+
+    const result = allUsers.map(u => {
+      const myTickets = userTicketMap.get(u.id) || []
+      const open      = myTickets.filter(t => t.status === 'open').length
+      const inProg    = myTickets.filter(t => t.status === 'in_progress').length
+      const closed    = myTickets.filter(t => t.status === 'closed' || t.status === 'resolved').length
+      const pending   = myTickets.filter(t => t.status === 'pending').length
+
+      const resolved = myTickets.filter(t => t.resolved_at && t.created_at)
+      const avgResolutionHours = resolved.length > 0
+        ? Math.round(resolved.reduce((sum, t) => {
+            return sum + (new Date(t.resolved_at!).getTime() - new Date(t.created_at).getTime()) / 3600000
+          }, 0) / resolved.length)
+        : null
+
+      const slaBreached = myTickets.filter(t =>
+        t.sla_deadline && new Date(t.sla_deadline) < new Date() && t.status !== 'closed' && t.status !== 'resolved'
+      ).length
+
+      const recentTickets = myTickets.slice(0, 5).map(t => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        category: t.category,
+        created_at: t.created_at,
+      }))
+
+      return {
+        ...u,
+        total: myTickets.length,
+        open, in_progress: inProg, closed, pending,
+        avg_resolution_hours: avgResolutionHours,
+        sla_breached: slaBreached,
+        recent_tickets: recentTickets,
+      }
+    })
+
+    res.json(result)
+  } catch (err: any) {
+    console.error('GET /reports/staff-overview error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to load staff overview' })
   }
 })
 

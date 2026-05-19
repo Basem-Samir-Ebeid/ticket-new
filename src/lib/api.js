@@ -223,6 +223,7 @@ export const api = {
   getAssetReports: () => request('GET', '/reports/assets'),
   getAttendanceReports: (range = 'month') => request('GET', `/reports/attendance?range=${range}`),
   getAnalytics: (range = 'month') => request('GET', `/reports/analytics?range=${range}`),
+  getStaffOverview: () => request('GET', '/reports/staff-overview'),
 
   // Knowledge Base
   getKnowledgeArticles: (params = {}) => {
