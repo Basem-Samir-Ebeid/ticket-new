@@ -16,10 +16,6 @@ router.get('/', requireAuth as any, requireAdmin as any, async (req: any, res) =
     const rows = await db.select().from(profiles).orderBy(desc(profiles.created_at))
     const users = rows.map(u => {
       const { password_hash, ...rest } = u
-      if (!isSuperAdmin) {
-        const { plain_password, ...noPass } = rest
-        return noPass
-      }
       return rest
     })
     res.json(users)
@@ -272,7 +268,7 @@ router.get('/:id/profile', requireAuth as any, requireAdmin as any, async (req: 
     const userId = req.params.id
     const [profile] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1)
     if (!profile) return res.status(404).json({ error: 'User not found' })
-    const { password_hash, plain_password, ...safeProfile } = profile
+    const { password_hash, ...safeProfile } = profile
 
     // This month attendance
     const now = new Date()

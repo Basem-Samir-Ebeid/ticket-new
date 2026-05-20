@@ -421,7 +421,7 @@ router.get('/staff-overview', requireAuth as any, async (req: any, res) => {
       full_name: profiles.full_name,
       email: profiles.email,
       role: profiles.role,
-      avatar_url: profiles.avatar_url,
+      profile_picture_url: profiles.profile_picture_url,
       department: profiles.department,
     }).from(profiles).orderBy(profiles.full_name)
 
@@ -433,8 +433,8 @@ router.get('/staff-overview', requireAuth as any, async (req: any, res) => {
       category: tickets.category,
       assigned_to: tickets.assigned_to,
       created_at: tickets.created_at,
-      solved_at: (tickets as any).solved_at,
-      sla_deadline: (tickets as any).sla_deadline,
+      solved_at: tickets.solved_at,
+      sla_deadline: tickets.sla_deadline,
     }).from(tickets).where(eq(tickets.is_request, false))
 
     const allAssignees = await db.select().from(ticketAssignees)
