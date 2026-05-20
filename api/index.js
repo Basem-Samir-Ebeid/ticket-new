@@ -10,7 +10,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import webpush from 'web-push'
 import multer from 'multer'
-import { neon } from '@neondatabase/serverless'
+import { neon, neonConfig } from '@neondatabase/serverless'
 import pg from 'pg'
 
 // ── Neon serverless config (uses HTTP fetch — no TCP timeouts on Vercel) ──────
