@@ -66,8 +66,9 @@ if (!global._pgPool) {
 // On Vercel (NEON_URL set, no PG_URL): uses Neon HTTP → no TCP timeout
 // On Replit  (PG_URL set):             uses pg Pool   → normal local dev
 async function query(text, params = []) {
-  // Prefer pg Pool when available (local Replit dev)
-  if (global._pgPool && PG_URL) {
+  // On Vercel serverless, always use Neon HTTP — pg Pool TCP connections fail there
+  const isVercel = !!process.env.VERCEL
+  if (!isVercel && global._pgPool && PG_URL) {
     return global._pgPool.query(text, params)
   }
   // Neon HTTP for Vercel serverless
