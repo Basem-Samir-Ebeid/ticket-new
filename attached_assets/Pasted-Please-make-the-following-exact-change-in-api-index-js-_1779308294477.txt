@@ -1,0 +1,96 @@
+Please make the following exact change in `api/index.js`. This is the final fix for the 500 login error on Vercel.
+
+---
+
+## CHANGE 1 — Fix the import on line 13
+
+Find:
+```js
+import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless'
+```
+Replace with:
+```js
+import { neon } from '@neondatabase/serverless'
+```
+
+---
+
+## CHANGE 2 — Replace the entire DB setup block
+
+Find everything from:
+```js
+// ── Neon serverless config (uses HTTP fetch — no TCP timeouts on Vercel) ──────
+neonConfig.fetchConnectionCache = true
+```
+All the way down to the closing `}` of the `getPool()` function. Replace the entire block with this:
+
+```js
+// ── DB setup ──────────────────────────────────────────────────────────────────
+const NEON_URL = process.env.NEON_DATABASE_URL
+const PG_URL   = process.env.DATABASE_URL
+const IS_VERCEL = !!process.env.VERCEL
+
+if (!NEON_URL && !PG_URL) {
+  console.error('[DB] FATAL: Neither NEON_DATABASE_URL nor DATABASE_URL is set')
+}
+
+// Vercel: neon() HTTP client — no WebSocket, no TCP, works on serverless
+// neon(url)(text, params) returns Row[] directly (not {rows}), so we wrap it
+let _neonHttp = null
+function getNeonHttp() {
+  if (!_neonHttp && NEON_URL) {
+    _neonHttp = neon(NEON_URL)
+  }
+  return _neonHttp
+}
+
+// Replit local dev only: standard pg Pool (TCP)
+if (!IS_VERCEL && !global._pgPool) {
+  const connStr = PG_URL || NEON_URL
+  if (connStr) {
+    const { Pool } = pg
+    global._pgPool = new Pool({
+      connectionString: connStr,
+      ssl: connStr?.includes('neon.tech') ? { rejectUnauthorized: false } : false,
+      max: 3,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    })
+    global._pgPool.on('error', (err) => console.error('[DB] Pool error:', err.message))
+  }
+}
+
+async function query(text, params = []) {
+  if (IS_VERCEL) {
+    // neon() HTTP returns Row[] directly — wrap to match pg's {rows} interface
+    const sql = getNeonHttp()
+    if (!sql) throw new Error('NEON_DATABASE_URL is not set in Vercel env vars')
+    const rows = await sql(text, params)
+    return { rows }
+  }
+  // Replit local dev: standard pg Pool
+  if (global._pgPool) {
+    return global._pgPool.query(text, params)
+  }
+  throw new Error('No database connection available')
+}
+
+function getPool() {
+  return { query }
+}
+```
+
+---
+
+## Why this fixes it
+
+The previous version used `NeonPool` which connects via **WebSocket** — WebSockets do not work on Vercel serverless Node.js runtime, so every DB call failed with 500.
+
+The correct driver for Vercel is `neon()` (HTTP client). It works without TCP or WebSocket. The key detail: `neon(url)(text, params)` returns a plain array `Row[]`, not `{ rows: Row[] }` like pg does — so we must wrap it manually with `return { rows }`.
+
+---
+
+After making these two changes, commit and push. Then verify by opening:
+`https://ticket-new-xi.vercel.app/api/health`
+
+It should return `{"status":"ok","db":"connected"}` and login will work.

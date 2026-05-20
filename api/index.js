@@ -10,7 +10,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import webpush from 'web-push'
 import multer from 'multer'
-import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless'
+import { neon } from '@neondatabase/serverless'
 import pg from 'pg'
 
 // ── Neon serverless config (uses HTTP fetch — no TCP timeouts on Vercel) ──────
@@ -29,7 +29,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// ── DB: try Neon serverless HTTP first, fall back to standard pg Pool ─────────
+// ── DB setup ──────────────────────────────────────────────────────────────────
 const NEON_URL = process.env.NEON_DATABASE_URL
 const PG_URL   = process.env.DATABASE_URL
 const IS_VERCEL = !!process.env.VERCEL
@@ -38,16 +38,17 @@ if (!NEON_URL && !PG_URL) {
   console.error('[DB] FATAL: Neither NEON_DATABASE_URL nor DATABASE_URL is set')
 }
 
-// ── Vercel: use @neondatabase/serverless Pool (HTTP-based, no TCP timeout) ─────
-let _neonPool = null
-function getNeonPool() {
-  if (!_neonPool && NEON_URL) {
-    _neonPool = new NeonPool({ connectionString: NEON_URL })
+// Vercel: neon() HTTP client — no WebSocket, no TCP, works on serverless
+// neon(url)(text, params) returns Row[] directly (not {rows}), so we wrap it
+let _neonHttp = null
+function getNeonHttp() {
+  if (!_neonHttp && NEON_URL) {
+    _neonHttp = neon(NEON_URL)
   }
-  return _neonPool
+  return _neonHttp
 }
 
-// ── Replit local dev: use standard pg Pool (TCP) ──────────────────────────────
+// Replit local dev only: standard pg Pool (TCP)
 if (!IS_VERCEL && !global._pgPool) {
   const connStr = PG_URL || NEON_URL
   if (connStr) {
@@ -65,12 +66,13 @@ if (!IS_VERCEL && !global._pgPool) {
 
 async function query(text, params = []) {
   if (IS_VERCEL) {
-    // Use Neon serverless Pool on Vercel — supports standard .query(text, params)
-    const pool = getNeonPool()
-    if (!pool) throw new Error('NEON_DATABASE_URL is not set')
-    return pool.query(text, params)
+    // neon() HTTP returns Row[] directly — wrap to match pg's {rows} interface
+    const sql = getNeonHttp()
+    if (!sql) throw new Error('NEON_DATABASE_URL is not set in Vercel env vars')
+    const rows = await sql(text, params)
+    return { rows }
   }
-  // Local Replit dev: use standard pg Pool
+  // Replit local dev: standard pg Pool
   if (global._pgPool) {
     return global._pgPool.query(text, params)
   }
