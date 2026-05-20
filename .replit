@@ -51,9 +51,11 @@ externalPort = 80
 [userenv]
 
 [userenv.shared]
-VAPID_PUBLIC_KEY = "BNl9QPsjetji4T2MQUEYvh51iDBTVnZSgGERLc7Cu-fq_7GLtncQ3fkkwIZWs_MucgI44e_5ulUOFdL-jQVDj2Y"
-VAPID_EMAIL = "mailto:admin@ticketsystem.com"
 NODE_ENV = "development"
+JWT_SECRET = "ba7b1a3ff533abf200d1a7e7ba3f033fb496060a661d826885517e28875b3e16e1cab67ab65c0eec0b5aefcf1a5c3e002feff96799710ed8302d63f000ceaebd"
+VAPID_PUBLIC_KEY = "BBu4UN5R9TppTgdegf6D_ykG73kaKHFN4Gz3TwbiOlpcEFEkQzMTjgd1-C0BFnRcBJuOqrwDXzPCP85rlMhon_g"
+VAPID_PRIVATE_KEY = "jbqe-lV6ksriV3Tibwes9vl-trHcfHbPCvyQfA1p1h4"
+VAPID_EMAIL = "mailto:admin@ticketsystem.com"
 
 [deployment]
 deploymentTarget = "autoscale"
