@@ -125,9 +125,21 @@ function shouldRunAt(hour: number, minute: number = 0): boolean {
 }
 
 // ─── Factory & Overtime Rotation crons (every 60s) ───────────────────────────
+const lastRun: Record<string, string> = {}
+
 setInterval(() => {
-  if (shouldRunAt(8)) runFactoryRotationNotifications()
-  if (shouldRunAt(15)) runOvertimeRotationNotifications()
+  const now = new Date()
+  const cairo = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }))
+  const todayKey = cairo.toISOString().slice(0, 10)
+
+  if (cairo.getHours() === 8 && !lastRun[`factory-${todayKey}`]) {
+    lastRun[`factory-${todayKey}`] = '1'
+    runFactoryRotationNotifications()
+  }
+  if (cairo.getHours() === 15 && !lastRun[`overtime-${todayKey}`]) {
+    lastRun[`overtime-${todayKey}`] = '1'
+    runOvertimeRotationNotifications()
+  }
 }, 60 * 1000)
 
 const PORT = parseInt(process.env.PORT || '3000')

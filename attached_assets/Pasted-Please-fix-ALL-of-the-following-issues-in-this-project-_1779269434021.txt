@@ -1,0 +1,182 @@
+Please fix ALL of the following issues in this project carefully. Read every item fully before starting. Do NOT skip any item.
+
+---
+
+## 🔴 CRITICAL — Security & Data
+
+### Fix #1: Remove plain-text password storage
+- Delete the `plain_password` column from `shared/schema.ts` (remove the line `plain_password: text('plain_password')`)
+- In `server/routes/forgot-password.ts`, remove any `.set({ ..., plain_password: newPassword, ... })` calls — store only `password_hash`
+- In `api/index.js`, remove all references to `plain_password` in INSERT and UPDATE statements, and remove the column from the CREATE TABLE statement
+- Run `drizzle-kit push` (or add a migration) to drop the column from the actual DB
+
+### Fix #2: Remove reference to non-existent `whatsapp_apikey` field
+- In `server/routes/auth.ts`, in the `PATCH /profile` handler, replace:
+  `const { password_hash, whatsapp_apikey: _apikey, ...safeUser } = user`
+  with:
+  `const { password_hash, ...safeUser } = user`
+- The field does not exist in the `profiles` schema so this destructure does nothing useful
+
+### Fix #3: Restrict CORS in `api/index.js`
+- Replace `app.use(cors({ origin: true, credentials: true }))` with a proper allowlist:
+```js
+const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5000'].filter(Boolean)
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+    callback(new Error('Not allowed by CORS'))
+  },
+  credentials: true,
+}))
+```
+
+---
+
+## 🟠 FUNCTIONAL BUGS
+
+### Fix #4: Wrong route registration order — AI tickets route never reached
+- In `server/app.ts`, move `app.use('/api/tickets/ai', aiTicketsRoutes)` to BEFORE `app.use('/api/tickets', ticketRoutes)`
+- Express matches the first prefix it finds, so `/api/tickets` catches `/api/tickets/ai/*` before the AI router ever runs
+- Final order must be:
+  1. `app.use('/api/tickets/ai', aiTicketsRoutes)`
+  2. `app.use('/api/tickets', ticketRoutes)`
+
+### Fix #5: Leave balance deducted in wrong timezone — miscounting working days
+- In `server/routes/leaves.ts`, fix the `calcWorkingDays` function:
+  Replace `const cur = new Date(startDate)` and `const end = new Date(endDate)`
+  with:
+```ts
+const [sy, sm, sd] = startDate.split('-').map(Number)
+const [ey, em, ed] = endDate.split('-').map(Number)
+const cur = new Date(sy, sm - 1, sd)
+const end = new Date(ey, em - 1, ed)
+```
+- Using `new Date('2026-05-01')` parses as UTC midnight which shifts the day in Cairo timezone (UTC+2), causing Friday/Saturday detection to be off by one day
+
+### Fix #6: Leave balance race condition when admin creates leave for employee
+- In `server/routes/leaves.ts`, in the `isAdminOverride` block inside `POST /`, wrap the insert + balance deduction in a `db.transaction()` the same way the `/approve` route does. Currently it does two separate DB calls without a transaction, which can result in double-deduction under concurrent requests.
+
+### Fix #7: Staff Overview page shows empty screen without error for non-super-admin
+- In `src/pages/StaffOverviewPage.jsx`, update the `useEffect` to handle errors:
+```jsx
+useEffect(() => {
+  api.getStaffOverview()
+    .then(setData)
+    .catch((err) => {
+      if (err?.status === 403 || err?.message?.includes('403')) {
+        setError('غير مصرح لك بعرض هذه الصفحة')
+      } else {
+        setError('فشل تحميل البيانات')
+      }
+    })
+    .finally(() => setLoading(false))
+}, [])
+```
+- Add a `const [error, setError] = useState(null)` state and render it in the JSX when set
+
+---
+
+## 🔵 PERFORMANCE & ARCHITECTURE
+
+### Fix #8: N+1 query — fetching ALL profiles on every ticket list request
+- In `server/routes/tickets.ts`, update the `withProfiles()` function:
+  Instead of `db.select().from(profiles)` (fetches every user),
+  collect only the needed user IDs first, then query only those:
+```ts
+async function withProfiles(rows: any[]) {
+  const userIds = [...new Set([
+    ...rows.map(t => t.created_by),
+    ...rows.map(t => t.assigned_to),
+  ].filter(Boolean))]
+
+  const ticketIds = rows.map(t => t.id)
+
+  const [allProfiles, assigneeRows, allAssets] = await Promise.all([
+    userIds.length > 0
+      ? db.select({ id: profiles.id, full_name: profiles.full_name, email: profiles.email, role: profiles.role, whatsapp_phone: profiles.whatsapp_phone })
+          .from(profiles).where(inArray(profiles.id, userIds))
+      : Promise.resolve([]),
+    ticketIds.length > 0
+      ? db.select().from(ticketAssignees).where(inArray(ticketAssignees.ticket_id, ticketIds))
+      : Promise.resolve([]),
+    db.select({ id: assets.id, name: assets.name, type: assets.type, serial_number: assets.serial_number }).from(assets),
+  ])
+  // ... rest of the function unchanged
+}
+```
+
+### Fix #9: Cron jobs fire 60 times per minute instead of once
+- In `server/index.ts`, the `shouldRunAt(hour, minute)` check runs every 60 seconds but only checks the hour, so it fires 60 times during the target hour's minute 0.
+- Fix by tracking last-run time:
+```ts
+const lastRun: Record<string, string> = {}
+
+setInterval(() => {
+  const now = new Date()
+  const cairo = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }))
+  const todayKey = cairo.toISOString().slice(0, 10)
+
+  if (cairo.getHours() === 8 && !lastRun[`factory-${todayKey}`]) {
+    lastRun[`factory-${todayKey}`] = '1'
+    runFactoryRotationNotifications()
+  }
+  if (cairo.getHours() === 15 && !lastRun[`overtime-${todayKey}`]) {
+    lastRun[`overtime-${todayKey}`] = '1'
+    runOvertimeRotationNotifications()
+  }
+}, 60 * 1000)
+```
+
+### Fix #10: Uploaded files never deleted — disk fills up over time
+- In `server/routes/tickets.ts`, when a ticket is deleted, also delete its attachment files from disk
+- In `server/routes/tickets.ts` DELETE `/:id` handler, before deleting the ticket, fetch its replies and collect all attachment URLs, then delete those files:
+```ts
+import fs from 'fs'
+import path from 'path'
+
+// Before db.delete(tickets)...
+const replies = await db.select().from(ticketReplies).where(eq(ticketReplies.ticket_id, req.params.id))
+for (const reply of replies) {
+  const urls = [
+    reply.image_url,
+    ...(reply.attachments || []),
+  ].filter(Boolean)
+  for (const url of urls) {
+    const filePath = path.join(process.cwd(), url)
+    fs.unlink(filePath, () => {}) // silent fail if already gone
+  }
+}
+```
+
+---
+
+## ⚪ IMPROVEMENTS
+
+### Fix #11: WhatsApp config fetched from DB on every single message
+- In `server/whatsappConfig.ts`, add an in-memory cache:
+```ts
+let _cachedConfig: WhatsAppConfig | null = null
+let _cacheExpiry = 0
+
+export async function getWhatsAppConfig(): Promise<WhatsAppConfig> {
+  if (_cachedConfig && Date.now() < _cacheExpiry) return _cachedConfig
+  // ... existing DB fetch logic ...
+  _cachedConfig = result
+  _cacheExpiry = Date.now() + 3 * 60 * 1000 // 3 min cache
+  return _cachedConfig
+}
+
+export async function saveWhatsAppConfig(...) {
+  // ... existing save logic ...
+  _cachedConfig = null // invalidate cache on save
+  _cacheExpiry = 0
+}
+```
+
+---
+
+After applying all fixes:
+1. Make sure the TypeScript server (`server/`) still compiles without errors
+2. Make sure `api/index.js` (Vercel) reflects the same fixes where applicable (CORS, plain_password removal, cron guard)
+3. Do NOT change any UI design, layout, or unrelated functionality
+4. Do NOT add new features — only fix what is listed above

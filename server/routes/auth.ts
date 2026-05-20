@@ -47,7 +47,7 @@ router.patch('/profile', requireAuth as any, async (req: any, res) => {
 
     const [user] = await db.update(profiles).set(updates).where(eq(profiles.id, req.user.id)).returning()
     if (!user) return res.status(404).json({ error: 'User not found' })
-    const { password_hash, whatsapp_apikey: _apikey, ...safeUser } = user
+    const { password_hash, ...safeUser } = user
     res.json(safeUser)
   } catch (err: any) {
     console.error('PATCH /auth/profile error:', err)

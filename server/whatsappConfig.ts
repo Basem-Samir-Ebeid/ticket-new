@@ -18,7 +18,11 @@ const DEFAULT_CONFIG: WhatsAppConfig = {
   apikey: '',
 }
 
+let _cachedConfig: WhatsAppConfig | null = null
+let _cacheExpiry = 0
+
 export async function getWhatsAppConfig(): Promise<WhatsAppConfig> {
+  if (_cachedConfig && Date.now() < _cacheExpiry) return _cachedConfig
   try {
     const rows = await db.select({ value: systemSettings.value })
       .from(systemSettings)
@@ -41,7 +45,9 @@ export async function getWhatsAppConfig(): Promise<WhatsAppConfig> {
         enabled: enabledBool,
       }
       console.log('[WhatsApp] getWhatsAppConfig result:', JSON.stringify(result))
-      return result
+      _cachedConfig = result
+      _cacheExpiry = Date.now() + 3 * 60 * 1000
+      return _cachedConfig
     }
   } catch (err: any) {
     console.error('[WhatsApp] getWhatsAppConfig error:', err?.message)
@@ -51,6 +57,8 @@ export async function getWhatsAppConfig(): Promise<WhatsAppConfig> {
 }
 
 export async function saveWhatsAppConfig(config: Partial<WhatsAppConfig>): Promise<WhatsAppConfig> {
+  _cachedConfig = null
+  _cacheExpiry = 0
   const existing = await getWhatsAppConfig()
   let enabledFinal: boolean
   if (config.enabled === true || config.enabled === ('true' as any) || config.enabled === (1 as any)) {

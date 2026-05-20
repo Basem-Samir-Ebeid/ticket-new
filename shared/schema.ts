@@ -5,7 +5,6 @@ export const profiles = pgTable('profiles', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   email: text('email').notNull().unique(),
   password_hash: text('password_hash').notNull(),
-  plain_password: text('plain_password'),
   full_name: text('full_name'),
   profile_picture_url: text('profile_picture_url'),
   role: text('role').notNull().default('employee'),

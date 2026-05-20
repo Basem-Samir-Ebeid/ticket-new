@@ -67,6 +67,7 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')))
 
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
+app.use('/api/tickets/ai', aiTicketsRoutes)
 app.use('/api/tickets', ticketRoutes)
 app.use('/api/attendance', attendanceRoutes)
 app.use('/api/leaves', leaveRoutes)
@@ -90,7 +91,6 @@ app.use('/api/licenses', licensesRoutes)
 app.use('/api/search', searchRoutes)
 app.use('/api/factory-rotation', factoryRotationRoutes)
 app.use('/api/overtime-rotation', overtimeRotationRoutes)
-app.use('/api/tickets/ai', aiTicketsRoutes)
 
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(process.cwd(), 'dist')))

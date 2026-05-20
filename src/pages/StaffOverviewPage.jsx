@@ -22,6 +22,7 @@ function StatBadge({ label, value, color }) {
 export default function StaffOverviewPage() {
   const [data, setData]         = useState([])
   const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState(null)
   const [search, setSearch]     = useState('')
   const [expanded, setExpanded] = useState(null)
   const [roleFilter, setRoleFilter] = useState('all')
@@ -30,7 +31,13 @@ export default function StaffOverviewPage() {
   useEffect(() => {
     api.getStaffOverview()
       .then(setData)
-      .catch(() => {})
+      .catch((err) => {
+        if (err?.status === 403 || err?.message?.includes('403')) {
+          setError('غير مصرح لك بعرض هذه الصفحة')
+        } else {
+          setError('فشل تحميل البيانات')
+        }
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -97,6 +104,8 @@ export default function StaffOverviewPage() {
 
       {loading ? (
         <div className="text-slate-500 text-sm py-12 text-center">Loading…</div>
+      ) : error ? (
+        <div className="text-red-400 text-sm py-12 text-center">{error}</div>
       ) : filtered.length === 0 ? (
         <div className="text-slate-600 text-sm py-12 text-center">No users found</div>
       ) : (

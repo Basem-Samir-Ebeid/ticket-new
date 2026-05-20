@@ -94,7 +94,7 @@ router.post('/reset-password', async (req, res) => {
 
     const password_hash = await bcrypt.hash(newPassword, 10)
     await db.update(profiles)
-      .set({ password_hash, plain_password: newPassword, must_change_password: false })
+      .set({ password_hash, must_change_password: false })
       .where(eq(profiles.id, resetToken.user_id))
 
     await db.update(passwordResetTokens)

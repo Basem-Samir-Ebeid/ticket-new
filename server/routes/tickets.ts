@@ -1,4 +1,6 @@
 import { Router } from 'express'
+import fs from 'fs'
+import path from 'path'
 import { db } from '../db'
 import { tickets, ticketReplies, profiles, notifications, ticketTemplates, ticketHistory, assets, ticketAssignees } from '../../shared/schema'
 import { eq, and, desc, or, inArray, sql as drizzleSql } from 'drizzle-orm'
@@ -21,29 +23,43 @@ import {
 const router = Router()
 
 async function withProfiles(rows: any[]) {
-  const allProfiles = await db.select({
-    id: profiles.id, full_name: profiles.full_name, email: profiles.email, role: profiles.role, whatsapp_phone: profiles.whatsapp_phone
-  }).from(profiles)
+  const userIds = [...new Set([
+    ...rows.map(t => t.created_by),
+    ...rows.map(t => t.assigned_to),
+  ].filter(Boolean))]
+
+  const ticketIds = rows.map(t => t.id)
+
+  const [allProfiles, assigneeRows, allAssets] = await Promise.all([
+    userIds.length > 0
+      ? db.select({ id: profiles.id, full_name: profiles.full_name, email: profiles.email, role: profiles.role, whatsapp_phone: profiles.whatsapp_phone })
+          .from(profiles).where(inArray(profiles.id, userIds))
+      : Promise.resolve([]),
+    ticketIds.length > 0
+      ? db.select().from(ticketAssignees).where(inArray(ticketAssignees.ticket_id, ticketIds))
+      : Promise.resolve([]),
+    db.select({ id: assets.id, name: assets.name, type: assets.type, serial_number: assets.serial_number }).from(assets),
+  ])
+
   const profileMap = new Map(allProfiles.map(p => [p.id, p]))
 
-  // Fetch multi-assignees
-  const ticketIds = rows.map(t => t.id)
-  const assigneesMap = new Map<string, any[]>()
-  if (ticketIds.length > 0) {
-    const assigneeRows = await db.select().from(ticketAssignees)
-      .where(inArray(ticketAssignees.ticket_id, ticketIds))
-    for (const a of assigneeRows) {
-      if (!assigneesMap.has(a.ticket_id)) assigneesMap.set(a.ticket_id, [])
-      assigneesMap.get(a.ticket_id)!.push({ ...a, profile: profileMap.get(a.user_id) || null })
-    }
+  // Build assignees map (augment with profiles fetched above + any extra assignee user_ids)
+  const assigneeUserIds = [...new Set(assigneeRows.map((a: any) => a.user_id).filter(Boolean))]
+  const missingIds = assigneeUserIds.filter(id => !profileMap.has(id))
+  if (missingIds.length > 0) {
+    const extra = await db.select({ id: profiles.id, full_name: profiles.full_name, email: profiles.email, role: profiles.role, whatsapp_phone: profiles.whatsapp_phone })
+      .from(profiles).where(inArray(profiles.id, missingIds))
+    extra.forEach(p => profileMap.set(p.id, p))
   }
 
-  const assetIds = [...new Set(rows.map(t => t.asset_id).filter(Boolean))]
-  let assetMap = new Map<string, any>()
-  if (assetIds.length > 0) {
-    const allAssets = await db.select({ id: assets.id, name: assets.name, type: assets.type, serial_number: assets.serial_number }).from(assets)
-    allAssets.forEach(a => assetMap.set(a.id, a))
+  const assigneesMap = new Map<string, any[]>()
+  for (const a of assigneeRows) {
+    if (!assigneesMap.has(a.ticket_id)) assigneesMap.set(a.ticket_id, [])
+    assigneesMap.get(a.ticket_id)!.push({ ...a, profile: profileMap.get(a.user_id) || null })
   }
+
+  const assetMap = new Map<string, any>()
+  allAssets.forEach(a => assetMap.set(a.id, a))
 
   return rows.map(t => ({
     ...t,
@@ -526,6 +542,17 @@ router.post('/:id/rate', requireAuth as any, async (req: any, res) => {
 
 router.delete('/:id', requireAuth as any, async (req: any, res) => {
   try {
+    const replies = await db.select().from(ticketReplies).where(eq(ticketReplies.ticket_id, req.params.id))
+    for (const reply of replies) {
+      const urls = [
+        reply.image_url,
+        ...(reply.attachments || []),
+      ].filter(Boolean)
+      for (const url of urls) {
+        const filePath = path.join(process.cwd(), url as string)
+        fs.unlink(filePath, () => {})
+      }
+    }
     await db.delete(tickets).where(eq(tickets.id, req.params.id))
     logAudit({
       user_id: req.user.id,

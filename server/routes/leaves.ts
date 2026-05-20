@@ -12,8 +12,10 @@ const router = Router()
 
 function calcWorkingDays(startDate: string, endDate: string): number {
   let count = 0
-  const cur = new Date(startDate)
-  const end = new Date(endDate)
+  const [sy, sm, sd] = startDate.split('-').map(Number)
+  const [ey, em, ed] = endDate.split('-').map(Number)
+  const cur = new Date(sy, sm - 1, sd)
+  const end = new Date(ey, em - 1, ed)
   while (cur <= end) {
     const dow = cur.getDay()
     if (dow !== 5 && dow !== 6) count++
@@ -212,25 +214,42 @@ router.post('/', requireAuth as any, async (req: any, res) => {
         gte(leaveRequests.end_date, start_date)
       ))
 
-    const [leave] = await db.insert(leaveRequests).values({
-      user_id: forUserId,
-      start_date,
-      end_date,
-      reason: reason || null,
-      leave_type: ltype,
-      days_count: days,
-      status: isAdminOverride ? 'approved' : 'pending',
-    }).returning()
-
-    // Admin-created leave: auto-approved — deduct balance and notify employee
+    let leave: any
     if (isAdminOverride) {
-      if (ltype === 'annual') {
-        await db.update(profiles).set({ leave_balance: Math.max(0, (prof?.leave_balance || 0) - days) }).where(eq(profiles.id, forUserId))
-      } else if (ltype === 'sick') {
-        await db.update(profiles).set({ sick_leave_balance: Math.max(0, (prof?.sick_leave_balance || 0) - days) }).where(eq(profiles.id, forUserId))
-      } else if (ltype === 'emergency') {
-        await db.update(profiles).set({ emergency_leave_balance: Math.max(0, (prof?.emergency_leave_balance || 0) - days) }).where(eq(profiles.id, forUserId))
-      }
+      await db.transaction(async (tx) => {
+        const [inserted] = await tx.insert(leaveRequests).values({
+          user_id: forUserId,
+          start_date,
+          end_date,
+          reason: reason || null,
+          leave_type: ltype,
+          days_count: days,
+          status: 'approved',
+        }).returning()
+        leave = inserted
+        if (ltype === 'annual') {
+          await tx.update(profiles).set({ leave_balance: Math.max(0, (prof?.leave_balance || 0) - days) }).where(eq(profiles.id, forUserId))
+        } else if (ltype === 'sick') {
+          await tx.update(profiles).set({ sick_leave_balance: Math.max(0, (prof?.sick_leave_balance || 0) - days) }).where(eq(profiles.id, forUserId))
+        } else if (ltype === 'emergency') {
+          await tx.update(profiles).set({ emergency_leave_balance: Math.max(0, (prof?.emergency_leave_balance || 0) - days) }).where(eq(profiles.id, forUserId))
+        }
+      })
+    } else {
+      const [inserted] = await db.insert(leaveRequests).values({
+        user_id: forUserId,
+        start_date,
+        end_date,
+        reason: reason || null,
+        leave_type: ltype,
+        days_count: days,
+        status: 'pending',
+      }).returning()
+      leave = inserted
+    }
+
+    // Admin-created leave: auto-approved — notify employee
+    if (isAdminOverride) {
       const typeLabel: Record<string, string> = { annual: 'سنوية', sick: 'مرضية', emergency: 'طارئة', unpaid: 'بدون راتب' }
       const [notif] = await db.insert(notifications).values({
         user_id: forUserId,

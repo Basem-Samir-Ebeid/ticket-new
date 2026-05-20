@@ -18,7 +18,14 @@ neonConfig.fetchConnectionCache = true
 
 const app = express()
 
-app.use(cors({ origin: true, credentials: true }))
+const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5000'].filter(Boolean)
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+    callback(new Error('Not allowed by CORS'))
+  },
+  credentials: true,
+}))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
@@ -90,7 +97,6 @@ async function ensureSchema() {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         email TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
-        plain_password TEXT,
         full_name TEXT,
         profile_picture_url TEXT,
         role TEXT NOT NULL DEFAULT 'employee',
@@ -435,9 +441,9 @@ async function seedAdmins() {
       if (rows.length === 0) {
         const password_hash = await bcrypt.hash(admin.password, 10)
         await db.query(
-          `INSERT INTO profiles (email, password_hash, plain_password, full_name, role, must_change_password)
-           VALUES ($1, $2, $3, $4, 'super_admin', false)`,
-          [admin.email, password_hash, admin.password, admin.full_name]
+          `INSERT INTO profiles (email, password_hash, full_name, role, must_change_password)
+           VALUES ($1, $2, $3, 'super_admin', false)`,
+          [admin.email, password_hash, admin.full_name]
         )
         console.log(`[seed] Created super admin: ${admin.email}`)
       } else {
@@ -598,8 +604,8 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
     if (!await bcrypt.compare(currentPassword, req.profile.password_hash)) return res.status(401).json({ error: 'Current password incorrect' })
     const password_hash = await bcrypt.hash(newPassword, 10)
     await getPool().query(
-      'UPDATE profiles SET password_hash=$1, must_change_password=false, plain_password=$2 WHERE id=$3',
-      [password_hash, newPassword, req.user.id]
+      'UPDATE profiles SET password_hash=$1, must_change_password=false WHERE id=$2',
+      [password_hash, req.user.id]
     )
     res.json({ success: true })
   } catch (err) {
@@ -616,8 +622,8 @@ app.post('/api/auth/force-change-password', requireAuth, async (req, res) => {
     if (newPassword.length < 6) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.' })
     const password_hash = await bcrypt.hash(newPassword, 10)
     await getPool().query(
-      'UPDATE profiles SET password_hash=$1, must_change_password=false, plain_password=$2 WHERE id=$3',
-      [password_hash, newPassword, req.user.id]
+      'UPDATE profiles SET password_hash=$1, must_change_password=false WHERE id=$2',
+      [password_hash, req.user.id]
     )
     res.json({ success: true })
   } catch (err) {
@@ -660,8 +666,8 @@ app.post('/api/auth/reset-password', async (req, res) => {
     if (!rows[0]) return res.status(400).json({ error: 'Invalid or expired reset link' })
     const password_hash = await bcrypt.hash(newPassword, 10)
     await getPool().query(
-      'UPDATE profiles SET password_hash=$1, plain_password=$2, must_change_password=false WHERE id=$3',
-      [password_hash, newPassword, rows[0].user_id]
+      'UPDATE profiles SET password_hash=$1, must_change_password=false WHERE id=$2',
+      [password_hash, rows[0].user_id]
     )
     await getPool().query('UPDATE password_reset_tokens SET used=true WHERE id=$1', [rows[0].id])
     res.json({ success: true })
@@ -692,10 +698,6 @@ app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
     const { rows } = await getPool().query('SELECT * FROM profiles ORDER BY created_at DESC')
     const users = rows.map(u => {
       const { password_hash, ...rest } = u
-      if (!isSuperAdmin) {
-        const { plain_password, ...noPass } = rest
-        return noPass
-      }
       return rest
     })
     res.json(users)
@@ -720,13 +722,13 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
     const password_hash = await bcrypt.hash(password, 10)
     const { rows } = await db.query(
       `INSERT INTO profiles (
-        email, password_hash, plain_password, full_name, role, can_view_attendance, can_view_assets, profile_picture_url,
+        email, password_hash, full_name, role, can_view_attendance, can_view_assets, profile_picture_url,
         must_change_password, department, job_title, phone, national_id, hire_date, birth_date,
         gender, address, employment_type, employee_code, direct_manager, notes, whatsapp_phone
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
       RETURNING *`,
       [
-        email.toLowerCase(), password_hash, password, full_name || null, role || 'employee',
+        email.toLowerCase(), password_hash, full_name || null, role || 'employee',
         can_view_attendance || false, can_view_assets || false, profile_picture_url || null,
         department || null, job_title || null, phone || null, national_id || null,
         hire_date || null, birth_date || null, gender || null, address || null,
@@ -795,8 +797,8 @@ app.post('/api/users/:id/reset-password', requireAuth, requireAdmin, async (req,
     if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
     const password_hash = await bcrypt.hash(newPassword, 10)
     const { rows } = await getPool().query(
-      'UPDATE profiles SET password_hash=$1, plain_password=$2, must_change_password=true WHERE id=$3 RETURNING id',
-      [password_hash, newPassword, req.params.id]
+      'UPDATE profiles SET password_hash=$1, must_change_password=true WHERE id=$2 RETURNING id',
+      [password_hash, req.params.id]
     )
     if (!rows[0]) return res.status(404).json({ error: 'User not found' })
     res.json({ success: true })
@@ -1566,7 +1568,7 @@ app.get('/api/users/:id/profile', requireAuth, requireAdmin, async (req, res) =>
   try {
     const { rows } = await getPool().query('SELECT * FROM profiles WHERE id=$1', [req.params.id])
     if (!rows[0]) return res.status(404).json({ error: 'User not found' })
-    const { password_hash, plain_password, ...safe } = rows[0]
+    const { password_hash, ...safe } = rows[0]
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
     const { rows: att } = await getPool().query('SELECT * FROM login_times WHERE user_id=$1 ORDER BY date DESC', [req.params.id])
