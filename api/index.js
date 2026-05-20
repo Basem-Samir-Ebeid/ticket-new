@@ -372,6 +372,31 @@ async function ensureSchema() {
     `)
 
     await db.query(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS ticket_assignees (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        assigned_by UUID REFERENCES profiles(id) ON DELETE SET NULL
+      );
+
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS subcategory TEXT;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS asset_id UUID;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_deadline TIMESTAMPTZ;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS merged_into UUID;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_escalated BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_warned BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ai_assisted BOOLEAN NOT NULL DEFAULT false;
+    `)
+
+    await db.query(`
       CREATE TABLE IF NOT EXISTS factory_rotation_groups (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name TEXT NOT NULL,
@@ -576,7 +601,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
     const { rows } = await getPool().query('SELECT * FROM profiles WHERE email = $1', [email.toLowerCase()])
     const profile = rows[0]
-    if (!profile) return res.status(401).json({ error: 'Invalid email or password' })
+    if (!profile || !profile.password_hash) return res.status(401).json({ error: 'Invalid email or password' })
     const valid = await bcrypt.compare(password, profile.password_hash)
     if (!valid) return res.status(401).json({ error: 'Invalid email or password' })
     const { password_hash, ...safeProfile } = profile
