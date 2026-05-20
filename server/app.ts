@@ -40,9 +40,20 @@ const allowedOrigins = [
   'http://localhost:5000',
 ].filter(Boolean)
 
+const replitDomains = process.env.REPLIT_DOMAINS
+  ? process.env.REPLIT_DOMAINS.split(',').map(d => `https://${d.trim()}`)
+  : []
+const replitDevDomain = process.env.REPLIT_DEV_DOMAIN
+  ? [`https://${process.env.REPLIT_DEV_DOMAIN}`]
+  : []
+const allAllowedOrigins = [...allowedOrigins, ...replitDomains, ...replitDevDomain]
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+    if (!origin || allAllowedOrigins.includes(origin) || !origin) return callback(null, true)
+    if (origin.endsWith('.replit.dev') || origin.endsWith('.repl.co') || origin.endsWith('.replit.app')) {
+      return callback(null, true)
+    }
     callback(new Error('Not allowed by CORS'))
   },
   credentials: true,
