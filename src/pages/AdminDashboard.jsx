@@ -41,6 +41,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     : 'radial-gradient(ellipse at 60% -10%, rgba(49,46,129,0.5) 0%, transparent 55%), radial-gradient(ellipse at 10% 80%, rgba(30,15,80,0.25) 0%, transparent 45%), #05050a'
   const focusBorder = isSuperAdmin ? 'focus:border-amber-500' : 'focus:border-indigo-500'
   const [tab, setTab] = useState('dashboard')
+  const [ticketsSubTab, setTicketsSubTab] = useState('all-tickets')
   const [tickets, setTickets] = useState([])
   const [users, setUsers] = useState([])
   const [selectedTicket, setSelectedTicket] = useState(null)
@@ -1338,7 +1339,6 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     { key: 'overtime-rotation', label: 'تناوب الأوفر',    icon: 'overtime' },
     ...(isSuperAdmin ? [
       { key: 'audit-logs',     label: 'Audit Logs',     icon: 'settings' },
-      { key: 'staff-overview', label: 'Staff Overview',  icon: 'users'    },
     ] : []),
     { key: 'settings',          label: 'Settings',        icon: 'settings' },
   ]
@@ -1872,7 +1872,33 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Tickets Tab */}
         {tab === 'tickets' && (
           <div>
-            <div className="flex justify-between items-center mb-4 gap-2 flex-wrap">
+            <div className="flex gap-1 mb-5 p-1 rounded-xl" style={{background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)', width:'fit-content'}}>
+              <button
+                onClick={() => setTicketsSubTab('all-tickets')}
+                className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all"
+                style={ticketsSubTab === 'all-tickets'
+                  ? {background:'rgba(99,102,241,0.25)', color:'#a5b4fc', border:'1px solid rgba(99,102,241,0.3)'}
+                  : {color:'#64748b', border:'1px solid transparent'}}
+              >
+                All Tickets
+              </button>
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setTicketsSubTab('staff-overview')}
+                  className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={ticketsSubTab === 'staff-overview'
+                    ? {background:'rgba(99,102,241,0.25)', color:'#a5b4fc', border:'1px solid rgba(99,102,241,0.3)'}
+                    : {color:'#64748b', border:'1px solid transparent'}}
+                >
+                  Staff Overview
+                </button>
+              )}
+            </div>
+            {ticketsSubTab === 'staff-overview' && isSuperAdmin ? (
+              <StaffOverviewPage />
+            ) : (
+              <div>
+                <div className="flex justify-between items-center mb-4 gap-2 flex-wrap">
               <h2 className="text-white font-semibold text-sm">All Tickets</h2>
               <div className="flex gap-2">
                 <button onClick={() => exportCsv('tickets.csv', tickets, [
@@ -2282,6 +2308,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                 )}
               </div>
             ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -4869,11 +4897,6 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Audit Logs Tab (super admin only) */}
         {tab === 'audit-logs' && isSuperAdmin && (
           <AuditLogsPage />
-        )}
-
-        {/* Staff Overview Tab (super admin only) */}
-        {tab === 'staff-overview' && isSuperAdmin && (
-          <StaffOverviewPage />
         )}
 
       {/* ── Edit Attendance Modal ────────────────────────────── */}
