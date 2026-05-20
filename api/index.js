@@ -10,7 +10,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import webpush from 'web-push'
 import multer from 'multer'
-import { neon, neonConfig } from '@neondatabase/serverless'
+import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless'
 import pg from 'pg'
 
 // ── Neon serverless config (uses HTTP fetch — no TCP timeouts on Vercel) ──────
@@ -38,23 +38,23 @@ if (!NEON_URL && !PG_URL) {
   console.error('[DB] FATAL: Neither NEON_DATABASE_URL nor DATABASE_URL is set')
 }
 
-// Neon HTTP client — the ONLY driver used on Vercel (no TCP, no pool, no timeouts)
-let _neonSql = null
-function getNeonSql() {
-  if (!_neonSql && NEON_URL) {
-    _neonSql = neon(NEON_URL)
+// ── Vercel: use @neondatabase/serverless Pool (HTTP-based, no TCP timeout) ─────
+let _neonPool = null
+function getNeonPool() {
+  if (!_neonPool && NEON_URL) {
+    _neonPool = new NeonPool({ connectionString: NEON_URL })
   }
-  return _neonSql
+  return _neonPool
 }
 
-// pg Pool — only for local Replit dev, never on Vercel
+// ── Replit local dev: use standard pg Pool (TCP) ──────────────────────────────
 if (!IS_VERCEL && !global._pgPool) {
   const connStr = PG_URL || NEON_URL
   if (connStr) {
     const { Pool } = pg
     global._pgPool = new Pool({
       connectionString: connStr,
-      ssl: connStr.includes('neon.tech') ? { rejectUnauthorized: false } : false,
+      ssl: connStr?.includes('neon.tech') ? { rejectUnauthorized: false } : false,
       max: 3,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
@@ -64,16 +64,17 @@ if (!IS_VERCEL && !global._pgPool) {
 }
 
 async function query(text, params = []) {
-  // On Vercel: always use Neon HTTP (pg Pool TCP connections fail on serverless)
-  if (!IS_VERCEL && global._pgPool) {
+  if (IS_VERCEL) {
+    // Use Neon serverless Pool on Vercel — supports standard .query(text, params)
+    const pool = getNeonPool()
+    if (!pool) throw new Error('NEON_DATABASE_URL is not set')
+    return pool.query(text, params)
+  }
+  // Local Replit dev: use standard pg Pool
+  if (global._pgPool) {
     return global._pgPool.query(text, params)
   }
-  const sql = getNeonSql()
-  if (sql) {
-    const rows = await sql(text, params)
-    return { rows }
-  }
-  throw new Error('No database connection — check NEON_DATABASE_URL in Vercel env vars')
+  throw new Error('No database connection available')
 }
 
 function getPool() {
@@ -477,14 +478,12 @@ async function seedAdmins() {
 }
 
 async function initDb() {
-  // Skip schema init on Vercel — DB schema is already set up via Drizzle (npm run db:push)
-  // Running ensureSchema on every cold start causes timeouts on Vercel serverless
-  if (!IS_VERCEL) {
-    await ensureSchema()
-    await seedAdmins()
-  } else {
-    console.log('[init] Vercel detected — skipping schema init')
+  if (IS_VERCEL) {
+    console.log('[init] Vercel: skipping schema init (use npm run db:push instead)')
+    return
   }
+  await ensureSchema()
+  await seedAdmins()
 }
 
 initDb().catch(err => console.error('[init] Failed:', err))

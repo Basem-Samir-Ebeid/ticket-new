@@ -1,0 +1,106 @@
+Root cause confirmed from Vercel logs: every `POST /api/auth/login` returns 500.
+
+The bug is in `api/index.js` line 76:
+```js
+const rows = await sql(text, params)  // ← WRONG
+return { rows }
+```
+
+`neon()` from `@neondatabase/serverless` returns a **tagged template literal function**, not a regular function. Calling it as `sql(text, params)` does NOT return `{ rows: [...] }` — it returns a raw array (the result itself), so `{ rows }` becomes `{ rows: [array] }` which breaks everything downstream.
+
+---
+
+## THE FIX — Replace the entire DB setup block in `api/index.js` (lines 33–83)
+
+Replace everything from `const NEON_URL =` down to the closing `}` of `getPool()` with this:
+
+```js
+const NEON_URL = process.env.NEON_DATABASE_URL
+const PG_URL   = process.env.DATABASE_URL
+const IS_VERCEL = !!process.env.VERCEL
+
+if (!NEON_URL && !PG_URL) {
+  console.error('[DB] FATAL: Neither NEON_DATABASE_URL nor DATABASE_URL is set')
+}
+
+// ── Vercel: use @neondatabase/serverless Pool (HTTP-based, no TCP timeout) ─────
+import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless'
+neonConfig.fetchConnectionCache = true
+
+let _neonPool = null
+function getNeonPool() {
+  if (!_neonPool && NEON_URL) {
+    _neonPool = new NeonPool({ connectionString: NEON_URL })
+  }
+  return _neonPool
+}
+
+// ── Replit local dev: use standard pg Pool (TCP) ──────────────────────────────
+if (!IS_VERCEL && !global._pgPool) {
+  const connStr = PG_URL || NEON_URL
+  if (connStr) {
+    const { Pool } = pg
+    global._pgPool = new Pool({
+      connectionString: connStr,
+      ssl: connStr?.includes('neon.tech') ? { rejectUnauthorized: false } : false,
+      max: 3,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    })
+    global._pgPool.on('error', (err) => console.error('[DB] Pool error:', err.message))
+  }
+}
+
+async function query(text, params = []) {
+  if (IS_VERCEL) {
+    // Use Neon serverless Pool on Vercel — supports standard .query(text, params)
+    const pool = getNeonPool()
+    if (!pool) throw new Error('NEON_DATABASE_URL is not set')
+    return pool.query(text, params)
+  }
+  // Local Replit dev: use standard pg Pool
+  if (global._pgPool) {
+    return global._pgPool.query(text, params)
+  }
+  throw new Error('No database connection available')
+}
+
+function getPool() {
+  return { query }
+}
+```
+
+**Important:** The import line `import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless'` must replace the existing `import { neon, neonConfig } from '@neondatabase/serverless'` at the top of the file (line 13). Update that import too.
+
+---
+
+## Also fix `initDb()` — skip schema init on Vercel
+
+Find:
+```js
+async function initDb() {
+  await ensureSchema()
+  await seedAdmins()
+}
+initDb().catch(err => console.error('[init] Failed:', err))
+```
+
+Replace with:
+```js
+async function initDb() {
+  if (IS_VERCEL) {
+    console.log('[init] Vercel: skipping schema init (use npm run db:push instead)')
+    return
+  }
+  await ensureSchema()
+  await seedAdmins()
+}
+initDb().catch(err => console.error('[init] Failed:', err))
+```
+
+---
+
+After these two changes, commit and push. Then test:
+`https://ticket-new-xi.vercel.app/api/health`
+
+Should return `{"status":"ok","db":"connected"}` — then login will work.
