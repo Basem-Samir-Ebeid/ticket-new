@@ -2574,6 +2574,82 @@ app.post('/api/overtime-rotation/schedule/assign', requireAuth, async (req, res)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// ── STAFF OVERVIEW ────────────────────────────────────────────────────────────
+app.get('/api/reports/staff-overview', requireAuth, async (req, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+
+    const { rows: allUsers } = await getPool().query(
+      'SELECT id, full_name, email, role, avatar_url, department FROM profiles ORDER BY full_name'
+    )
+    const { rows: allTickets } = await getPool().query(
+      "SELECT id, title, status, priority, category, assigned_to, created_at, solved_at, sla_deadline FROM tickets WHERE is_request=false"
+    )
+    let allAssignees = []
+    try {
+      const { rows } = await getPool().query('SELECT ticket_id, user_id FROM ticket_assignees')
+      allAssignees = rows
+    } catch (_) {}
+
+    const userTicketMap = new Map()
+    for (const u of allUsers) userTicketMap.set(u.id, [])
+
+    for (const t of allTickets) {
+      if (t.assigned_to && userTicketMap.has(t.assigned_to)) {
+        userTicketMap.get(t.assigned_to).push(t)
+      }
+      const extra = allAssignees.filter(a => String(a.ticket_id) === String(t.id) && String(a.user_id) !== String(t.assigned_to))
+      for (const a of extra) {
+        if (userTicketMap.has(a.user_id)) userTicketMap.get(a.user_id).push(t)
+      }
+    }
+
+    const result = allUsers.map(u => {
+      const myTickets = userTicketMap.get(u.id) || []
+      const open      = myTickets.filter(t => t.status === 'opened').length
+      const inProg    = myTickets.filter(t => t.status === 'pending').length
+      const closed    = myTickets.filter(t => t.status === 'solved').length
+
+      const resolvedT = myTickets.filter(t => t.solved_at && t.created_at)
+      const avgResolutionHours = resolvedT.length > 0
+        ? Math.round(resolvedT.reduce((sum, t) =>
+            sum + (new Date(t.solved_at).getTime() - new Date(t.created_at).getTime()) / 3600000
+          , 0) / resolvedT.length)
+        : null
+
+      const slaBreached = myTickets.filter(t =>
+        t.sla_deadline && new Date(t.sla_deadline) < new Date() && t.status !== 'solved'
+      ).length
+
+      const recentTickets = myTickets.slice(0, 5).map(t => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        category: t.category,
+        created_at: t.created_at,
+      }))
+
+      return {
+        ...u,
+        total: myTickets.length,
+        open,
+        in_progress: inProg,
+        closed,
+        pending: inProg,
+        avg_resolution_hours: avgResolutionHours,
+        sla_breached: slaBreached,
+        recent_tickets: recentTickets,
+      }
+    })
+
+    res.json(result)
+  } catch (err) {
+    console.error('GET /api/reports/staff-overview error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to load staff overview' })
+  }
+})
+
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {
   try {

@@ -2,11 +2,9 @@ import { useState, useEffect } from 'react'
 import { api } from '../lib/api'
 
 const STATUS_COLOR = {
-  open:        { bg: 'rgba(59,130,246,0.15)',  text: '#60a5fa', border: 'rgba(59,130,246,0.25)' },
-  in_progress: { bg: 'rgba(245,158,11,0.15)', text: '#fbbf24', border: 'rgba(245,158,11,0.25)' },
-  closed:      { bg: 'rgba(34,197,94,0.15)',  text: '#4ade80', border: 'rgba(34,197,94,0.25)' },
-  resolved:    { bg: 'rgba(34,197,94,0.15)',  text: '#4ade80', border: 'rgba(34,197,94,0.25)' },
-  pending:     { bg: 'rgba(168,85,247,0.15)', text: '#c084fc', border: 'rgba(168,85,247,0.25)' },
+  opened:  { bg: 'rgba(59,130,246,0.15)',  text: '#60a5fa', border: 'rgba(59,130,246,0.25)' },
+  pending: { bg: 'rgba(245,158,11,0.15)', text: '#fbbf24', border: 'rgba(245,158,11,0.25)' },
+  solved:  { bg: 'rgba(34,197,94,0.15)',  text: '#4ade80', border: 'rgba(34,197,94,0.25)' },
 }
 const PRIORITY_COLOR = {
   critical: '#f87171', high: '#fb923c', medium: '#fbbf24', low: '#60a5fa'

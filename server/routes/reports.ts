@@ -433,8 +433,8 @@ router.get('/staff-overview', requireAuth as any, async (req: any, res) => {
       category: tickets.category,
       assigned_to: tickets.assigned_to,
       created_at: tickets.created_at,
-      resolved_at: tickets.resolved_at,
-      sla_deadline: tickets.sla_deadline,
+      solved_at: (tickets as any).solved_at,
+      sla_deadline: (tickets as any).sla_deadline,
     }).from(tickets).where(eq(tickets.is_request, false))
 
     const allAssignees = await db.select().from(ticketAssignees)
@@ -454,20 +454,20 @@ router.get('/staff-overview', requireAuth as any, async (req: any, res) => {
 
     const result = allUsers.map(u => {
       const myTickets = userTicketMap.get(u.id) || []
-      const open      = myTickets.filter(t => t.status === 'open').length
-      const inProg    = myTickets.filter(t => t.status === 'in_progress').length
-      const closed    = myTickets.filter(t => t.status === 'closed' || t.status === 'resolved').length
-      const pending   = myTickets.filter(t => t.status === 'pending').length
+      const open      = myTickets.filter(t => t.status === 'opened').length
+      const inProg    = myTickets.filter(t => t.status === 'pending').length
+      const closed    = myTickets.filter(t => t.status === 'solved').length
+      const pending   = inProg
 
-      const resolved = myTickets.filter(t => t.resolved_at && t.created_at)
+      const resolved = myTickets.filter(t => t.solved_at && t.created_at)
       const avgResolutionHours = resolved.length > 0
         ? Math.round(resolved.reduce((sum, t) => {
-            return sum + (new Date(t.resolved_at!).getTime() - new Date(t.created_at).getTime()) / 3600000
+            return sum + (new Date(t.solved_at as any).getTime() - new Date(t.created_at).getTime()) / 3600000
           }, 0) / resolved.length)
         : null
 
       const slaBreached = myTickets.filter(t =>
-        t.sla_deadline && new Date(t.sla_deadline) < new Date() && t.status !== 'closed' && t.status !== 'resolved'
+        t.sla_deadline && new Date(t.sla_deadline as any) < new Date() && t.status !== 'solved'
       ).length
 
       const recentTickets = myTickets.slice(0, 5).map(t => ({
