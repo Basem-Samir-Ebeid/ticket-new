@@ -32,12 +32,13 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 // ── DB: try Neon serverless HTTP first, fall back to standard pg Pool ─────────
 const NEON_URL = process.env.NEON_DATABASE_URL
 const PG_URL   = process.env.DATABASE_URL
+const IS_VERCEL = !!process.env.VERCEL
 
 if (!NEON_URL && !PG_URL) {
   console.error('[DB] FATAL: Neither NEON_DATABASE_URL nor DATABASE_URL is set')
 }
 
-// Neon HTTP client (serverless-safe, works on Vercel with no TCP timeouts)
+// Neon HTTP client — the ONLY driver used on Vercel (no TCP, no pool, no timeouts)
 let _neonSql = null
 function getNeonSql() {
   if (!_neonSql && NEON_URL) {
@@ -46,8 +47,8 @@ function getNeonSql() {
   return _neonSql
 }
 
-// Fallback pg Pool for local dev (Replit) where Neon HTTP isn't needed
-if (!global._pgPool) {
+// pg Pool — only for local Replit dev, never on Vercel
+if (!IS_VERCEL && !global._pgPool) {
   const connStr = PG_URL || NEON_URL
   if (connStr) {
     const { Pool } = pg
@@ -62,25 +63,19 @@ if (!global._pgPool) {
   }
 }
 
-// ── Unified query helper ───────────────────────────────────────────────────────
-// On Vercel (NEON_URL set, no PG_URL): uses Neon HTTP → no TCP timeout
-// On Replit  (PG_URL set):             uses pg Pool   → normal local dev
 async function query(text, params = []) {
-  // On Vercel serverless, always use Neon HTTP — pg Pool TCP connections fail there
-  const isVercel = !!process.env.VERCEL
-  if (!isVercel && global._pgPool && PG_URL) {
+  // On Vercel: always use Neon HTTP (pg Pool TCP connections fail on serverless)
+  if (!IS_VERCEL && global._pgPool) {
     return global._pgPool.query(text, params)
   }
-  // Neon HTTP for Vercel serverless
   const sql = getNeonSql()
   if (sql) {
     const rows = await sql(text, params)
     return { rows }
   }
-  throw new Error('No database connection available')
+  throw new Error('No database connection — check NEON_DATABASE_URL in Vercel env vars')
 }
 
-// Keep getPool() for any legacy callers — wraps the unified query
 function getPool() {
   return { query }
 }
@@ -482,8 +477,14 @@ async function seedAdmins() {
 }
 
 async function initDb() {
-  await ensureSchema()
-  await seedAdmins()
+  // Skip schema init on Vercel — DB schema is already set up via Drizzle (npm run db:push)
+  // Running ensureSchema on every cold start causes timeouts on Vercel serverless
+  if (!IS_VERCEL) {
+    await ensureSchema()
+    await seedAdmins()
+  } else {
+    console.log('[init] Vercel detected — skipping schema init')
+  }
 }
 
 initDb().catch(err => console.error('[init] Failed:', err))

@@ -1,0 +1,104 @@
+Please apply these 3 targeted fixes to `api/index.js`. This is the definitive fix for the 500 login error on Vercel.
+
+---
+
+## FIX 1 — Replace the entire DB setup block (lines 33–83)
+
+Replace everything from `const NEON_URL = ...` down to the end of the `getPool()` function with this:
+
+```js
+const NEON_URL = process.env.NEON_DATABASE_URL
+const PG_URL   = process.env.DATABASE_URL
+const IS_VERCEL = !!process.env.VERCEL
+
+if (!NEON_URL && !PG_URL) {
+  console.error('[DB] FATAL: Neither NEON_DATABASE_URL nor DATABASE_URL is set')
+}
+
+// Neon HTTP client — the ONLY driver used on Vercel (no TCP, no pool, no timeouts)
+let _neonSql = null
+function getNeonSql() {
+  if (!_neonSql && NEON_URL) {
+    _neonSql = neon(NEON_URL)
+  }
+  return _neonSql
+}
+
+// pg Pool — only for local Replit dev, never on Vercel
+if (!IS_VERCEL && !global._pgPool) {
+  const connStr = PG_URL || NEON_URL
+  if (connStr) {
+    const { Pool } = pg
+    global._pgPool = new Pool({
+      connectionString: connStr,
+      ssl: connStr.includes('neon.tech') ? { rejectUnauthorized: false } : false,
+      max: 3,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    })
+    global._pgPool.on('error', (err) => console.error('[DB] Pool error:', err.message))
+  }
+}
+
+async function query(text, params = []) {
+  // On Vercel: always use Neon HTTP (pg Pool TCP connections fail on serverless)
+  if (!IS_VERCEL && global._pgPool) {
+    return global._pgPool.query(text, params)
+  }
+  const sql = getNeonSql()
+  if (sql) {
+    const rows = await sql(text, params)
+    return { rows }
+  }
+  throw new Error('No database connection — check NEON_DATABASE_URL in Vercel env vars')
+}
+
+function getPool() {
+  return { query }
+}
+```
+
+---
+
+## FIX 2 — Disable ensureSchema on Vercel (find line ~483)
+
+Find:
+```js
+async function initDb() {
+  await ensureSchema()
+  await seedAdmins()
+}
+
+initDb().catch(err => console.error('[init] Failed:', err))
+```
+
+Replace with:
+```js
+async function initDb() {
+  // Skip schema init on Vercel — DB schema is already set up via Drizzle (npm run db:push)
+  // Running ensureSchema on every cold start causes timeouts on Vercel serverless
+  if (!IS_VERCEL) {
+    await ensureSchema()
+    await seedAdmins()
+  } else {
+    console.log('[init] Vercel detected — skipping schema init')
+  }
+}
+
+initDb().catch(err => console.error('[init] Failed:', err))
+```
+
+---
+
+## FIX 3 — Add a health check route to verify DB (find the existing `/api/health` route)
+
+The existing health check is fine. After deploying, open this URL to confirm the DB connects:
+`https://ticket-new-xi.vercel.app/api/health`
+
+It should return: `{"status":"ok","db":"connected"}`
+
+If it returns `disconnected`, check that `NEON_DATABASE_URL` in Vercel matches exactly the connection string from your Neon dashboard (Project → Connection Details → Connection string, with `?sslmode=require` at the end).
+
+---
+
+After applying FIX 1 and FIX 2, commit and push. Vercel will auto-deploy. Then test `/api/health` first, then try login.
