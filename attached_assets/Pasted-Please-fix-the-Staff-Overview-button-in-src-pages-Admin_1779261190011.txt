@@ -1,0 +1,77 @@
+Please fix the Staff Overview button in `src/pages/AdminDashboard.jsx`. The goal is simple: add a **Staff Overview button next to the + New Ticket button**, and when clicked it opens a full-screen modal showing `<StaffOverviewPage />`.
+
+---
+
+## Step 1 — Remove the sub-tabs entirely
+
+Delete the `ticketsSubTab` state and the sub-tab pill navigation (the `<div>` containing the "All Tickets" / "Staff Overview" toggle buttons). Also remove the `{ticketsSubTab === 'staff-overview' ? <StaffOverviewPage /> : ...}` conditional — just show the tickets list directly.
+
+---
+
+## Step 2 — Add state for the modal
+
+Add this state near the top of the component (with the other useState declarations):
+
+```js
+const [showStaffOverview, setShowStaffOverview] = useState(false)
+```
+
+---
+
+## Step 3 — Add the button next to + New Ticket
+
+Inside `{tab === 'tickets' && (...)}`, find the header row that contains the `+ New Ticket` button. Add the Staff Overview button **right before** it:
+
+```jsx
+<button
+  onClick={() => setShowStaffOverview(true)}
+  className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5"
+>
+  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+  </svg>
+  Staff Overview
+</button>
+<button onClick={() => setShowCreateTicket(v=>!v)} className="btn-primary text-sm px-4 py-2">+ New Ticket</button>
+```
+
+---
+
+## Step 4 — Add the modal
+
+At the bottom of the component's return (before the final closing tags), add this modal:
+
+```jsx
+{showStaffOverview && (
+  <div
+    className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
+    style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}
+    onClick={e => { if (e.target === e.currentTarget) setShowStaffOverview(false) }}
+  >
+    <div
+      className="relative w-full max-w-5xl my-8 rounded-2xl p-6 shadow-2xl"
+      style={{ background: 'linear-gradient(135deg,#1e1b2e,#16132a)', border: '1px solid rgba(99,102,241,0.3)' }}
+    >
+      <button
+        onClick={() => setShowStaffOverview(false)}
+        className="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      <h2 className="text-white font-semibold text-base mb-4">Staff Overview</h2>
+      <StaffOverviewPage />
+    </div>
+  </div>
+)}
+```
+
+---
+
+**Summary of changes:**
+- Remove `ticketsSubTab` state and all sub-tab UI
+- Add `showStaffOverview` state
+- Add Staff Overview button next to + New Ticket button
+- Add modal that renders `<StaffOverviewPage />` when button is clicked
+- Modal closes on backdrop click or X button
