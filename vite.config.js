@@ -14,7 +14,6 @@ export default defineConfig({
     hmr: {
       clientPort: 443,
       protocol: 'wss',
-      path: '/__vite_hmr',
     },
     proxy: {
       '/api': {
