@@ -1,0 +1,167 @@
+Please fix ALL of the following bugs carefully. Read every point before making any changes.
+
+---
+
+## BUG 1 — File uploads on Vercel return base64 instead of a persistent URL
+
+In `api/index.js`, the upload handler uses `multer.memoryStorage()` and returns a base64 data URL:
+```js
+const url = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`
+```
+This is broken on Vercel because:
+- There is no persistent filesystem on Vercel serverless functions
+- The base64 data URL is massive and not a real file URL
+- The frontend stores this "URL" in the database and it breaks rendering
+
+**Fix:** Keep using `multer.memoryStorage()` in `api/index.js` (since disk is not available on Vercel), but instead of returning base64, upload the file buffer to an external storage service. The simplest approach is to encode it as base64 and store it in the database as a `data:` URL only as a last resort — but a better fix is to add Cloudinary or Supabase Storage. For now, at minimum, add a clear comment and return the base64 URL with a `name` field so the frontend can display the filename:
+```js
+res.json({ url: `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`, name: req.file.originalname })
+```
+And make sure the frontend (`FileAttachment.jsx` and anywhere files are rendered) handles both `/uploads/filename.ext` style URLs AND `data:...` base64 URLs gracefully.
+
+---
+
+## BUG 2 — CORS in `api/index.js` blocks the Vercel production domain
+
+Current code in `api/index.js`:
+```js
+const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5000'].filter(Boolean)
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+    callback(new Error('Not allowed by CORS'))
+  },
+  credentials: true,
+}))
+```
+If `FRONTEND_URL` is not set in Vercel environment variables, ALL frontend requests will fail with a CORS error.
+
+**Fix:** Update the CORS origin function in `api/index.js` to also allow Vercel preview domains and be more resilient:
+```js
+const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5000'].filter(Boolean)
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true)
+    if (allowedOrigins.includes(origin)) return callback(null, true)
+    if (origin.endsWith('.vercel.app') || origin.endsWith('.replit.dev') || origin.endsWith('.repl.co')) {
+      return callback(null, true)
+    }
+    callback(new Error('Not allowed by CORS'))
+  },
+  credentials: true,
+}))
+```
+Also fix the duplicate condition in `server/app.ts` line:
+```ts
+if (!origin || allAllowedOrigins.includes(origin) || !origin) // <-- !origin is duplicated
+```
+Change to:
+```ts
+if (!origin || allAllowedOrigins.includes(origin))
+```
+
+---
+
+## BUG 3 — Missing UNIQUE constraint on `ticket_assignees` (ticket_id, user_id)
+
+In `shared/schema.ts`, the `ticketAssignees` table has no unique constraint on the combination of `ticket_id` + `user_id`. This means the same user can be added as an assignee to the same ticket multiple times, causing duplicate entries and incorrect behavior.
+
+**Fix:** Add a unique constraint in `shared/schema.ts`:
+```ts
+import { pgTable, uuid, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+
+export const ticketAssignees = pgTable('ticket_assignees', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ticket_id: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  assigned_at: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
+  assigned_by: uuid('assigned_by').references(() => profiles.id, { onDelete: 'set null' }),
+}, (table) => ({
+  uniqueAssignee: uniqueIndex('ticket_assignees_ticket_user_unique').on(table.ticket_id, table.user_id),
+}))
+```
+Also in `api/index.js`, update the `CREATE TABLE IF NOT EXISTS ticket_assignees` SQL to add the constraint:
+```sql
+CREATE TABLE IF NOT EXISTS ticket_assignees (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  assigned_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  UNIQUE(ticket_id, user_id)
+);
+```
+
+---
+
+## BUG 4 — Leave days double-deduction: `calcWorkingDays` returns minimum 1 even for weekend-only ranges
+
+In `server/routes/leaves.ts`:
+```ts
+return Math.max(1, count)
+```
+If a user submits a leave request for a Friday–Saturday range (both weekend days in Egypt), the function returns `1` instead of `0`. This means:
+- 1 day gets deducted from their balance incorrectly
+- The leave is created with `days_count: 1` when it should be rejected or have 0 days
+
+**Fix:** Remove the `Math.max(1, count)` floor. If the result is 0, the backend should reject the request:
+```ts
+function calcWorkingDays(startDate: string, endDate: string): number {
+  let count = 0
+  const [sy, sm, sd] = startDate.split('-').map(Number)
+  const [ey, em, ed] = endDate.split('-').map(Number)
+  const cur = new Date(sy, sm - 1, sd)
+  const end = new Date(ey, em - 1, ed)
+  while (cur <= end) {
+    const dow = cur.getDay()
+    if (dow !== 5 && dow !== 6) count++
+    cur.setDate(cur.getDate() + 1)
+  }
+  return count // removed Math.max(1, count)
+}
+```
+Then after calling `calcWorkingDays`, add a check:
+```ts
+const days = calcWorkingDays(start_date, end_date)
+if (days === 0) {
+  return res.status(400).json({ error: 'لا يمكن تقديم طلب إجازة في أيام العطلة الرسمية فقط.' })
+}
+```
+Apply the same fix in `api/index.js` wherever `calcWorkingDays` is defined.
+
+---
+
+## BUG 5 — Duplicate `broadcast` import in `server/index.ts`
+
+In `server/index.ts`:
+```ts
+import { setupWebSocket } from './ws'   // line 3
+import { broadcast } from './ws'         // line 8 — duplicate
+```
+**Fix:** Merge into one import:
+```ts
+import { setupWebSocket, broadcast } from './ws'
+```
+
+---
+
+## BUG 6 — Missing input validation on user creation in `api/index.js`
+
+The `POST /api/users` endpoint in `api/index.js` does not validate the email format or password strength before inserting into the database. This can cause silent failures or invalid data in the DB.
+
+**Fix:** Add basic validation before the INSERT:
+```js
+if (!email || !password || !full_name) {
+  return res.status(400).json({ error: 'email, password, and full_name are required' })
+}
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  return res.status(400).json({ error: 'Invalid email format' })
+}
+if (password.length < 6) {
+  return res.status(400).json({ error: 'Password must be at least 6 characters' })
+}
+```
+
+---
+
+Please apply all 6 fixes above. After applying, run the project to make sure nothing is broken.

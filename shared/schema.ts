@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, date, doublePrecision, integer, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, boolean, timestamp, date, doublePrecision, integer, jsonb, uniqueIndex } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 export const profiles = pgTable('profiles', {
@@ -78,7 +78,9 @@ export const ticketAssignees = pgTable('ticket_assignees', {
   user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
   assigned_at: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
   assigned_by: uuid('assigned_by').references(() => profiles.id, { onDelete: 'set null' }),
-})
+}, (table) => ({
+  uniqueAssignee: uniqueIndex('ticket_assignees_ticket_user_unique').on(table.ticket_id, table.user_id),
+}))
 
 export type TicketAssignee = typeof ticketAssignees.$inferSelect
 

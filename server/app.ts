@@ -50,7 +50,7 @@ const allAllowedOrigins = [...allowedOrigins, ...replitDomains, ...replitDevDoma
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allAllowedOrigins.includes(origin) || !origin) return callback(null, true)
+    if (!origin || allAllowedOrigins.includes(origin)) return callback(null, true)
     if (origin.endsWith('.replit.dev') || origin.endsWith('.repl.co') || origin.endsWith('.replit.app')) {
       return callback(null, true)
     }

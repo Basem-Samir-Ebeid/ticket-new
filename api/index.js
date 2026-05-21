@@ -21,7 +21,11 @@ const app = express()
 const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5000'].filter(Boolean)
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+    if (!origin) return callback(null, true)
+    if (allowedOrigins.includes(origin)) return callback(null, true)
+    if (origin.endsWith('.vercel.app') || origin.endsWith('.replit.dev') || origin.endsWith('.repl.co') || origin.endsWith('.replit.app')) {
+      return callback(null, true)
+    }
     callback(new Error('Not allowed by CORS'))
   },
   credentials: true,
@@ -382,7 +386,8 @@ async function ensureSchema() {
         ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
         user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
         assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        assigned_by UUID REFERENCES profiles(id) ON DELETE SET NULL
+        assigned_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        UNIQUE(ticket_id, user_id)
       );
 
       ALTER TABLE tickets ADD COLUMN IF NOT EXISTS subcategory TEXT;
@@ -742,7 +747,8 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
       department, job_title, phone, national_id, hire_date, birth_date,
       gender, address, employment_type, employee_code, direct_manager, notes, whatsapp_phone,
     } = req.body
-    if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
+    if (!email || !password || !full_name) return res.status(400).json({ error: 'email, password, and full_name are required' })
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email format' })
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
     const db = getPool()
     const { rows: existing } = await db.query('SELECT id FROM profiles WHERE email = $1', [email.toLowerCase()])
@@ -1294,9 +1300,12 @@ app.post('/api/leaves', requireAuth, async (req, res) => {
       let count = 0
       const cur = new Date(s), end = new Date(e)
       while (cur <= end) { const d = cur.getDay(); if (d !== 5 && d !== 6) count++; cur.setDate(cur.getDate() + 1) }
-      return Math.max(1, count)
+      return count
     }
     const days = calcWorkingDays(start_date, end_date)
+    if (days === 0) {
+      return res.status(400).json({ error: 'لا يمكن تقديم طلب إجازة في أيام العطلة الرسمية فقط.' })
+    }
 
     // Check balance for the target user (skip balance check for admin override)
     if (!isAdminOverride) {
@@ -1507,7 +1516,7 @@ app.post('/api/upload', requireAuth, upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
     const url = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`
-    res.json({ url })
+    res.json({ url, name: req.file.originalname })
   } catch (err) {
     res.status(500).json({ error: 'Upload failed' })
   }

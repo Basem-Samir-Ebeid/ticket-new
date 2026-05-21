@@ -21,7 +21,7 @@ function calcWorkingDays(startDate: string, endDate: string): number {
     if (dow !== 5 && dow !== 6) count++
     cur.setDate(cur.getDate() + 1)
   }
-  return Math.max(1, count)
+  return count
 }
 
 router.get('/', requireAuth as any, async (req: any, res) => {
@@ -180,6 +180,9 @@ router.post('/', requireAuth as any, async (req: any, res) => {
 
     const ltype = leave_type || 'annual'
     const days = calcWorkingDays(start_date, end_date)
+    if (days === 0) {
+      return res.status(400).json({ error: 'لا يمكن تقديم طلب إجازة في أيام العطلة الرسمية فقط.' })
+    }
 
     const [prof] = await db.select({
       leave_balance: profiles.leave_balance, sick_leave_balance: profiles.sick_leave_balance,
