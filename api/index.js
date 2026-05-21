@@ -485,7 +485,8 @@ async function seedAdmins() {
 
 async function initDb() {
   if (IS_VERCEL) {
-    console.log('[init] Vercel: skipping schema init (use npm run db:push instead)')
+    console.log('[init] Vercel: skipping schema init — seeding admins only')
+    await seedAdmins()
     return
   }
   await ensureSchema()
@@ -602,6 +603,37 @@ async function sendPushToAdmins(title, body, url = '/') {
 }
 
 // ── AUTH ROUTES ───────────────────────────────────────────────────────────────
+
+// Temporary emergency route — reset a super admin's password directly.
+// Protected by ADMIN_RESET_SECRET env var. Remove once password is confirmed working.
+app.post('/api/auth/reset-seed-admin', async (req, res) => {
+  try {
+    const { secret, newPassword } = req.body
+    if (!process.env.ADMIN_RESET_SECRET || secret !== process.env.ADMIN_RESET_SECRET) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password too short' })
+    }
+    const password_hash = await bcrypt.hash(newPassword, 10)
+    const { rows } = await getPool().query(
+      `UPDATE profiles SET password_hash = $1, must_change_password = false
+       WHERE email = $2 RETURNING id`,
+      [password_hash, 'basem.samir@finest-his.com']
+    )
+    if (rows.length === 0) {
+      await getPool().query(
+        `INSERT INTO profiles (email, password_hash, full_name, role, must_change_password)
+         VALUES ($1, $2, 'Basem Samir', 'super_admin', false)`,
+        ['basem.samir@finest-his.com', password_hash]
+      )
+    }
+    res.json({ success: true, message: 'Password updated' })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body

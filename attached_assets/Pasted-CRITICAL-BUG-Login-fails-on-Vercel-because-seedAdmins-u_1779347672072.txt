@@ -1,0 +1,63 @@
+CRITICAL BUG — Login fails on Vercel because seedAdmins() uses a hardcoded 
+fallback password that may not match what's stored in the database.
+
+In `api/index.js`, the seedAdmins function has:
+  password: process.env.SEED_ADMIN1_PASSWORD || 'Basem.s.ebeid#@55!'
+
+The password hash stored in the Neon database was created at a specific time.
+If the database was reset, migrated, or the user row was recreated, the hash 
+will not match the hardcoded password.
+
+Fix 1 — Add a route to reset the super admin password directly from the app.
+Add this temporary route in api/index.js (protected by a secret key):
+
+app.post('/api/auth/reset-seed-admin', async (req, res) => {
+  try {
+    const { secret, newPassword } = req.body
+    if (secret !== process.env.ADMIN_RESET_SECRET) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password too short' })
+    }
+    const password_hash = await bcrypt.hash(newPassword, 10)
+    const { rows } = await getPool().query(
+      `UPDATE profiles SET password_hash = $1, must_change_password = false 
+       WHERE email = $2 RETURNING id`,
+      [password_hash, 'basem.samir@finest-his.com']
+    )
+    if (rows.length === 0) {
+      // User doesn't exist, create them
+      await getPool().query(
+        `INSERT INTO profiles (email, password_hash, full_name, role, must_change_password)
+         VALUES ($1, $2, 'Basem Samir', 'super_admin', false)`,
+        ['basem.samir@finest-his.com', password_hash]
+      )
+    }
+    res.json({ success: true, message: 'Password updated' })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+Fix 2 — Also update seedAdmins() so that on Vercel it DOES run but only 
+to ensure the user exists (not skip entirely). Change initDb() to:
+
+async function initDb() {
+  if (IS_VERCEL) {
+    await seedAdmins()  // still seed admins on Vercel
+    return
+  }
+  await ensureSchema()
+  await seedAdmins()
+}
+
+Fix 3 — Add SEED_ADMIN1_PASSWORD and SEED_ADMIN2_PASSWORD as Environment 
+Variables in Vercel → Settings → Environment Variables, so the real 
+passwords are used instead of the hardcoded fallback values.
+
+After deploying this fix, call the reset endpoint once:
+POST /api/auth/reset-seed-admin
+Body: { "secret": "<your ADMIN_RESET_SECRET>", "newPassword": "<your password>" }
+
+Then remove the /api/auth/reset-seed-admin route for security.
