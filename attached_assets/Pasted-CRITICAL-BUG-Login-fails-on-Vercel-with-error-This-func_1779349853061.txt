@@ -1,0 +1,71 @@
+CRITICAL BUG — Login fails on Vercel with error:
+"This function can now be called only as a tagged template literal"
+
+Root cause: The neon() HTTP client from @neondatabase/serverless has been 
+updated and no longer supports being called as a regular function.
+
+Current broken code in api/index.js:
+  const rows = await sql(text, params)  // ❌ WRONG
+
+The new API requires tagged template syntax:
+  const rows = await sql`SELECT * FROM profiles WHERE email = ${email}`  // ✅
+
+Fix: Replace the entire query() wrapper function in api/index.js with one 
+that uses the tagged template syntax properly:
+
+// Replace the current query() function with this:
+async function query(text, params = []) {
+  if (IS_VERCEL) {
+    const sql = getNeonHttp()
+    if (!sql) throw new Error('NEON_DATABASE_URL is not set in Vercel env vars')
+    // Neon tagged template workaround — convert parameterized query to template
+    const { neon } = await import('@neondatabase/serverless')
+    const db = neon(process.env.NEON_DATABASE_URL)
+    // Use the unsafe() method which still accepts (text, params) format
+    const rows = await db.unsafe(text, params)
+    return { rows }
+  }
+  if (global._pgPool) {
+    return global._pgPool.query(text, params)
+  }
+  throw new Error('No database connection available')
+}
+
+If db.unsafe() is not available in your version, use this alternative fix:
+Change the import at the top of api/index.js from:
+  import { neon, neonConfig } from '@neondatabase/serverless'
+
+To use neonConfig with queryOptions:
+  neonConfig.fetchConnectionCache = true
+
+And replace getNeonHttp() and query() entirely with:
+
+import { neon } from '@neondatabase/serverless'
+
+function getNeonHttp() {
+  if (!_neonHttp && NEON_URL) {
+    _neonHttp = neon(NEON_URL, { fullResults: true })
+  }
+  return _neonHttp
+}
+
+async function query(text, params = []) {
+  if (IS_VERCEL) {
+    const sql = getNeonHttp()
+    if (!sql) throw new Error('NEON_DATABASE_URL is not set in Vercel env vars')
+    const result = await sql(text, params)
+    // With fullResults: true, result has a .rows property
+    return { rows: result.rows }
+  }
+  if (global._pgPool) {
+    return global._pgPool.query(text, params)
+  }
+  throw new Error('No database connection available')
+}
+
+The key fix is adding { fullResults: true } to the neon() constructor,
+which makes it return { rows: [...] } instead of Row[] directly,
+AND makes it accept (text, params) calls again without requiring 
+tagged template syntax.
+
+This affects ALL database calls on Vercel — login, all API routes, everything.

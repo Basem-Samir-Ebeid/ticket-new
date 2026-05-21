@@ -43,11 +43,12 @@ if (!NEON_URL && !PG_URL) {
 }
 
 // Vercel: neon() HTTP client — no WebSocket, no TCP, works on serverless
-// neon(url)(text, params) returns Row[] directly (not {rows}), so we wrap it
+// { fullResults: true } makes it return { rows, fields, ... } and accept
+// (text, params) calls without requiring tagged template syntax.
 let _neonHttp = null
 function getNeonHttp() {
   if (!_neonHttp && NEON_URL) {
-    _neonHttp = neon(NEON_URL)
+    _neonHttp = neon(NEON_URL, { fullResults: true })
   }
   return _neonHttp
 }
@@ -70,11 +71,11 @@ if (!IS_VERCEL && !global._pgPool) {
 
 async function query(text, params = []) {
   if (IS_VERCEL) {
-    // neon() HTTP returns Row[] directly — wrap to match pg's {rows} interface
+    // fullResults: true → result is { rows, fields, ... } matching pg's interface
     const sql = getNeonHttp()
     if (!sql) throw new Error('NEON_DATABASE_URL is not set in Vercel env vars')
-    const rows = await sql(text, params)
-    return { rows }
+    const result = await sql(text, params)
+    return { rows: result.rows }
   }
   // Replit local dev: standard pg Pool
   if (global._pgPool) {
