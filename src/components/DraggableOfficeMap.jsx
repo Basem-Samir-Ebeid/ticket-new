@@ -17,8 +17,16 @@ export default function DraggableOfficeMap({ lat, lng, radius, onChange }) {
   useEffect(() => {
     if (!containerRef.current) return
 
+    const timer = setTimeout(() => {
     import('leaflet').then(({ default: L }) => {
       if (mapRef.current) return
+
+      delete L.Icon.Default.prototype._getIconUrl
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      })
 
       const map = L.map(containerRef.current, {
         center: [validLat, validLng],
@@ -88,8 +96,10 @@ export default function DraggableOfficeMap({ lat, lng, radius, onChange }) {
       markerRef.current = marker
       circleRef.current = circle
     })
+    }, 100)
 
     return () => {
+      clearTimeout(timer)
       if (mapRef.current) {
         mapRef.current.remove()
         mapRef.current = null

@@ -1250,19 +1250,6 @@ app.post('/api/attendance/logout', requireAuth, async (req, res) => {
 
     const isRemote = existing[0].attendance_type === 'remote'
 
-    // Check if current time in Cairo is after 6 PM — bypass geofence if so
-    const nowCairo = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo' }))
-    const isAfterSixPM = nowCairo.getHours() >= 18
-
-    if (!isRemote && !isAfterSixPM) {
-      if (latitude == null || longitude == null) return res.status(400).json({ error: 'Location is required to check out' })
-      const office = await getOfficeConfig()
-      const distance = haversineDistance(Number(latitude), Number(longitude), office.latitude, office.longitude)
-      if (distance > office.radius_meters) {
-        return res.status(403).json({ error: `أنت بعيد جداً عن المكتب (${Math.round(distance)}م، الحد الأقصى المسموح: ${office.radius_meters}م)` })
-      }
-    }
-
     const { rows } = await db.query(
       'UPDATE login_times SET logout_time=$1, logout_latitude=$2, logout_longitude=$3 WHERE user_id=$4 AND date=$5 RETURNING *',
       [new Date(), isRemote ? null : latitude, isRemote ? null : longitude, req.user.id, today]

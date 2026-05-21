@@ -366,18 +366,6 @@ router.post('/logout', requireAuth as any, async (req: any, res) => {
     if (existing.logout_time) return res.status(400).json({ error: 'Already signed off today' })
 
     const isRemote = existing.attendance_type === 'remote'
-    const currentHour = getLocalHour()
-    const isAfter6PM = currentHour >= 18
-
-    if (!isRemote && !isAfter6PM) {
-      if (latitude == null || longitude == null) {
-        return res.status(400).json({ error: 'يجب إرسال الإحداثيات لتسجيل الانصراف.' })
-      }
-      const geo = await checkGeofence(latitude, longitude, 'check-out')
-      if (!geo.allowed) {
-        return res.status(403).json({ error: geo.error })
-      }
-    }
 
     const [record] = await db.update(loginTimes).set({
       logout_time: new Date(),
