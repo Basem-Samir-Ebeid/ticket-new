@@ -93,9 +93,9 @@ async function ensureSchema() {
   if (schemaInitialized) return
   try {
     const db = getPool()
-    await db.query(`
-      CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+    // ── CREATE TABLE statements (idempotent, safe to batch) ──────────────────
+    await db.query(`
       CREATE TABLE IF NOT EXISTS profiles (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         email TEXT NOT NULL UNIQUE,
@@ -108,26 +108,6 @@ async function ensureSchema() {
         leave_balance INTEGER NOT NULL DEFAULT 14,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
-
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS can_view_assets BOOLEAN NOT NULL DEFAULT false;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS leave_balance INTEGER NOT NULL DEFAULT 14;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sick_leave_balance INTEGER NOT NULL DEFAULT 7;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS emergency_leave_balance INTEGER NOT NULL DEFAULT 3;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS work_start_hour INTEGER NOT NULL DEFAULT 9;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS department TEXT;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS job_title TEXT;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS phone TEXT;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS national_id TEXT;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS hire_date DATE;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_date DATE;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gender TEXT;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS address TEXT;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS employment_type TEXT DEFAULT 'full_time';
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS employee_code TEXT;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS direct_manager TEXT;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS notes TEXT;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS whatsapp_phone TEXT;
-      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS can_view_whatsapp_contacts BOOLEAN NOT NULL DEFAULT false;
 
       CREATE TABLE IF NOT EXISTS tickets (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -150,13 +130,6 @@ async function ensureSchema() {
         solved_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
-
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category TEXT;
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS due_date DATE;
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'medium';
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS rating INTEGER;
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS rating_comment TEXT;
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS affected_user_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
 
       CREATE TABLE IF NOT EXISTS ticket_history (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -189,8 +162,6 @@ async function ensureSchema() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
-      ALTER TABLE ticket_replies ADD COLUMN IF NOT EXISTS attachment_name TEXT;
-
       CREATE TABLE IF NOT EXISTS login_times (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -202,8 +173,6 @@ async function ensureSchema() {
         logout_latitude DOUBLE PRECISION,
         logout_longitude DOUBLE PRECISION
       );
-
-      ALTER TABLE login_times ADD COLUMN IF NOT EXISTS attendance_type TEXT NOT NULL DEFAULT 'office';
 
       CREATE TABLE IF NOT EXISTS remote_attendance_requests (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -229,8 +198,6 @@ async function ensureSchema() {
         decided_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
-
-      ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS leave_type TEXT NOT NULL DEFAULT 'annual';
 
       CREATE TABLE IF NOT EXISTS notifications (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -367,14 +334,6 @@ async function ensureSchema() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
-      ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS days_count INTEGER NOT NULL DEFAULT 1;
-
-      INSERT INTO office_settings (id, latitude, longitude, radius_meters)
-      VALUES ('main', 30.0803897, 31.3524335, 20)
-      ON CONFLICT (id) DO NOTHING;
-    `)
-
-    await db.query(`
       CREATE TABLE IF NOT EXISTS system_settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL,
@@ -390,17 +349,6 @@ async function ensureSchema() {
         UNIQUE(ticket_id, user_id)
       );
 
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS subcategory TEXT;
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS asset_id UUID;
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_deadline TIMESTAMPTZ;
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS merged_into UUID;
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_escalated BOOLEAN NOT NULL DEFAULT false;
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_warned BOOLEAN NOT NULL DEFAULT false;
-      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ai_assisted BOOLEAN NOT NULL DEFAULT false;
-    `)
-
-    await db.query(`
       CREATE TABLE IF NOT EXISTS factory_rotation_groups (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name TEXT NOT NULL,
@@ -441,11 +389,62 @@ async function ensureSchema() {
         notified BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
+
+      INSERT INTO office_settings (id, latitude, longitude, radius_meters)
+      VALUES ('main', 30.0803897, 31.3524335, 20)
+      ON CONFLICT (id) DO NOTHING;
     `)
+
+    // ── ALTER TABLE statements — each in its own try/catch so one failure
+    //    never blocks login or any other API route ──────────────────────────
+    const alters = [
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS can_view_assets BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS leave_balance INTEGER NOT NULL DEFAULT 14`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sick_leave_balance INTEGER NOT NULL DEFAULT 7`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS emergency_leave_balance INTEGER NOT NULL DEFAULT 3`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS work_start_hour INTEGER NOT NULL DEFAULT 9`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS department TEXT`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS job_title TEXT`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS phone TEXT`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS national_id TEXT`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS hire_date DATE`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_date DATE`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gender TEXT`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS address TEXT`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS employment_type TEXT DEFAULT 'full_time'`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS employee_code TEXT`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS direct_manager TEXT`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS notes TEXT`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS whatsapp_phone TEXT`,
+      `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS can_view_whatsapp_contacts BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category TEXT`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS due_date DATE`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'medium'`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS rating INTEGER`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS rating_comment TEXT`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS affected_user_id UUID REFERENCES profiles(id) ON DELETE SET NULL`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS subcategory TEXT`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}'`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS asset_id UUID`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_deadline TIMESTAMPTZ`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS merged_into UUID`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_escalated BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_warned BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ai_assisted BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE ticket_replies ADD COLUMN IF NOT EXISTS attachment_name TEXT`,
+      `ALTER TABLE login_times ADD COLUMN IF NOT EXISTS attendance_type TEXT NOT NULL DEFAULT 'office'`,
+      `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS leave_type TEXT NOT NULL DEFAULT 'annual'`,
+      `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS days_count INTEGER NOT NULL DEFAULT 1`,
+    ]
+    for (const sql of alters) {
+      try { await db.query(sql) } catch (_) {}
+    }
+
     schemaInitialized = true
     console.log('[schema] Schema ready')
   } catch (err) {
     console.error('[schema] Schema init failed:', err.message)
+    // Do NOT re-throw — let the app continue even if schema init partially fails
   }
 }
 
