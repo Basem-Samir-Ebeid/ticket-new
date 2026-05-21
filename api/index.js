@@ -10,11 +10,10 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import webpush from 'web-push'
 import multer from 'multer'
-import { neon, neonConfig } from '@neondatabase/serverless'
+import { neon } from '@neondatabase/serverless'
 import pg from 'pg'
 
 // ── Neon serverless config (uses HTTP fetch — no TCP timeouts on Vercel) ──────
-neonConfig.fetchConnectionCache = true
 
 const app = express()
 
@@ -74,7 +73,7 @@ async function query(text, params = []) {
     // fullResults: true → result is { rows, fields, ... } matching pg's interface
     const sql = getNeonHttp()
     if (!sql) throw new Error('NEON_DATABASE_URL is not set in Vercel env vars')
-    const result = await sql(text, params)
+    const result = await sql.query(text, params)
     return { rows: result.rows }
   }
   // Replit local dev: standard pg Pool
