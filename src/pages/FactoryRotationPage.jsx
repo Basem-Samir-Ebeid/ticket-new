@@ -848,12 +848,13 @@ function EmployeeView() {
     }
   }
 
-  const pastDays = allDays.filter(d => normDate(d.scheduled_date) < today).reverse()
-  const todayEntry = allDays.find(d => normDate(d.scheduled_date) === today)
+  const attendedDays = allDays.filter(d => d.attended_at).sort((a, b) => normDate(b.scheduled_date).localeCompare(normDate(a.scheduled_date)))
+  const todayEntry = allDays.find(d => normDate(d.scheduled_date) === today && !d.attended_at)
   const futureDays = allDays.filter(d => normDate(d.scheduled_date) > today)
+  const missedDays = allDays.filter(d => normDate(d.scheduled_date) < today && !d.attended_at).sort((a, b) => normDate(b.scheduled_date).localeCompare(normDate(a.scheduled_date)))
 
-  const attendedCount = allDays.filter(d => d.attended_at).length
-  const absentCount = allDays.filter(d => normDate(d.scheduled_date) < today && !d.attended_at).length
+  const attendedCount = attendedDays.length
+  const absentCount = missedDays.length
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">
@@ -895,7 +896,7 @@ function EmployeeView() {
         )}
       </div>
 
-      {/* Today's entry — prominent card */}
+      {/* Today's entry — prominent card with attend button */}
       {todayEntry && (
         <div className="rounded-2xl p-5" style={{background:'linear-gradient(135deg,rgba(8,145,178,0.18),rgba(6,182,212,0.08))', border:'2px solid rgba(8,145,178,0.5)'}}>
           <div className="flex items-center justify-between">
@@ -908,39 +909,27 @@ function EmployeeView() {
                 </p>
               </div>
             </div>
-            {todayEntry.attended_at ? (
-              <div className="flex flex-col items-end gap-1.5">
-                <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl" style={{background:'rgba(16,185,129,0.15)', border:'1px solid rgba(16,185,129,0.4)'}}>
-                  <span className="text-lg leading-none">✅</span>
-                  <span className="text-emerald-400 text-sm font-bold">تم الحضور</span>
-                </div>
-                <span className="text-emerald-600 text-[11px] font-medium">
-                  ⏱ الساعة {new Date(todayEntry.attended_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-            ) : (
-              <button
-                onClick={() => handleAttend(todayEntry)}
-                disabled={markingId === todayEntry.id}
-                className="px-5 py-2.5 rounded-xl text-white text-sm font-bold transition-all disabled:opacity-60 active:scale-95"
-                style={{background:'linear-gradient(135deg,#0891b2,#06b6d4)', boxShadow:'0 4px 20px rgba(8,145,178,0.4)'}}
-              >
-                {markingId === todayEntry.id ? (
-                  <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />جارٍ التسجيل...</span>
-                ) : '✋ سجّل حضورك'}
-              </button>
-            )}
+            <button
+              onClick={() => handleAttend(todayEntry)}
+              disabled={markingId === todayEntry.id}
+              className="px-5 py-2.5 rounded-xl text-white text-sm font-bold transition-all disabled:opacity-60 active:scale-95"
+              style={{background:'linear-gradient(135deg,#0891b2,#06b6d4)', boxShadow:'0 4px 20px rgba(8,145,178,0.4)'}}
+            >
+              {markingId === todayEntry.id ? (
+                <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />جارٍ التسجيل...</span>
+              ) : '✋ سجّل حضورك'}
+            </button>
           </div>
         </div>
       )}
 
-      {/* Upcoming days */}
+      {/* Upcoming days — only non-attended future days */}
       {futureDays.length > 0 && (
         <div>
           <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3">الأيام القادمة</h3>
           <div className="space-y-2">
             {futureDays.map(entry => {
-              const isTomorrow = entry.scheduled_date === tomorrow
+              const isTomorrow = normDate(entry.scheduled_date) === tomorrow
               return (
                 <div key={entry.id} className="rounded-xl p-3.5 flex items-center justify-between"
                   style={{
@@ -969,45 +958,64 @@ function EmployeeView() {
         </div>
       )}
 
-      {/* Past days */}
-      {pastDays.length > 0 && (
+      {/* Attended days — moves here after marking attendance */}
+      {attendedDays.length > 0 && (
         <div>
-          <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3">السجل السابق</h3>
+          <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2">
+            <span className="text-emerald-500">✓</span> الأيام التي تم الحضور فيها
+          </h3>
           <div className="space-y-2">
-            {pastDays.map(entry => {
-              const attended = !!entry.attended_at
-              return (
-                <div key={entry.id} className="rounded-xl p-3.5 flex items-center justify-between"
-                  style={{
-                    background: attended ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
-                    border: attended ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(239,68,68,0.15)',
-                  }}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
-                      style={{background: attended ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.12)'}}>
-                      {attended ? '✅' : '❌'}
-                    </div>
-                    <div>
-                      <p className="text-slate-300 text-sm font-medium">
-                        {new Date(entry.scheduled_date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                      </p>
-                      {attended && (
-                        <p className="text-[11px] text-emerald-500">
-                          سُجّل الحضور في {new Date(entry.attended_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                      )}
-                      {!attended && <p className="text-[11px] text-red-400/70">لم يُسجَّل الحضور</p>}
-                    </div>
+            {attendedDays.map(entry => (
+              <div key={entry.id} className="rounded-xl p-3.5 flex items-center justify-between"
+                style={{background:'rgba(16,185,129,0.06)', border:'1px solid rgba(16,185,129,0.2)'}}>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
+                    style={{background:'rgba(16,185,129,0.15)'}}>✅</div>
+                  <div>
+                    <p className="text-slate-300 text-sm font-medium">
+                      {new Date(entry.scheduled_date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                    <p className="text-[11px] text-emerald-500">
+                      سُجّل الحضور في {new Date(entry.attended_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
                   </div>
-                  <span className="text-[11px] font-semibold px-3 py-1 rounded-full"
-                    style={attended
-                      ? {background:'rgba(16,185,129,0.15)', color:'#34d399', border:'1px solid rgba(16,185,129,0.3)'}
-                      : {background:'rgba(239,68,68,0.12)', color:'#f87171', border:'1px solid rgba(239,68,68,0.25)'}}>
-                    {attended ? 'حضر ✓' : 'تغيّب ✗'}
-                  </span>
                 </div>
-              )
-            })}
+                <span className="text-[11px] font-semibold px-3 py-1 rounded-full"
+                  style={{background:'rgba(16,185,129,0.15)', color:'#34d399', border:'1px solid rgba(16,185,129,0.3)'}}>
+                  حضر ✓
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Missed days */}
+      {missedDays.length > 0 && (
+        <div>
+          <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2">
+            <span className="text-red-500">✗</span> الأيام الفائتة
+          </h3>
+          <div className="space-y-2">
+            {missedDays.map(entry => (
+              <div key={entry.id} className="rounded-xl p-3.5 flex items-center justify-between"
+                style={{background:'rgba(239,68,68,0.06)', border:'1px solid rgba(239,68,68,0.15)'}}>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
+                    style={{background:'rgba(239,68,68,0.12)'}}>❌</div>
+                  <div>
+                    <p className="text-slate-300 text-sm font-medium">
+                      {new Date(entry.scheduled_date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                    <p className="text-[11px] text-red-400/70">لم يُسجَّل الحضور</p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-semibold px-3 py-1 rounded-full"
+                  style={{background:'rgba(239,68,68,0.12)', color:'#f87171', border:'1px solid rgba(239,68,68,0.25)'}}>
+                  تغيّب ✗
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
