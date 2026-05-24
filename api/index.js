@@ -435,6 +435,7 @@ async function ensureSchema() {
       `ALTER TABLE login_times ADD COLUMN IF NOT EXISTS attendance_type TEXT NOT NULL DEFAULT 'office'`,
       `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS leave_type TEXT NOT NULL DEFAULT 'annual'`,
       `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS days_count INTEGER NOT NULL DEFAULT 1`,
+      `ALTER TABLE factory_rotation_schedule ADD COLUMN IF NOT EXISTS attended_at TIMESTAMPTZ`,
     ]
     for (const sql of alters) {
       try { await db.query(sql) } catch (_) {}
