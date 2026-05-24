@@ -1,0 +1,205 @@
+Please apply the following 3 fixes to the factory rotation attendance feature:
+
+---
+
+## Fix 1 — Add missing attend route in `api/index.js`
+
+Find this line:
+```
+app.get('/api/factory-rotation/my-next', requireAuth, async (req, res) => {
+  try {
+    const today = toDateStrCairo(new Date())
+    const { rows } = await getPool().query('SELECT * FROM factory_rotation_schedule WHERE user_id=$1 AND scheduled_date>=$2 ORDER BY scheduled_date ASC LIMIT 10', [req.user.id, today])
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+```
+
+Replace it with:
+```js
+app.get('/api/factory-rotation/my-next', requireAuth, async (req, res) => {
+  try {
+    const past = new Date()
+    past.setDate(past.getDate() - 60)
+    const pastFrom = toDateStrCairo(past)
+    const { rows } = await getPool().query(
+      'SELECT * FROM factory_rotation_schedule WHERE user_id=$1 AND scheduled_date>=$2 ORDER BY scheduled_date ASC',
+      [req.user.id, pastFrom]
+    )
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /schedule/:id/attend
+app.post('/api/factory-rotation/schedule/:id/attend', requireAuth, async (req, res) => {
+  try {
+    const db = getPool()
+    const { rows: entries } = await db.query(
+      'SELECT * FROM factory_rotation_schedule WHERE id=$1',
+      [req.params.id]
+    )
+    if (!entries.length) return res.status(404).json({ error: 'Entry not found' })
+    const row = entries[0]
+
+    if (row.user_id !== req.user.id) return res.status(403).json({ error: 'ليس يومك المحدد' })
+
+    const today = toDateStrCairo(new Date())
+    const rowDate = String(row.scheduled_date).slice(0, 10)
+    if (rowDate !== today) {
+      return res.status(400).json({ error: 'يمكن تسجيل الحضور في يوم الدورة فقط' })
+    }
+
+    if (row.attended_at) return res.status(400).json({ error: 'تم تسجيل حضورك مسبقاً' })
+
+    const { rows: updated } = await db.query(
+      'UPDATE factory_rotation_schedule SET attended_at=NOW() WHERE id=$1 RETURNING *',
+      [req.params.id]
+    )
+
+    const { rows: empRows } = await db.query(
+      'SELECT full_name, email FROM profiles WHERE id=$1',
+      [req.user.id]
+    )
+    const emp = empRows[0] || {}
+    const empName = emp.full_name || emp.email || 'موظف'
+
+    await db.query(
+      'INSERT INTO notifications (user_id, message) VALUES ($1, $2)',
+      [req.user.id, `✅ تم تسجيل حضورك في المصنع بتاريخ ${today}`]
+    )
+
+    const adminMsg = `🏭 ${empName} سجّل حضوره في المصنع اليوم ${today}`
+    const { rows: admins } = await db.query(
+      "SELECT id FROM profiles WHERE role IN ('admin', 'super_admin')"
+    )
+    for (const admin of admins) {
+      if (admin.id === req.user.id) continue
+      await db.query(
+        'INSERT INTO notifications (user_id, message) VALUES ($1, $2)',
+        [admin.id, adminMsg]
+      )
+    }
+
+    res.json(updated[0])
+  } catch (err) {
+    console.error('[POST /factory-rotation/schedule/:id/attend]', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+```
+
+---
+
+## Fix 2 — Fix attend route in `server/routes/factory-rotation.ts`
+
+Find the `POST /schedule/:id/attend` handler. After this block:
+```ts
+    const [updated] = await db
+      .update(factoryRotationSchedule)
+      .set({ attended_at: new Date() })
+      .where(eq(factoryRotationSchedule.id, req.params.id))
+      .returning()
+
+    // Notify admin
+    await db.insert(notifications).values({
+      user_id: req.user.id,
+      message: `✅ تم تسجيل حضورك في المصنع بتاريخ ${today}`,
+    })
+
+    res.json(updated)
+```
+
+Replace it with:
+```ts
+    const [updated] = await db
+      .update(factoryRotationSchedule)
+      .set({ attended_at: new Date() })
+      .where(eq(factoryRotationSchedule.id, req.params.id))
+      .returning()
+
+    const [emp] = await db
+      .select({ full_name: profiles.full_name, email: profiles.email })
+      .from(profiles)
+      .where(eq(profiles.id, req.user.id))
+      .limit(1)
+    const empName = emp?.full_name || emp?.email || 'موظف'
+
+    await db.insert(notifications).values({
+      user_id: req.user.id,
+      message: `✅ تم تسجيل حضورك في المصنع بتاريخ ${today}`,
+    })
+    broadcast(req.user.id, 'notification', { message: `✅ تم تسجيل حضورك في المصنع بتاريخ ${today}` })
+
+    const admins = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(inArray(profiles.role, ['admin', 'super_admin']))
+
+    const adminMsg = `🏭 ${empName} سجّل حضوره في المصنع اليوم ${today}`
+    for (const admin of admins) {
+      if (admin.id === req.user.id) continue
+      await db.insert(notifications).values({
+        user_id: admin.id,
+        message: adminMsg,
+      })
+      broadcast(admin.id, 'notification', { message: adminMsg })
+    }
+
+    res.json(updated)
+```
+
+Also make sure `inArray` is imported at the top of the file from `drizzle-orm` (it should already be there).
+
+---
+
+## Fix 3 — Fix `GET /my-next` in `server/routes/factory-rotation.ts`
+
+Find:
+```ts
+router.get('/my-next', requireAuth as any, async (req: any, res) => {
+  try {
+    const today = toDateStr(new Date())
+    // Past 60 days + next 10 future entries
+    const pastFrom = toDateStr(addDays(new Date(), -60))
+    const rows = await db
+      .select()
+      .from(factoryRotationSchedule)
+      .where(
+        and(
+          eq(factoryRotationSchedule.user_id, req.user.id),
+          gte(factoryRotationSchedule.scheduled_date, pastFrom)
+        )
+      )
+      .orderBy(asc(factoryRotationSchedule.scheduled_date))
+    res.json(rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to load schedule' })
+  }
+})
+```
+
+Replace it with:
+```ts
+router.get('/my-next', requireAuth as any, async (req: any, res) => {
+  try {
+    const pastFrom = toDateStr(addDays(new Date(), -60))
+    const rows = await db
+      .select()
+      .from(factoryRotationSchedule)
+      .where(
+        and(
+          eq(factoryRotationSchedule.user_id, req.user.id),
+          gte(factoryRotationSchedule.scheduled_date, pastFrom)
+        )
+      )
+      .orderBy(asc(factoryRotationSchedule.scheduled_date))
+    res.json(rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to load schedule' })
+  }
+})
+```
+
+---
+
+**Only modify these two files: `server/routes/factory-rotation.ts` and `api/index.js`. Do not touch anything else.**
