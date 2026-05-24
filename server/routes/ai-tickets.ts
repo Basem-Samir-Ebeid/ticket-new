@@ -3,6 +3,12 @@ import { requireAuth } from '../auth'
 import { db } from '../db'
 import { knowledgeArticles } from '../../shared/schema'
 import { eq } from 'drizzle-orm'
+import Anthropic from '@anthropic-ai/sdk'
+
+const anthropic = new Anthropic({
+  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+})
 
 const router = Router()
 
@@ -11,8 +17,8 @@ router.post('/suggest', requireAuth as any, async (req: any, res) => {
     const { title, description } = req.body
     if (!title?.trim()) return res.status(400).json({ error: 'Title is required' })
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) return res.status(503).json({ error: 'AI suggestions are not configured (missing ANTHROPIC_API_KEY)' })
+    const hasAI = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY
+    if (!hasAI) return res.status(503).json({ error: 'AI suggestions are not configured' })
 
     const articles = await db.select({
       id: knowledgeArticles.id,
@@ -42,29 +48,13 @@ Respond ONLY with valid JSON (no markdown, no explanation) in this exact format:
   "reasoning": "brief 1-sentence explanation"
 }`
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 512,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-      signal: AbortSignal.timeout(15000),
+    const aiResponse = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 512,
+      messages: [{ role: 'user', content: prompt }],
     })
 
-    if (!response.ok) {
-      const err = await response.text()
-      console.error('[AI suggest] Anthropic error:', err)
-      return res.status(502).json({ error: 'AI service error' })
-    }
-
-    const aiData = await response.json()
-    const rawText = aiData?.content?.[0]?.text || ''
+    const rawText = (aiResponse.content[0] as any)?.text || ''
 
     let parsed: any
     try {
