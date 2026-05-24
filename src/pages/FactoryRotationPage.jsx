@@ -403,7 +403,10 @@ function AdminView() {
                   </span>
                   {entry && (() => {
                     const isPast = dateStr < today
+                    const isDateToday = dateStr === today
                     const attended = !!entry.attended_at
+                    const showCheck = attended
+                    const showCross = isPast && !attended
                     return (
                       <>
                         <span
@@ -411,9 +414,12 @@ function AdminView() {
                           style={{background:`${color}25`, color, border:`1px solid ${color}40`}}>
                           {entry.full_name?.split(' ')[0] || entry.email?.split('@')[0]}
                         </span>
-                        {isPast && (
-                          <span className={`text-[9px] font-bold mt-0.5 ${attended ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {attended ? '✓' : '✗'}
+                        {(showCheck || showCross) && (
+                          <span
+                            className={`text-[11px] font-extrabold mt-0.5 leading-none ${showCheck ? 'text-emerald-400' : 'text-red-400'}`}
+                            title={showCheck ? `حضر — ${new Date(entry.attended_at).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}` : 'تغيّب'}
+                          >
+                            {showCheck ? '✓' : '✗'}
                           </span>
                         )}
                       </>
@@ -894,9 +900,14 @@ function EmployeeView() {
               </div>
             </div>
             {todayEntry.attended_at ? (
-              <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl" style={{background:'rgba(16,185,129,0.15)', border:'1px solid rgba(16,185,129,0.4)'}}>
-                <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-                <span className="text-emerald-400 text-sm font-semibold">تم الحضور</span>
+              <div className="flex flex-col items-end gap-1.5">
+                <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl" style={{background:'rgba(16,185,129,0.15)', border:'1px solid rgba(16,185,129,0.4)'}}>
+                  <span className="text-lg leading-none">✅</span>
+                  <span className="text-emerald-400 text-sm font-bold">تم الحضور</span>
+                </div>
+                <span className="text-emerald-600 text-[11px] font-medium">
+                  ⏱ الساعة {new Date(todayEntry.attended_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                </span>
               </div>
             ) : (
               <button
@@ -911,11 +922,6 @@ function EmployeeView() {
               </button>
             )}
           </div>
-          {todayEntry.attended_at && (
-            <p className="text-emerald-500 text-[11px] mt-3">
-              ⏱ وقت التسجيل: {new Date(todayEntry.attended_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
-            </p>
-          )}
         </div>
       )}
 
