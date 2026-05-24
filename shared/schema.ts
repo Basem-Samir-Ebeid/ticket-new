@@ -408,6 +408,7 @@ export const factoryRotationSchedule = pgTable('factory_rotation_schedule', {
   user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
   scheduled_date: date('scheduled_date').notNull(),
   notified: boolean('notified').notNull().default(false),
+  attended_at: timestamp('attended_at', { withTimezone: true }),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 

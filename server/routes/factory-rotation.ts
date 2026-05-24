@@ -158,6 +158,7 @@ router.get('/schedule', requireAuth as any, async (req: any, res) => {
         user_id: factoryRotationSchedule.user_id,
         scheduled_date: factoryRotationSchedule.scheduled_date,
         notified: factoryRotationSchedule.notified,
+        attended_at: factoryRotationSchedule.attended_at,
         full_name: profiles.full_name,
         email: profiles.email,
       })
@@ -230,20 +231,64 @@ router.post('/generate', requireAuth as any, async (req: any, res) => {
 router.get('/my-next', requireAuth as any, async (req: any, res) => {
   try {
     const today = toDateStr(new Date())
+    // Past 60 days + next 10 future entries
+    const pastFrom = toDateStr(addDays(new Date(), -60))
     const rows = await db
       .select()
       .from(factoryRotationSchedule)
       .where(
         and(
           eq(factoryRotationSchedule.user_id, req.user.id),
-          gte(factoryRotationSchedule.scheduled_date, today)
+          gte(factoryRotationSchedule.scheduled_date, pastFrom)
         )
       )
       .orderBy(asc(factoryRotationSchedule.scheduled_date))
-      .limit(10)
     res.json(rows)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to load schedule' })
+  }
+})
+
+// ── POST /schedule/:id/attend ─────────────────────────────────────────────────
+router.post('/schedule/:id/attend', requireAuth as any, async (req: any, res) => {
+  try {
+    const entry = await db
+      .select()
+      .from(factoryRotationSchedule)
+      .where(eq(factoryRotationSchedule.id, req.params.id))
+      .limit(1)
+
+    if (!entry.length) return res.status(404).json({ error: 'Entry not found' })
+
+    const row = entry[0]
+
+    // Only the assigned employee can mark attendance
+    if (row.user_id !== req.user.id) return res.status(403).json({ error: 'ليس يومك المحدد' })
+
+    // Only allowed on the actual scheduled day
+    const today = toDateStr(new Date())
+    if (row.scheduled_date !== today) {
+      return res.status(400).json({ error: 'يمكن تسجيل الحضور في يوم الدورة فقط' })
+    }
+
+    // Already attended
+    if (row.attended_at) return res.status(400).json({ error: 'تم تسجيل حضورك مسبقاً' })
+
+    const [updated] = await db
+      .update(factoryRotationSchedule)
+      .set({ attended_at: new Date() })
+      .where(eq(factoryRotationSchedule.id, req.params.id))
+      .returning()
+
+    // Notify admin
+    await db.insert(notifications).values({
+      user_id: req.user.id,
+      message: `✅ تم تسجيل حضورك في المصنع بتاريخ ${today}`,
+    })
+
+    res.json(updated)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to mark attendance' })
   }
 })
 

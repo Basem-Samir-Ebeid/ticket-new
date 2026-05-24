@@ -332,6 +332,7 @@ export const api = {
   overrideFactoryEntry: (id, user_id) => request('PUT', `/factory-rotation/schedule/${id}`, { user_id }),
   assignFactoryEntry: (group_id, user_id, scheduled_date) => request('POST', '/factory-rotation/schedule/assign', { group_id, user_id, scheduled_date }),
   getFactoryScheduleForUser: (from, to) => request('GET', `/factory-rotation/schedule?from=${from}&to=${to}`),
+  markFactoryAttendance: (id) => request('POST', `/factory-rotation/schedule/${id}/attend`, {}),
 
   // Overtime Rotation
   getOvertimeGroups: () => request('GET', '/overtime-rotation/groups'),
