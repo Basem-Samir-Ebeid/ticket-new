@@ -2476,7 +2476,9 @@ app.post('/api/factory-rotation/schedule/:id/attend', requireAuth, async (req, r
     if (row.user_id !== req.user.id) return res.status(403).json({ error: 'ليس يومك المحدد' })
 
     const today = toDateStrCairo(new Date())
-    const rowDate = String(row.scheduled_date).slice(0, 10)
+    const rowDate = row.scheduled_date instanceof Date
+      ? row.scheduled_date.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+      : String(row.scheduled_date).slice(0, 10)
     if (rowDate !== today) {
       return res.status(400).json({ error: 'يمكن تسجيل الحضور في يوم الدورة فقط' })
     }
