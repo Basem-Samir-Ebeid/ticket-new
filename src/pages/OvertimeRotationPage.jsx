@@ -16,6 +16,11 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function normDate(d) {
+  if (!d) return ''
+  return String(d).slice(0, 10)
+}
+
 function tomorrowStr() {
   const d = new Date()
   d.setDate(d.getDate() + 1)
@@ -587,8 +592,8 @@ function EmployeeView() {
       ) : (
         <div className="space-y-3">
           {entries.map(entry => {
-            const isToday = entry.scheduled_date === today
-            const isTomorrow = entry.scheduled_date === tomorrow
+            const isToday = normDate(entry.scheduled_date) === today
+            const isTomorrow = normDate(entry.scheduled_date) === tomorrow
             return (
               <div key={entry.id} className="rounded-2xl p-4 transition-all"
                 style={{

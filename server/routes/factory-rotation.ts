@@ -267,7 +267,10 @@ router.post('/schedule/:id/attend', requireAuth as any, async (req: any, res) =>
 
     // Only allowed on the actual scheduled day
     const today = toDateStr(new Date())
-    if (row.scheduled_date !== today) {
+    const rowDateStr = typeof row.scheduled_date === 'string'
+      ? row.scheduled_date.slice(0, 10)
+      : new Date(row.scheduled_date as any).toISOString().slice(0, 10)
+    if (rowDateStr !== today) {
       return res.status(400).json({ error: 'يمكن تسجيل الحضور في يوم الدورة فقط' })
     }
 

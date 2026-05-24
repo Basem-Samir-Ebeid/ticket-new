@@ -15,6 +15,11 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function normDate(d) {
+  if (!d) return ''
+  return String(d).slice(0, 10)
+}
+
 function tomorrowStr() {
   const d = new Date()
   d.setDate(d.getDate() + 1)
@@ -193,7 +198,7 @@ function AdminView() {
   const monthLabel = new Date(firstOfMonth(monthOffset)).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })
 
   const scheduleByDate = {}
-  schedule.forEach(s => { scheduleByDate[s.scheduled_date] = s })
+  schedule.forEach(s => { scheduleByDate[normDate(s.scheduled_date)] = s })
 
   const firstDay = new Date(firstOfMonth(monthOffset))
   const lastDay = new Date(lastOfMonth(monthOffset))
@@ -243,9 +248,9 @@ function AdminView() {
       {/* Personal Attendance Section */}
       {(() => {
         const td = todayStr()
-        const todayEntry = myDays.find(d => d.scheduled_date === td)
-        const upcomingMine = myDays.filter(d => d.scheduled_date > td).sort((a,b) => a.scheduled_date.localeCompare(b.scheduled_date)).slice(0,3)
-        const pastMine = myDays.filter(d => d.scheduled_date < td).sort((a,b) => b.scheduled_date.localeCompare(a.scheduled_date)).slice(0,3)
+        const todayEntry = myDays.find(d => normDate(d.scheduled_date) === td)
+        const upcomingMine = myDays.filter(d => normDate(d.scheduled_date) > td).sort((a,b) => normDate(a.scheduled_date).localeCompare(normDate(b.scheduled_date))).slice(0,3)
+        const pastMine = myDays.filter(d => normDate(d.scheduled_date) < td).sort((a,b) => normDate(b.scheduled_date).localeCompare(normDate(a.scheduled_date))).slice(0,3)
         if (!todayEntry && upcomingMine.length === 0 && pastMine.length === 0) return null
         return (
           <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4 space-y-3">
@@ -498,9 +503,9 @@ function AdminView() {
                   {currentGroup.members.map((m, i) => {
                     const memberDays = schedule
                       .filter(s => s.user_id === m.user_id)
-                      .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
+                      .sort((a, b) => normDate(a.scheduled_date).localeCompare(normDate(b.scheduled_date)))
                     const today2 = todayStr()
-                    const pastMemberDays = memberDays.filter(s => s.scheduled_date < today2)
+                    const pastMemberDays = memberDays.filter(s => normDate(s.scheduled_date) < today2)
                     const attendedDays = pastMemberDays.filter(s => s.attended_at)
                     const attendRate = pastMemberDays.length > 0 ? Math.round((attendedDays.length / pastMemberDays.length) * 100) : null
                     const dotColor = getColor(i)
@@ -544,7 +549,7 @@ function AdminView() {
                         {memberDays.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {memberDays.map(s => {
-                              const isPast = s.scheduled_date < today2
+                              const isPast = normDate(s.scheduled_date) < today2
                               const att = !!s.attended_at
                               return (
                                 <span
@@ -839,12 +844,12 @@ function EmployeeView() {
     }
   }
 
-  const pastDays = allDays.filter(d => d.scheduled_date < today).reverse()
-  const todayEntry = allDays.find(d => d.scheduled_date === today)
-  const futureDays = allDays.filter(d => d.scheduled_date > today)
+  const pastDays = allDays.filter(d => normDate(d.scheduled_date) < today).reverse()
+  const todayEntry = allDays.find(d => normDate(d.scheduled_date) === today)
+  const futureDays = allDays.filter(d => normDate(d.scheduled_date) > today)
 
   const attendedCount = allDays.filter(d => d.attended_at).length
-  const absentCount = allDays.filter(d => d.scheduled_date < today && !d.attended_at).length
+  const absentCount = allDays.filter(d => normDate(d.scheduled_date) < today && !d.attended_at).length
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">
