@@ -27,7 +27,7 @@ function addDays(date: Date, n: number): Date {
 }
 
 function toDateStr(date: Date): string {
-  return date.toISOString().slice(0, 10)
+  return date.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 }
 
 // ── GET /groups ───────────────────────────────────────────────────────────────
@@ -228,18 +228,17 @@ router.post('/generate', requireAuth as any, async (req: any, res) => {
 // ── GET /my-next ──────────────────────────────────────────────────────────────
 router.get('/my-next', requireAuth as any, async (req: any, res) => {
   try {
-    const today = toDateStr(new Date())
+    const pastFrom = toDateStr(addDays(new Date(), -60))
     const rows = await db
       .select()
       .from(overtimeRotationSchedule)
       .where(
         and(
           eq(overtimeRotationSchedule.user_id, req.user.id),
-          gte(overtimeRotationSchedule.scheduled_date, today)
+          gte(overtimeRotationSchedule.scheduled_date, pastFrom)
         )
       )
       .orderBy(asc(overtimeRotationSchedule.scheduled_date))
-      .limit(10)
     res.json(rows)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to load schedule' })

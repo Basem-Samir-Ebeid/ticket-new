@@ -29,13 +29,17 @@ function tomorrowStr() {
 function firstOfMonth(offset = 0) {
   const d = new Date()
   d.setMonth(d.getMonth() + offset, 1)
-  return d.toISOString().slice(0, 10)
+  return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }).slice(0, 7) + '-01'
 }
 
 function lastOfMonth(offset = 0) {
   const d = new Date()
   d.setMonth(d.getMonth() + offset + 1, 0)
-  return d.toISOString().slice(0, 10)
+  return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+}
+
+function dateStrCairo(d) {
+  return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 }
 
 export default function FactoryRotationPage() {
@@ -206,7 +210,7 @@ function AdminView() {
   const startPad = firstDay.getDay()
   for (let i = 0; i < startPad; i++) calDays.push(null)
   for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
-    calDays.push(d.toISOString().slice(0, 10))
+    calDays.push(dateStrCairo(d))
   }
 
   if (loading) return (
@@ -464,7 +468,7 @@ function AdminView() {
             }
 
             const handleExportCSV = () => {
-              const monthKey = new Date(firstOfMonth(monthOffset)).toISOString().slice(0, 7)
+              const monthKey = firstOfMonth(monthOffset).slice(0, 7)
               const rows = [['Name', 'Days Assigned', 'Month']]
               currentGroup.members.forEach(m => {
                 const days = schedule.filter(s => s.user_id === m.user_id).length

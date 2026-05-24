@@ -1,0 +1,225 @@
+Please apply the following fixes across 5 files. The root cause is that `toISOString()` returns UTC dates, but Egypt is UTC+3, so date comparisons fail. All date functions must use `Africa/Cairo` timezone.
+
+---
+
+## Fix 1 — `server/routes/factory-rotation.ts`
+
+Find:
+```ts
+function toDateStr(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+```
+Replace with:
+```ts
+function toDateStr(date: Date): string {
+  return date.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+}
+```
+
+Also find:
+```ts
+    const rowDateStr = typeof row.scheduled_date === 'string'
+      ? row.scheduled_date.slice(0, 10)
+      : new Date(row.scheduled_date as any).toISOString().slice(0, 10)
+```
+Replace with:
+```ts
+    const rowDateStr = typeof row.scheduled_date === 'string'
+      ? row.scheduled_date.slice(0, 10)
+      : new Date(row.scheduled_date as any).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+```
+
+---
+
+## Fix 2 — `server/routes/overtime-rotation.ts`
+
+Find:
+```ts
+function toDateStr(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+```
+Replace with:
+```ts
+function toDateStr(date: Date): string {
+  return date.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+}
+```
+
+Also find the `GET /my-next` route:
+```ts
+router.get('/my-next', requireAuth as any, async (req: any, res) => {
+  try {
+    const today = toDateStr(new Date())
+    const rows = await db
+      .select()
+      .from(overtimeRotationSchedule)
+      .where(
+        and(
+          eq(overtimeRotationSchedule.user_id, req.user.id),
+          gte(overtimeRotationSchedule.scheduled_date, today)
+        )
+      )
+      .orderBy(asc(overtimeRotationSchedule.scheduled_date))
+      .limit(10)
+    res.json(rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to load schedule' })
+  }
+})
+```
+Replace with:
+```ts
+router.get('/my-next', requireAuth as any, async (req: any, res) => {
+  try {
+    const pastFrom = toDateStr(addDays(new Date(), -60))
+    const rows = await db
+      .select()
+      .from(overtimeRotationSchedule)
+      .where(
+        and(
+          eq(overtimeRotationSchedule.user_id, req.user.id),
+          gte(overtimeRotationSchedule.scheduled_date, pastFrom)
+        )
+      )
+      .orderBy(asc(overtimeRotationSchedule.scheduled_date))
+    res.json(rows)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to load schedule' })
+  }
+})
+```
+
+---
+
+## Fix 3 — `src/pages/FactoryRotationPage.jsx`
+
+Find:
+```js
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+```
+Replace with:
+```js
+function todayStr() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+}
+```
+
+Find:
+```js
+function tomorrowStr() {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+```
+Replace with:
+```js
+function tomorrowStr() {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+}
+```
+
+Find:
+```js
+function firstOfMonth(offset = 0) {
+  const d = new Date()
+  d.setMonth(d.getMonth() + offset, 1)
+  return d.toISOString().slice(0, 10)
+}
+
+function lastOfMonth(offset = 0) {
+  const d = new Date()
+  d.setMonth(d.getMonth() + offset + 1, 0)
+  return d.toISOString().slice(0, 10)
+}
+```
+Replace with:
+```js
+function firstOfMonth(offset = 0) {
+  const d = new Date()
+  d.setMonth(d.getMonth() + offset, 1)
+  return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }).slice(0, 7) + '-01'
+}
+
+function lastOfMonth(offset = 0) {
+  const d = new Date()
+  d.setMonth(d.getMonth() + offset + 1, 0)
+  return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+}
+
+function dateStrCairo(d) {
+  return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+}
+```
+
+Find:
+```js
+  for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
+    calDays.push(d.toISOString().slice(0, 10))
+  }
+```
+Replace with:
+```js
+  for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
+    calDays.push(dateStrCairo(d))
+  }
+```
+
+Find:
+```js
+              const monthKey = new Date(firstOfMonth(monthOffset)).toISOString().slice(0, 7)
+```
+Replace with:
+```js
+              const monthKey = firstOfMonth(monthOffset).slice(0, 7)
+```
+
+---
+
+## Fix 4 — `src/pages/OvertimeRotationPage.jsx`
+
+Apply the exact same replacements from Fix 3 to this file:
+- `todayStr()` → use `Africa/Cairo`
+- `tomorrowStr()` → use `Africa/Cairo`
+- `firstOfMonth()` and `lastOfMonth()` → use `Africa/Cairo` + add `dateStrCairo` helper
+- `calDays.push(d.toISOString()...)` → `calDays.push(dateStrCairo(d))`
+
+---
+
+## Fix 5 — `api/index.js`
+
+Find:
+```js
+app.get('/api/overtime-rotation/my-next', requireAuth, async (req, res) => {
+  try {
+    const today = toDateStrCairo(new Date())
+    const { rows } = await getPool().query('SELECT * FROM overtime_rotation_schedule WHERE user_id=$1 AND scheduled_date>=$2 ORDER BY scheduled_date ASC LIMIT 10', [req.user.id, today])
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+```
+Replace with:
+```js
+app.get('/api/overtime-rotation/my-next', requireAuth, async (req, res) => {
+  try {
+    const past = new Date()
+    past.setDate(past.getDate() - 60)
+    const pastFrom = toDateStrCairo(past)
+    const { rows } = await getPool().query(
+      'SELECT * FROM overtime_rotation_schedule WHERE user_id=$1 AND scheduled_date>=$2 ORDER BY scheduled_date ASC',
+      [req.user.id, pastFrom]
+    )
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+```
+
+---
+
+**Only modify these 5 files. Do not touch anything else.**

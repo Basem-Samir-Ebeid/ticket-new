@@ -2649,8 +2649,13 @@ app.post('/api/overtime-rotation/generate', requireAuth, async (req, res) => {
 
 app.get('/api/overtime-rotation/my-next', requireAuth, async (req, res) => {
   try {
-    const today = toDateStrCairo(new Date())
-    const { rows } = await getPool().query('SELECT * FROM overtime_rotation_schedule WHERE user_id=$1 AND scheduled_date>=$2 ORDER BY scheduled_date ASC LIMIT 10', [req.user.id, today])
+    const past = new Date()
+    past.setDate(past.getDate() - 60)
+    const pastFrom = toDateStrCairo(past)
+    const { rows } = await getPool().query(
+      'SELECT * FROM overtime_rotation_schedule WHERE user_id=$1 AND scheduled_date>=$2 ORDER BY scheduled_date ASC',
+      [req.user.id, pastFrom]
+    )
     res.json(rows)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })

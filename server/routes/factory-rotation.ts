@@ -28,7 +28,7 @@ function addDays(date: Date, n: number): Date {
 }
 
 function toDateStr(date: Date): string {
-  return date.toISOString().slice(0, 10)
+  return date.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 }
 
 // ── GET /groups ───────────────────────────────────────────────────────────────
@@ -267,7 +267,7 @@ router.post('/schedule/:id/attend', requireAuth as any, async (req: any, res) =>
     const today = toDateStr(new Date())
     const rowDateStr = typeof row.scheduled_date === 'string'
       ? row.scheduled_date.slice(0, 10)
-      : new Date(row.scheduled_date as any).toISOString().slice(0, 10)
+      : new Date(row.scheduled_date as any).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
     if (rowDateStr !== today) {
       return res.status(400).json({ error: 'يمكن تسجيل الحضور في يوم الدورة فقط' })
     }
