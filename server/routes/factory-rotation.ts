@@ -230,8 +230,6 @@ router.post('/generate', requireAuth as any, async (req: any, res) => {
 // ── GET /my-next ──────────────────────────────────────────────────────────────
 router.get('/my-next', requireAuth as any, async (req: any, res) => {
   try {
-    const today = toDateStr(new Date())
-    // Past 60 days + next 10 future entries
     const pastFrom = toDateStr(addDays(new Date(), -60))
     const rows = await db
       .select()
@@ -283,11 +281,33 @@ router.post('/schedule/:id/attend', requireAuth as any, async (req: any, res) =>
       .where(eq(factoryRotationSchedule.id, req.params.id))
       .returning()
 
-    // Notify admin
+    const [emp] = await db
+      .select({ full_name: profiles.full_name, email: profiles.email })
+      .from(profiles)
+      .where(eq(profiles.id, req.user.id))
+      .limit(1)
+    const empName = emp?.full_name || emp?.email || 'موظف'
+
     await db.insert(notifications).values({
       user_id: req.user.id,
       message: `✅ تم تسجيل حضورك في المصنع بتاريخ ${today}`,
     })
+    broadcast(req.user.id, 'notification', { message: `✅ تم تسجيل حضورك في المصنع بتاريخ ${today}` })
+
+    const admins = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(inArray(profiles.role, ['admin', 'super_admin']))
+
+    const adminMsg = `🏭 ${empName} سجّل حضوره في المصنع اليوم ${today}`
+    for (const admin of admins) {
+      if (admin.id === req.user.id) continue
+      await db.insert(notifications).values({
+        user_id: admin.id,
+        message: adminMsg,
+      })
+      broadcast(admin.id, 'notification', { message: adminMsg })
+    }
 
     res.json(updated)
   } catch (err: any) {

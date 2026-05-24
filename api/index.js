@@ -2451,10 +2451,72 @@ app.post('/api/factory-rotation/generate', requireAuth, async (req, res) => {
 
 app.get('/api/factory-rotation/my-next', requireAuth, async (req, res) => {
   try {
-    const today = toDateStrCairo(new Date())
-    const { rows } = await getPool().query('SELECT * FROM factory_rotation_schedule WHERE user_id=$1 AND scheduled_date>=$2 ORDER BY scheduled_date ASC LIMIT 10', [req.user.id, today])
+    const past = new Date()
+    past.setDate(past.getDate() - 60)
+    const pastFrom = toDateStrCairo(past)
+    const { rows } = await getPool().query(
+      'SELECT * FROM factory_rotation_schedule WHERE user_id=$1 AND scheduled_date>=$2 ORDER BY scheduled_date ASC',
+      [req.user.id, pastFrom]
+    )
     res.json(rows)
   } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /schedule/:id/attend
+app.post('/api/factory-rotation/schedule/:id/attend', requireAuth, async (req, res) => {
+  try {
+    const db = getPool()
+    const { rows: entries } = await db.query(
+      'SELECT * FROM factory_rotation_schedule WHERE id=$1',
+      [req.params.id]
+    )
+    if (!entries.length) return res.status(404).json({ error: 'Entry not found' })
+    const row = entries[0]
+
+    if (row.user_id !== req.user.id) return res.status(403).json({ error: 'ليس يومك المحدد' })
+
+    const today = toDateStrCairo(new Date())
+    const rowDate = String(row.scheduled_date).slice(0, 10)
+    if (rowDate !== today) {
+      return res.status(400).json({ error: 'يمكن تسجيل الحضور في يوم الدورة فقط' })
+    }
+
+    if (row.attended_at) return res.status(400).json({ error: 'تم تسجيل حضورك مسبقاً' })
+
+    const { rows: updated } = await db.query(
+      'UPDATE factory_rotation_schedule SET attended_at=NOW() WHERE id=$1 RETURNING *',
+      [req.params.id]
+    )
+
+    const { rows: empRows } = await db.query(
+      'SELECT full_name, email FROM profiles WHERE id=$1',
+      [req.user.id]
+    )
+    const emp = empRows[0] || {}
+    const empName = emp.full_name || emp.email || 'موظف'
+
+    await db.query(
+      'INSERT INTO notifications (user_id, message) VALUES ($1, $2)',
+      [req.user.id, `✅ تم تسجيل حضورك في المصنع بتاريخ ${today}`]
+    )
+
+    const adminMsg = `🏭 ${empName} سجّل حضوره في المصنع اليوم ${today}`
+    const { rows: admins } = await db.query(
+      "SELECT id FROM profiles WHERE role IN ('admin', 'super_admin')"
+    )
+    for (const admin of admins) {
+      if (admin.id === req.user.id) continue
+      await db.query(
+        'INSERT INTO notifications (user_id, message) VALUES ($1, $2)',
+        [admin.id, adminMsg]
+      )
+    }
+
+    res.json(updated[0])
+  } catch (err) {
+    console.error('[POST /factory-rotation/schedule/:id/attend]', err.message)
+    res.status(500).json({ error: err.message })
+  }
 })
 
 app.put('/api/factory-rotation/schedule/:id', requireAuth, async (req, res) => {
