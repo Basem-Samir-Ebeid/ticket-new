@@ -61,8 +61,37 @@ function AdminView() {
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const [success, setSuccess] = useState('')
+  // Personal attendance state
+  const [myDays, setMyDays] = useState([])
+  const [markingId, setMarkingId] = useState(null)
+  const [attendToast, setAttendToast] = useState('')
 
-  useEffect(() => { load() }, [])
+  function showAttendToast(msg) {
+    setAttendToast(msg)
+    setTimeout(() => setAttendToast(''), 3000)
+  }
+
+  async function loadMyDays() {
+    try {
+      const rows = await api.getMyNextFactory()
+      setMyDays(rows)
+    } catch (e) { console.error(e) }
+  }
+
+  async function handleAttendSelf(entry) {
+    setMarkingId(entry.id)
+    try {
+      await api.markFactoryAttendance(entry.id)
+      setMyDays(prev => prev.map(d => d.id === entry.id ? { ...d, attended_at: new Date().toISOString() } : d))
+      showAttendToast('✅ تم تسجيل حضورك في المصنع بنجاح!')
+    } catch (e) {
+      showAttendToast('❌ ' + (e.message || 'حدث خطأ'))
+    } finally {
+      setMarkingId(null)
+    }
+  }
+
+  useEffect(() => { load(); loadMyDays() }, [])
 
   useEffect(() => {
     if (selectedGroup) loadSchedule(selectedGroup, monthOffset)
@@ -210,6 +239,65 @@ function AdminView() {
           </button>
         </div>
       </div>
+
+      {/* Personal Attendance Section */}
+      {(() => {
+        const td = todayStr()
+        const todayEntry = myDays.find(d => d.scheduled_date === td)
+        const upcomingMine = myDays.filter(d => d.scheduled_date > td).sort((a,b) => a.scheduled_date.localeCompare(b.scheduled_date)).slice(0,3)
+        const pastMine = myDays.filter(d => d.scheduled_date < td).sort((a,b) => b.scheduled_date.localeCompare(a.scheduled_date)).slice(0,3)
+        if (!todayEntry && upcomingMine.length === 0 && pastMine.length === 0) return null
+        return (
+          <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4 space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg">👤</span>
+              <span className="text-violet-300 font-semibold text-sm">دورتي في المصنع</span>
+            </div>
+            {todayEntry && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <div className="text-amber-300 font-bold text-sm">🏭 يومك في المصنع اليوم!</div>
+                  <div className="text-slate-400 text-xs mt-0.5">{todayEntry.scheduled_date}</div>
+                </div>
+                {todayEntry.attended_at ? (
+                  <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-3 py-1.5">
+                    <span className="text-emerald-400 text-sm font-bold">✓ تم تسجيل الحضور</span>
+                    <span className="text-slate-500 text-xs">{new Date(todayEntry.attended_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'})}</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleAttendSelf(todayEntry)}
+                    disabled={markingId === todayEntry.id}
+                    className="px-4 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-all"
+                    style={{background:'linear-gradient(135deg,#7c3aed,#a855f7)'}}
+                  >
+                    {markingId === todayEntry.id ? '...' : '✋ سجّل حضورك'}
+                  </button>
+                )}
+              </div>
+            )}
+            {(upcomingMine.length > 0 || pastMine.length > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {upcomingMine.map(d => (
+                  <div key={d.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs">
+                    <span>📅</span> {d.scheduled_date}
+                  </div>
+                ))}
+                {pastMine.map(d => (
+                  <div key={d.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs border ${d.attended_at ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                    {d.attended_at ? '✓' : '✗'} {d.scheduled_date}
+                  </div>
+                ))}
+              </div>
+            )}
+            {attendToast && (
+              <div className="px-3 py-2 rounded-xl bg-slate-800 border border-slate-600 text-slate-200 text-sm">
+                {attendToast}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {err && <div className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{err}</div>}
       {success && <div className="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">{success}</div>}
