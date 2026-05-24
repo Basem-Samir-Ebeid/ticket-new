@@ -12,7 +12,7 @@ function getColor(idx) {
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 }
 
 function normDate(d) {
@@ -23,7 +23,7 @@ function normDate(d) {
 function tomorrowStr() {
   const d = new Date()
   d.setDate(d.getDate() + 1)
-  return d.toISOString().slice(0, 10)
+  return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 }
 
 function firstOfMonth(offset = 0) {
