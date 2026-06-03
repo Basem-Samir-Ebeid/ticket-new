@@ -1145,10 +1145,16 @@ function EmployeeView() {
                     <p className="text-[11px] text-red-400/70">لم يُسجَّل الحضور</p>
                   </div>
                 </div>
-                <span className="text-[11px] font-semibold px-3 py-1 rounded-full"
-                  style={{background:'rgba(239,68,68,0.12)', color:'#f87171', border:'1px solid rgba(239,68,68,0.25)'}}>
-                  تغيّب ✗
-                </span>
+                <button
+                  onClick={() => handleAttend(entry)}
+                  disabled={markingId === entry.id}
+                  className="text-[11px] font-semibold px-3 py-1.5 rounded-xl text-white disabled:opacity-50 transition-all active:scale-95"
+                  style={{background:'linear-gradient(135deg,#0891b2,#06b6d4)', boxShadow:'0 2px 10px rgba(8,145,178,0.3)'}}
+                >
+                  {markingId === entry.id
+                    ? <span className="flex items-center gap-1.5"><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />...</span>
+                    : '✋ سجّل حضور'}
+                </button>
               </div>
             ))}
           </div>
