@@ -344,6 +344,17 @@ export const api = {
   getMyNextOvertime: () => request('GET', '/overtime-rotation/my-next'),
   overrideOvertimeEntry: (id, user_id) => request('PUT', `/overtime-rotation/schedule/${id}`, { user_id }),
   assignOvertimeEntry: (group_id, user_id, scheduled_date) => request('POST', '/overtime-rotation/schedule/assign', { group_id, user_id, scheduled_date }),
+  markOvertimeAttendance: (id) => request('POST', `/overtime-rotation/schedule/${id}/attend`, {}),
+
+  // Group Members (for swap modal)
+  getFactoryGroupMembers: (groupId) => request('GET', `/factory-rotation/groups/${groupId}/members`),
+  getOvertimeGroupMembers: (groupId) => request('GET', `/overtime-rotation/groups/${groupId}/members`),
+
+  // Rotation Swap Requests
+  createRotationSwap: (data) => request('POST', '/rotation-swaps', data),
+  getMyRotationSwaps: () => request('GET', '/rotation-swaps/my'),
+  acceptRotationSwap: (id, target_schedule_id) => request('POST', `/rotation-swaps/${id}/accept`, { target_schedule_id }),
+  rejectRotationSwap: (id) => request('POST', `/rotation-swaps/${id}/reject`, {}),
 }
 
 // ─── CSV Export helper ───────────────────────────────────────────────────────

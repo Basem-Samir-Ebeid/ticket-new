@@ -3,8 +3,8 @@ import { WebSocketServer } from 'ws'
 import { setupWebSocket, broadcast } from './ws'
 import app from './app'
 import { db } from './db'
-import { tickets, profiles, notifications, systemSettings } from '../shared/schema'
-import { eq, and, lt, lte, gt, isNotNull, inArray } from 'drizzle-orm'
+import { tickets, profiles, notifications, systemSettings, factoryRotationSchedule, overtimeRotationSchedule } from '../shared/schema'
+import { eq, and, lt, lte, gt, isNotNull, isNull, inArray } from 'drizzle-orm'
 import { sendEmail } from './email'
 import { sendWhatsAppNotification, startWhatsAppKeepAlive } from './whatsappConfig'
 import { runFactoryRotationNotifications } from './routes/factory-rotation'
@@ -126,6 +126,32 @@ function shouldRunAt(hour: number, minute: number = 0): boolean {
 // ─── Factory & Overtime Rotation crons (every 60s) ───────────────────────────
 const lastRun: Record<string, string> = {}
 
+// ─── Auto-absent job (23:55 Cairo) ───────────────────────────────────────────
+async function runAbsentMarkingJob() {
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+    const [factoryResult] = await Promise.allSettled([
+      db.update(factoryRotationSchedule)
+        .set({ is_absent: true })
+        .where(and(
+          eq(factoryRotationSchedule.scheduled_date, today),
+          isNull(factoryRotationSchedule.attended_at),
+          eq(factoryRotationSchedule.is_absent, false),
+        )),
+      db.update(overtimeRotationSchedule)
+        .set({ is_absent: true })
+        .where(and(
+          eq(overtimeRotationSchedule.scheduled_date, today),
+          isNull(overtimeRotationSchedule.attended_at),
+          eq(overtimeRotationSchedule.is_absent, false),
+        )),
+    ])
+    console.log(`[AbsentJob] Marked absences for ${today}`)
+  } catch (err) {
+    console.error('[AbsentJob error]', err)
+  }
+}
+
 setInterval(() => {
   const now = new Date()
   const cairo = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }))
@@ -138,6 +164,10 @@ setInterval(() => {
   if (cairo.getHours() === 15 && !lastRun[`overtime-${todayKey}`]) {
     lastRun[`overtime-${todayKey}`] = '1'
     runOvertimeRotationNotifications()
+  }
+  if (cairo.getHours() === 23 && cairo.getMinutes() === 55 && !lastRun[`absent-${todayKey}`]) {
+    lastRun[`absent-${todayKey}`] = '1'
+    runAbsentMarkingJob()
   }
 }, 60 * 1000)
 

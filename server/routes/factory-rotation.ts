@@ -368,6 +368,26 @@ router.put('/schedule/:id', requireAuth as any, async (req: any, res) => {
   }
 })
 
+// ── GET /groups/:id/members (no admin restriction — employees need for swaps) ──
+router.get('/groups/:id/members', requireAuth as any, async (req: any, res) => {
+  try {
+    const members = await db
+      .select({
+        user_id: factoryRotationMembers.user_id,
+        order_index: factoryRotationMembers.order_index,
+        full_name: profiles.full_name,
+        email: profiles.email,
+      })
+      .from(factoryRotationMembers)
+      .leftJoin(profiles, eq(factoryRotationMembers.user_id, profiles.id))
+      .where(eq(factoryRotationMembers.group_id, req.params.id))
+      .orderBy(asc(factoryRotationMembers.order_index))
+    res.json(members)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to load members' })
+  }
+})
+
 export default router
 
 // ── Exported cron function ────────────────────────────────────────────────────

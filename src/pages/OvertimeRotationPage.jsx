@@ -319,12 +319,27 @@ function AdminView() {
                   <span className={`text-[11px] font-semibold mb-1 ${isToday ? 'text-amber-400' : isWeekend ? 'text-slate-600' : 'text-slate-400'}`}>
                     {new Date(dateStr).getDate()}
                   </span>
-                  {entry && (
-                    <span className="text-[9px] font-medium px-1 py-0.5 rounded text-center leading-tight w-full truncate"
-                      style={{background:`${color}22`, color, border:`1px solid ${color}33`}}>
-                      {entry.full_name?.split(' ')[0] || entry.email?.split('@')[0]}
-                    </span>
-                  )}
+                  {entry && (() => {
+                    const attended = !!entry.attended_at
+                    const showCheck = attended
+                    const showCross = !!entry.is_absent
+                    return (
+                      <>
+                        <span className="text-[9px] font-medium px-1 py-0.5 rounded text-center leading-tight w-full truncate block"
+                          style={{background:`${color}22`, color, border:`1px solid ${color}33`}}>
+                          {entry.full_name?.split(' ')[0] || entry.email?.split('@')[0]}
+                        </span>
+                        {(showCheck || showCross) && (
+                          <span
+                            className={`text-[11px] font-extrabold mt-0.5 leading-none ${showCheck ? 'text-emerald-400' : 'text-red-400'}`}
+                            title={showCheck ? `حضر — ${new Date(entry.attended_at).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}` : 'غياب'}
+                          >
+                            {showCheck ? '✓' : '✗'}
+                          </span>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
               )
             })}
@@ -563,15 +578,119 @@ function GroupModal({ group, users, onSave, onClose, saving }) {
 
 // ─────────────────────────────── EMPLOYEE VIEW ───────────────────────────────
 function EmployeeView() {
-  const [entries, setEntries] = useState([])
+  const { profile } = useAuth()
+  const [allDays, setAllDays] = useState([])
   const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    api.getMyNextOvertime().then(setEntries).catch(() => {}).finally(() => setLoading(false))
-  }, [])
+  const [markingId, setMarkingId] = useState(null)
+  const [toast, setToast] = useState('')
+  const [groupMembers, setGroupMembers] = useState([])
+  const [swaps, setSwaps] = useState({ incoming: [], outgoing: [] })
+  const [swapModal, setSwapModal] = useState(null)
+  const [swapTarget, setSwapTarget] = useState('')
+  const [swapNote, setSwapNote] = useState('')
+  const [swapSaving, setSwapSaving] = useState(false)
+  const [acceptingSwap, setAcceptingSwap] = useState(null)
+  const [myDayForSwap, setMyDayForSwap] = useState('')
 
   const today = todayStr()
   const tomorrow = tomorrowStr()
+
+  function showToast(msg) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 3500)
+  }
+
+  async function loadDays() {
+    try {
+      const rows = await api.getMyNextOvertime()
+      setAllDays(rows)
+      const groupId = rows[0]?.group_id
+      if (groupId) {
+        try {
+          const members = await api.getOvertimeGroupMembers(groupId)
+          setGroupMembers(members)
+        } catch {}
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadSwaps() {
+    try {
+      const data = await api.getMyRotationSwaps()
+      setSwaps({
+        incoming: (data.incoming || []).filter(s => s.module === 'overtime'),
+        outgoing: (data.outgoing || []).filter(s => s.module === 'overtime'),
+      })
+    } catch {}
+  }
+
+  useEffect(() => { loadDays(); loadSwaps() }, [])
+
+  async function handleAttend(entry) {
+    setMarkingId(entry.id)
+    try {
+      await api.markOvertimeAttendance(entry.id)
+      setAllDays(prev => prev.map(d => d.id === entry.id ? { ...d, attended_at: new Date().toISOString() } : d))
+      showToast('✅ تم تسجيل حضورك في الأوفر تايم بنجاح!')
+    } catch (e) {
+      showToast('❌ ' + (e.message || 'حدث خطأ'))
+    } finally {
+      setMarkingId(null)
+    }
+  }
+
+  async function handleCreateSwap() {
+    if (!swapModal || !swapTarget) return
+    setSwapSaving(true)
+    try {
+      await api.createRotationSwap({
+        module: 'overtime',
+        requester_schedule_id: swapModal.id,
+        requester_date: normDate(swapModal.scheduled_date),
+        target_id: swapTarget,
+        note: swapNote || null,
+      })
+      showToast('✅ تم إرسال طلب التبديل')
+      setSwapModal(null); setSwapTarget(''); setSwapNote('')
+      loadSwaps()
+    } catch (e) {
+      showToast('❌ ' + (e.message || 'حدث خطأ'))
+    } finally {
+      setSwapSaving(false)
+    }
+  }
+
+  async function handleAcceptSwap(swap) {
+    if (!myDayForSwap) return
+    try {
+      await api.acceptRotationSwap(swap.id, myDayForSwap)
+      showToast('✅ تم قبول طلب التبديل — تم تبديل الأيام بنجاح!')
+      setAcceptingSwap(null); setMyDayForSwap('')
+      loadSwaps(); loadDays()
+    } catch (e) {
+      showToast('❌ ' + (e.message || 'حدث خطأ'))
+    }
+  }
+
+  async function handleRejectSwap(swapId) {
+    try {
+      await api.rejectRotationSwap(swapId)
+      showToast('تم رفض طلب التبديل')
+      loadSwaps()
+    } catch {}
+  }
+
+  const attendedDays = allDays.filter(d => d.attended_at).sort((a, b) => normDate(b.scheduled_date).localeCompare(normDate(a.scheduled_date)))
+  const todayEntry = allDays.find(d => normDate(d.scheduled_date) === today && !d.attended_at)
+  const futureDays = allDays.filter(d => normDate(d.scheduled_date) > today)
+  const missedDays = allDays.filter(d => normDate(d.scheduled_date) < today && !d.attended_at).sort((a, b) => normDate(b.scheduled_date).localeCompare(normDate(a.scheduled_date)))
+
+  const attendedCount = attendedDays.length
+  const absentCount = missedDays.length
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">
@@ -581,54 +700,271 @@ function EmployeeView() {
 
   return (
     <div dir="rtl" className="space-y-5">
-      <div>
-        <h2 className="text-white text-lg font-bold flex items-center gap-2">
-          <span className="text-2xl">🌙</span> أيام الأوفر تايم القادمة
-        </h2>
-        <p className="text-slate-400 text-sm mt-0.5">هذه هي أيام دورتك في الأوفر تايم</p>
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl text-sm font-semibold shadow-2xl"
+          style={{background: toast.startsWith('✅') ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+            border: toast.startsWith('✅') ? '1px solid rgba(16,185,129,0.4)' : '1px solid rgba(239,68,68,0.4)',
+            color: toast.startsWith('✅') ? '#34d399' : '#f87171', backdropFilter:'blur(12px)'}}>
+          {toast}
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-white text-lg font-bold flex items-center gap-2">
+            <span className="text-2xl">🌙</span> جدول الأوفر تايم الخاص بي
+          </h2>
+          <p className="text-slate-400 text-sm mt-0.5">أيام دورتك — سجّل حضورك في يومك المحدد</p>
+        </div>
+        {allDays.length > 0 && (
+          <div className="flex gap-3">
+            <div className="text-center px-3 py-2 rounded-xl" style={{background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.2)'}}>
+              <p className="text-emerald-400 text-lg font-bold">{attendedCount}</p>
+              <p className="text-[10px] text-slate-500">حضر</p>
+            </div>
+            <div className="text-center px-3 py-2 rounded-xl" style={{background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.2)'}}>
+              <p className="text-red-400 text-lg font-bold">{absentCount}</p>
+              <p className="text-[10px] text-slate-500">تغيّب</p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {entries.length === 0 ? (
+      {/* Today's entry */}
+      {todayEntry && (
+        <div className="rounded-2xl p-5" style={{background:'linear-gradient(135deg,rgba(180,83,9,0.18),rgba(245,158,11,0.08))', border:'2px solid rgba(245,158,11,0.5)'}}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center text-2xl" style={{background:'rgba(180,83,9,0.2)'}}>🌙</div>
+              <div>
+                <p className="text-amber-300 text-[11px] font-semibold uppercase tracking-widest mb-0.5">اليوم — دورتك في الأوفر تايم</p>
+                <p className="text-white text-base font-bold">
+                  {new Date(todayEntry.scheduled_date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => handleAttend(todayEntry)}
+              disabled={markingId === todayEntry.id}
+              className="px-5 py-2.5 rounded-xl text-white text-sm font-bold transition-all disabled:opacity-60 active:scale-95"
+              style={{background:'linear-gradient(135deg,#b45309,#f59e0b)', boxShadow:'0 4px 20px rgba(180,83,9,0.4)'}}
+            >
+              {markingId === todayEntry.id ? (
+                <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />جارٍ التسجيل...</span>
+              ) : '✋ سجّل حضورك'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Incoming swap requests */}
+      {swaps.incoming.length > 0 && (
+        <div>
+          <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2">
+            <span className="text-amber-400">🔄</span> طلبات التبديل الواردة
+          </h3>
+          <div className="space-y-2">
+            {swaps.incoming.map(swap => (
+              <div key={swap.id} className="rounded-xl p-3.5"
+                style={{background:'rgba(180,83,9,0.08)', border:'1px solid rgba(245,158,11,0.25)'}}>
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="text-white text-sm font-medium">{swap.requester_name}</p>
+                    <p className="text-amber-300 text-xs mt-0.5">يطلب تبديل يومه: {swap.requester_date}</p>
+                    {swap.note && <p className="text-slate-400 text-xs mt-1 italic">"{swap.note}"</p>}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {acceptingSwap?.id === swap.id ? (
+                      <div className="flex items-center gap-2">
+                        <select value={myDayForSwap} onChange={e => setMyDayForSwap(e.target.value)}
+                          className="bg-white/5 border border-white/15 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-amber-500">
+                          <option value="">اختر يومك</option>
+                          {futureDays.map(d => (
+                            <option key={d.id} value={d.id}>{normDate(d.scheduled_date)}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => handleAcceptSwap(swap)} disabled={!myDayForSwap}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50 transition-all"
+                          style={{background:'linear-gradient(135deg,#b45309,#f59e0b)'}}>
+                          تأكيد
+                        </button>
+                        <button onClick={() => { setAcceptingSwap(null); setMyDayForSwap('') }}
+                          className="px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white border border-white/10 transition-all">
+                          إلغاء
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button onClick={() => { setAcceptingSwap(swap); setMyDayForSwap('') }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all"
+                          style={{background:'linear-gradient(135deg,#b45309,#f59e0b)'}}>
+                          ✓ قبول
+                        </button>
+                        <button onClick={() => handleRejectSwap(swap.id)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-300 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all">
+                          ✕ رفض
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Upcoming days */}
+      {futureDays.length > 0 && (
+        <div>
+          <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3">الأيام القادمة</h3>
+          <div className="space-y-2">
+            {futureDays.map(entry => {
+              const isTomorrow = normDate(entry.scheduled_date) === tomorrow
+              return (
+                <div key={entry.id} className="rounded-xl p-3.5 flex items-center justify-between"
+                  style={{
+                    background: isTomorrow ? 'rgba(180,83,9,0.1)' : 'rgba(255,255,255,0.03)',
+                    border: isTomorrow ? '1px solid rgba(245,158,11,0.35)' : '1px solid rgba(255,255,255,0.06)',
+                  }}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">🌙</span>
+                    <div>
+                      <p className="text-white text-sm font-medium">
+                        {new Date(entry.scheduled_date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                      {isTomorrow
+                        ? <span className="text-[11px] text-amber-300 font-medium">◎ غداً</span>
+                        : <span className="text-slate-500 text-xs">قادم</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {groupMembers.length > 1 && (
+                      <button
+                        onClick={() => { setSwapModal(entry); setSwapTarget(''); setSwapNote('') }}
+                        className="text-[11px] px-2.5 py-1 rounded-full border border-amber-500/35 text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 transition-all"
+                      >
+                        🔄 تبديل
+                      </button>
+                    )}
+                    <span className="text-[11px] font-medium px-3 py-1 rounded-full"
+                      style={{background:'rgba(100,116,139,0.15)', color:'#94a3b8', border:'1px solid rgba(100,116,139,0.2)'}}>
+                      لم يحن بعد
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Attended days */}
+      {attendedDays.length > 0 && (
+        <div>
+          <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2">
+            <span className="text-emerald-500">✓</span> الأيام التي تم الحضور فيها
+          </h3>
+          <div className="space-y-2">
+            {attendedDays.map(entry => (
+              <div key={entry.id} className="rounded-xl p-3.5 flex items-center justify-between"
+                style={{background:'rgba(16,185,129,0.06)', border:'1px solid rgba(16,185,129,0.2)'}}>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
+                    style={{background:'rgba(16,185,129,0.15)'}}>✅</div>
+                  <div>
+                    <p className="text-slate-300 text-sm font-medium">
+                      {new Date(entry.scheduled_date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                    <p className="text-[11px] text-emerald-500">
+                      سُجّل الحضور في {new Date(entry.attended_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-semibold px-3 py-1 rounded-full"
+                  style={{background:'rgba(16,185,129,0.15)', color:'#34d399', border:'1px solid rgba(16,185,129,0.3)'}}>
+                  حضر ✓
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Missed days */}
+      {missedDays.length > 0 && (
+        <div>
+          <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2">
+            <span className="text-red-500">✗</span> الأيام الفائتة
+          </h3>
+          <div className="space-y-2">
+            {missedDays.map(entry => (
+              <div key={entry.id} className="rounded-xl p-3.5 flex items-center justify-between"
+                style={{background:'rgba(239,68,68,0.06)', border:'1px solid rgba(239,68,68,0.15)'}}>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
+                    style={{background:'rgba(239,68,68,0.12)'}}>❌</div>
+                  <div>
+                    <p className="text-slate-300 text-sm font-medium">
+                      {new Date(entry.scheduled_date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                    <p className="text-[11px] text-red-400/70">{entry.is_absent ? 'غياب مؤكد' : 'لم يُسجَّل الحضور'}</p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-semibold px-3 py-1 rounded-full"
+                  style={{background:'rgba(239,68,68,0.12)', color:'#f87171', border:'1px solid rgba(239,68,68,0.25)'}}>
+                  {entry.is_absent ? '❌ غياب' : 'تغيّب ✗'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {allDays.length === 0 && (
         <div className="rounded-2xl p-10 text-center" style={{background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)'}}>
           <div className="text-4xl mb-3">🌙</div>
           <p className="text-slate-400 text-sm">لا توجد أيام أوفر تايم مجدولة لك حالياً</p>
         </div>
-      ) : (
-        <div className="space-y-3">
-          {entries.map(entry => {
-            const isToday = normDate(entry.scheduled_date) === today
-            const isTomorrow = normDate(entry.scheduled_date) === tomorrow
-            return (
-              <div key={entry.id} className="rounded-2xl p-4 transition-all"
-                style={{
-                  background: isToday ? 'rgba(180,83,9,0.15)' : isTomorrow ? 'rgba(180,83,9,0.1)' : 'rgba(255,255,255,0.03)',
-                  border: isToday || isTomorrow ? '1px solid rgba(245,158,11,0.4)' : '1px solid rgba(255,255,255,0.07)',
-                }}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
-                      style={{background: isToday || isTomorrow ? 'rgba(180,83,9,0.2)' : 'rgba(255,255,255,0.05)'}}>
-                      🌙
-                    </div>
-                    <div>
-                      <p className="text-white font-semibold text-sm">
-                        {new Date(entry.scheduled_date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                      </p>
-                      {isToday && <span className="text-[11px] text-amber-400 font-medium">● اليوم</span>}
-                      {isTomorrow && <span className="text-[11px] text-amber-300 font-medium">◎ غداً</span>}
-                      {!isToday && !isTomorrow && <span className="text-slate-500 text-xs">قادم</span>}
-                    </div>
-                  </div>
-                  {(isToday || isTomorrow) && (
-                    <span className="text-[11px] font-medium px-3 py-1.5 rounded-full"
-                      style={{background:'rgba(180,83,9,0.2)', color:'#f59e0b', border:'1px solid rgba(245,158,11,0.3)'}}>
-                      {isToday ? 'اليوم 🌙' : 'غداً 🌙'}
-                    </span>
-                  )}
-                </div>
+      )}
+
+      {/* Swap Request Modal */}
+      {swapModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.7)', backdropFilter:'blur(6px)'}}>
+          <div className="w-full max-w-sm rounded-2xl p-6 shadow-2xl" style={{background:'linear-gradient(135deg,#1a0c00,#1a1000)', border:'1px solid rgba(245,158,11,0.35)'}}>
+            <h3 className="text-white font-semibold text-base mb-1" dir="rtl">🔄 طلب تبديل دوام</h3>
+            <p className="text-slate-400 text-xs mb-4" dir="rtl">يومك: {normDate(swapModal.scheduled_date)}</p>
+            <div className="space-y-3" dir="rtl">
+              <div>
+                <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest">تبديل مع</label>
+                <select value={swapTarget} onChange={e => setSwapTarget(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
+                  <option value="">اختر زميلاً</option>
+                  {groupMembers.filter(m => m.user_id !== profile?.id).map(m => (
+                    <option key={m.user_id} value={m.user_id}>{m.full_name || m.email}</option>
+                  ))}
+                </select>
               </div>
-            )
-          })}
+              <div>
+                <label className="block text-[11px] text-slate-500 mb-1.5 uppercase tracking-widest">ملاحظة (اختياري)</label>
+                <input value={swapNote} onChange={e => setSwapNote(e.target.value)} placeholder="سبب الطلب..."
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={handleCreateSwap} disabled={swapSaving || !swapTarget}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-all"
+                style={{background:'linear-gradient(135deg,#b45309,#f59e0b)'}}>
+                {swapSaving ? 'جارٍ الإرسال...' : 'إرسال الطلب'}
+              </button>
+              <button onClick={() => { setSwapModal(null); setSwapTarget(''); setSwapNote('') }}
+                className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm border border-white/10 hover:border-white/20 transition-all">
+                إلغاء
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -409,6 +409,7 @@ export const factoryRotationSchedule = pgTable('factory_rotation_schedule', {
   scheduled_date: date('scheduled_date').notNull(),
   notified: boolean('notified').notNull().default(false),
   attended_at: timestamp('attended_at', { withTimezone: true }),
+  is_absent: boolean('is_absent').notNull().default(false),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -433,5 +434,23 @@ export const overtimeRotationSchedule = pgTable('overtime_rotation_schedule', {
   user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
   scheduled_date: date('scheduled_date').notNull(),
   notified: boolean('notified').notNull().default(false),
+  attended_at: timestamp('attended_at', { withTimezone: true }),
+  is_absent: boolean('is_absent').notNull().default(false),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Rotation Swap Requests ───────────────────────────────────────────────────
+export const rotationSwapRequests = pgTable('rotation_swap_requests', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  module: text('module').notNull(),
+  requester_id: uuid('requester_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  target_id: uuid('target_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  requester_schedule_id: uuid('requester_schedule_id').notNull(),
+  requester_date: date('requester_date').notNull(),
+  target_schedule_id: uuid('target_schedule_id'),
+  target_date: date('target_date'),
+  note: text('note'),
+  status: text('status').notNull().default('pending'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })

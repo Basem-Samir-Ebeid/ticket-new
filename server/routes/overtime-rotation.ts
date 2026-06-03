@@ -8,7 +8,7 @@ import {
   profiles,
   notifications,
 } from '../../shared/schema'
-import { eq, and, gte, lte, asc } from 'drizzle-orm'
+import { eq, and, gte, lte, asc, isNull, inArray } from 'drizzle-orm'
 import { broadcast } from '../ws'
 import { sendWhatsAppToUser } from '../whatsappConfig'
 
@@ -157,6 +157,8 @@ router.get('/schedule', requireAuth as any, async (req: any, res) => {
         user_id: overtimeRotationSchedule.user_id,
         scheduled_date: overtimeRotationSchedule.scheduled_date,
         notified: overtimeRotationSchedule.notified,
+        attended_at: overtimeRotationSchedule.attended_at,
+        is_absent: overtimeRotationSchedule.is_absent,
         full_name: profiles.full_name,
         email: profiles.email,
       })
@@ -279,6 +281,87 @@ router.post('/schedule/assign', requireAuth as any, async (req: any, res) => {
     res.json(row)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to assign entry' })
+  }
+})
+
+// ── POST /schedule/:id/attend ─────────────────────────────────────────────────
+router.post('/schedule/:id/attend', requireAuth as any, async (req: any, res) => {
+  try {
+    const entry = await db
+      .select()
+      .from(overtimeRotationSchedule)
+      .where(eq(overtimeRotationSchedule.id, req.params.id))
+      .limit(1)
+
+    if (!entry.length) return res.status(404).json({ error: 'Entry not found' })
+    const row = entry[0]
+
+    if (row.user_id !== req.user.id) return res.status(403).json({ error: 'ليس يومك المحدد' })
+
+    const today = toDateStr(new Date())
+    const rowDateStr = typeof row.scheduled_date === 'string'
+      ? row.scheduled_date.slice(0, 10)
+      : new Date(row.scheduled_date as any).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+    if (rowDateStr !== today) {
+      return res.status(400).json({ error: 'يمكن تسجيل الحضور في يوم الدورة فقط' })
+    }
+
+    if (row.attended_at) return res.status(400).json({ error: 'تم تسجيل حضورك مسبقاً' })
+
+    const [updated] = await db
+      .update(overtimeRotationSchedule)
+      .set({ attended_at: new Date(), is_absent: false })
+      .where(eq(overtimeRotationSchedule.id, req.params.id))
+      .returning()
+
+    const [emp] = await db
+      .select({ full_name: profiles.full_name, email: profiles.email })
+      .from(profiles)
+      .where(eq(profiles.id, req.user.id))
+      .limit(1)
+    const empName = emp?.full_name || emp?.email || 'موظف'
+
+    await db.insert(notifications).values({
+      user_id: req.user.id,
+      message: `✅ تم تسجيل حضورك في الأوفر تايم بتاريخ ${today}`,
+    })
+    broadcast(req.user.id, 'notification', { message: `✅ تم تسجيل حضورك في الأوفر تايم بتاريخ ${today}` })
+
+    const admins = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(inArray(profiles.role, ['admin', 'super_admin']))
+
+    const adminMsg = `🌙 ${empName} سجّل حضوره في الأوفر تايم اليوم ${today}`
+    for (const admin of admins) {
+      if (admin.id === req.user.id) continue
+      await db.insert(notifications).values({ user_id: admin.id, message: adminMsg })
+      broadcast(admin.id, 'notification', { message: adminMsg })
+    }
+
+    res.json(updated)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to mark attendance' })
+  }
+})
+
+// ── GET /groups/:id/members (no admin restriction — employees need for swaps) ──
+router.get('/groups/:id/members', requireAuth as any, async (req: any, res) => {
+  try {
+    const members = await db
+      .select({
+        user_id: overtimeRotationMembers.user_id,
+        order_index: overtimeRotationMembers.order_index,
+        full_name: profiles.full_name,
+        email: profiles.email,
+      })
+      .from(overtimeRotationMembers)
+      .leftJoin(profiles, eq(overtimeRotationMembers.user_id, profiles.id))
+      .where(eq(overtimeRotationMembers.group_id, req.params.id))
+      .orderBy(asc(overtimeRotationMembers.order_index))
+    res.json(members)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to load members' })
   }
 })
 

@@ -1,0 +1,610 @@
+Please implement the following 2 features for **both** the Factory Rotation (`factoryRotationSchedule`) and Overtime Rotation (`overtimeRotationSchedule`) modules. Read all steps carefully before writing any code, then execute them in order.
+
+---
+
+## FEATURE 1 — Attendance Tracking + Auto-Absent
+
+### Step 1 — Schema changes in `shared/schema.ts`
+
+The `factoryRotationSchedule` table already has `attended_at`. You need to:
+
+**A)** Add `attended_at` and `is_absent` to `overtimeRotationSchedule`:
+```ts
+attended_at: timestamp('attended_at', { withTimezone: true }),
+is_absent: boolean('is_absent').notNull().default(false),
+```
+
+**B)** Add `is_absent` to `factoryRotationSchedule` as well:
+```ts
+is_absent: boolean('is_absent').notNull().default(false),
+```
+
+After editing the schema, run:
+```bash
+npm run db:push
+```
+
+---
+
+### Step 2 — Add `/attend` endpoint to `server/routes/overtime-rotation.ts`
+
+Copy the exact same logic from the factory-rotation attend endpoint and add it to overtime-rotation. The route is `POST /schedule/:id/attend`:
+
+- Fetch the schedule entry by `req.params.id`
+- Return 404 if not found
+- Return 403 if `row.user_id !== req.user.id` with message `'ليس يومك المحدد'`
+- Compare `scheduled_date` with today in Cairo timezone — return 400 if not today: `'يمكن تسجيل الحضور في يوم الدورة فقط'`
+- Return 400 if `row.attended_at` is already set: `'تم تسجيل حضورك مسبقاً'`
+- Update `attended_at = new Date()`
+- Insert notification for the employee: `✅ تم تسجيل حضورك في الأوفرتايم بتاريخ ${today}`
+- Broadcast via `broadcast(req.user.id, 'notification', { message })`
+- Notify all admins/super_admins: `⏱️ ${empName} سجّل حضوره في الأوفرتايم اليوم ${today}`
+- Return the updated row
+
+---
+
+### Step 3 — Add `markOvertimeAttendance` to `src/lib/api.js`
+
+```js
+markOvertimeAttendance: (id) => request('POST', `/overtime-rotation/schedule/${id}/attend`, {}),
+```
+
+---
+
+### Step 4 — Auto-absent background job in `server/index.ts`
+
+Add a new function `runAbsentMarkingJob()` and schedule it with `setInterval` every 60 seconds (same pattern as the existing factory/overtime notification crons).
+
+The function should run once per day at **23:55 Cairo time** using the existing `lastRun` map and `shouldRunAt()` helper.
+
+Logic inside `runAbsentMarkingJob()`:
+
+```ts
+import { factoryRotationSchedule, overtimeRotationSchedule } from '../shared/schema'
+import { isNull, eq, and, lt } from 'drizzle-orm'
+
+async function runAbsentMarkingJob() {
+  try {
+    const now = new Date()
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+
+    // Mark factory absences
+    const factoryAbsent = await db
+      .select({ id: factoryRotationSchedule.id, user_id: factoryRotationSchedule.user_id, scheduled_date: factoryRotationSchedule.scheduled_date })
+      .from(factoryRotationSchedule)
+      .where(and(
+        eq(factoryRotationSchedule.scheduled_date, yesterdayStr),
+        isNull(factoryRotationSchedule.attended_at),
+        eq(factoryRotationSchedule.is_absent, false),
+      ))
+
+    for (const row of factoryAbsent) {
+      await db.update(factoryRotationSchedule)
+        .set({ is_absent: true })
+        .where(eq(factoryRotationSchedule.id, row.id))
+
+      await db.insert(notifications).values({
+        user_id: row.user_id,
+        message: `❌ تم تسجيل غيابك في المصنع بتاريخ ${yesterdayStr}`,
+      })
+      broadcast(row.user_id, 'notification', { message: `❌ تم تسجيل غيابك في المصنع بتاريخ ${yesterdayStr}` })
+    }
+
+    // Mark overtime absences — same logic
+    const overtimeAbsent = await db
+      .select({ id: overtimeRotationSchedule.id, user_id: overtimeRotationSchedule.user_id, scheduled_date: overtimeRotationSchedule.scheduled_date })
+      .from(overtimeRotationSchedule)
+      .where(and(
+        eq(overtimeRotationSchedule.scheduled_date, yesterdayStr),
+        isNull(overtimeRotationSchedule.attended_at),
+        eq(overtimeRotationSchedule.is_absent, false),
+      ))
+
+    for (const row of overtimeAbsent) {
+      await db.update(overtimeRotationSchedule)
+        .set({ is_absent: true })
+        .where(eq(overtimeRotationSchedule.id, row.id))
+
+      await db.insert(notifications).values({
+        user_id: row.user_id,
+        message: `❌ تم تسجيل غيابك في الأوفرتايم بتاريخ ${yesterdayStr}`,
+      })
+      broadcast(row.user_id, 'notification', { message: `❌ تم تسجيل غيابك في الأوفرتايم بتاريخ ${yesterdayStr}` })
+    }
+
+    // Notify admins summary
+    const absentNames: string[] = []
+    if (factoryAbsent.length || overtimeAbsent.length) {
+      const allAbsentUserIds = [...new Set([...factoryAbsent, ...overtimeAbsent].map(r => r.user_id))]
+      const empRows = await db.select({ id: profiles.id, full_name: profiles.full_name, email: profiles.email })
+        .from(profiles).where(inArray(profiles.id, allAbsentUserIds))
+      const nameMap = Object.fromEntries(empRows.map(e => [e.id, e.full_name || e.email]))
+
+      const factoryNames = factoryAbsent.map(r => nameMap[r.user_id]).filter(Boolean)
+      const overtimeNames = overtimeAbsent.map(r => nameMap[r.user_id]).filter(Boolean)
+
+      const adminRows = await db.select({ id: profiles.id }).from(profiles).where(inArray(profiles.role, ['admin', 'super_admin']))
+
+      let adminMsg = `📋 تقرير الغياب ليوم ${yesterdayStr}\n`
+      if (factoryNames.length) adminMsg += `🏭 مصنع: ${factoryNames.join('، ')}\n`
+      if (overtimeNames.length) adminMsg += `⏱️ أوفرتايم: ${overtimeNames.join('، ')}`
+
+      for (const admin of adminRows) {
+        await db.insert(notifications).values({ user_id: admin.id, message: adminMsg })
+        broadcast(admin.id, 'notification', { message: adminMsg })
+      }
+    }
+
+    console.log(`[AbsentJob] Factory: ${factoryAbsent.length}, Overtime: ${overtimeAbsent.length} marked absent for ${yesterdayStr}`)
+  } catch (err) {
+    console.error('[AbsentJob error]', err)
+  }
+}
+```
+
+Then add to the existing `setInterval` that already checks `cairo.getHours()` for factory and overtime notifications:
+
+```ts
+if (cairo.getHours() === 23 && cairo.getMinutes() === 55 && !lastRun[`absent-${todayKey}`]) {
+  lastRun[`absent-${todayKey}`] = '1'
+  runAbsentMarkingJob()
+}
+```
+
+Make sure to import `factoryRotationSchedule`, `overtimeRotationSchedule`, `isNull` at the top of `server/index.ts`.
+
+---
+
+### Step 5 — UI: `FactoryRotationPage.jsx`
+
+The factory page already has the attendance button and `attended_at` badges. You only need to:
+
+- Add `is_absent` awareness: wherever the page shows a badge for a past entry with no `attended_at`, check `is_absent`:
+  - If `is_absent === true` → show a **red** `❌ غياب` badge
+  - If `attended_at` is set → keep the existing **green** `✓ حضر` badge with time
+  - If neither (future day or today not yet marked) → keep existing logic
+
+- In the admin schedule table, add a red `✗` indicator for entries where `is_absent === true`
+
+---
+
+### Step 6 — UI: `OvertimeRotationPage.jsx`
+
+The overtime page currently has **no attendance feature at all**. You need to add it exactly like the factory page:
+
+**In the employee view (EmployeeView component):**
+
+1. Fetch `myDays` from `/overtime-rotation/my-next` (already done via `getMyNextOvertime`)
+
+2. Add state: `const [attendToast, setAttendToast] = useState('')`
+
+3. Add attend handler:
+```js
+async function handleAttend(entry) {
+  try {
+    const updated = await api.markOvertimeAttendance(entry.id)
+    setMyDays(prev => prev.map(d => d.id === entry.id ? { ...d, attended_at: new Date().toISOString() } : d))
+    setAttendToast('✅ تم تسجيل حضورك بنجاح')
+    setTimeout(() => setAttendToast(''), 3000)
+  } catch (e) {
+    setAttendToast('❌ ' + (e.message || 'فشل تسجيل الحضور'))
+    setTimeout(() => setAttendToast(''), 3000)
+  }
+}
+```
+
+4. In the employee's upcoming days list, for the entry matching today's date and not yet attended, show a green attendance button:
+```jsx
+{normDate(d.scheduled_date) === today && !d.attended_at && !d.is_absent && (
+  <button onClick={() => handleAttend(d)} className="px-3 py-1 rounded-lg bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-400 transition">
+    ✅ تسجيل حضور
+  </button>
+)}
+```
+
+5. For past days in the employee list, show badges:
+   - `attended_at` set → green `✓ حضر` with time
+   - `is_absent === true` → red `❌ غياب`
+
+6. Show `attendToast` if set (same style as FactoryRotationPage)
+
+**In the admin view (AdminView component):**
+
+In the schedule table, show indicators per entry:
+- `attended_at` → green `✓` icon with tooltip of the time
+- `is_absent` → red `✗` icon
+- Neither (future/today) → neutral dash or nothing
+
+---
+
+## FEATURE 2 — Day Swap Request
+
+### Step 7 — Schema: add `rotationSwapRequests` to `shared/schema.ts`
+
+```ts
+export const rotationSwapRequests = pgTable('rotation_swap_requests', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  module: text('module').notNull(), // 'factory' | 'overtime'
+  schedule_id: uuid('schedule_id').notNull(),
+  requester_id: uuid('requester_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  target_user_id: uuid('target_user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  target_schedule_id: uuid('target_schedule_id'),
+  status: text('status').notNull().default('pending'), // 'pending' | 'accepted' | 'rejected'
+  requester_note: text('requester_note'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  resolved_at: timestamp('resolved_at', { withTimezone: true }),
+})
+export type RotationSwapRequest = typeof rotationSwapRequests.$inferSelect
+```
+
+Run `npm run db:push`.
+
+---
+
+### Step 8 — New route file `server/routes/rotation-swaps.ts`
+
+Create this file with the following 4 endpoints:
+
+**POST `/`** — create a swap request:
+```ts
+router.post('/', requireAuth, async (req, res) => {
+  const { module, schedule_id, target_user_id, target_schedule_id, requester_note } = req.body
+  if (!module || !schedule_id || !target_user_id)
+    return res.status(400).json({ error: 'module, schedule_id, target_user_id are required' })
+
+  // Verify schedule_id belongs to requester and is in the future
+  const table = module === 'factory' ? factoryRotationSchedule : overtimeRotationSchedule
+  const [entry] = await db.select().from(table).where(eq(table.id, schedule_id)).limit(1)
+  if (!entry) return res.status(404).json({ error: 'Schedule entry not found' })
+  if (entry.user_id !== req.user.id) return res.status(403).json({ error: 'هذا اليوم ليس يومك' })
+
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+  const entryDate = String(entry.scheduled_date).slice(0, 10)
+  if (entryDate <= today) return res.status(400).json({ error: 'لا يمكن طلب تحويل يوم مضى' })
+
+  // Check no existing pending swap for this schedule_id
+  const existing = await db.select().from(rotationSwapRequests)
+    .where(and(eq(rotationSwapRequests.schedule_id, schedule_id), eq(rotationSwapRequests.status, 'pending')))
+    .limit(1)
+  if (existing.length) return res.status(400).json({ error: 'يوجد طلب تحويل معلق لهذا اليوم بالفعل' })
+
+  const [swap] = await db.insert(rotationSwapRequests).values({
+    module, schedule_id, requester_id: req.user.id,
+    target_user_id, target_schedule_id: target_schedule_id || null,
+    requester_note: requester_note || null,
+  }).returning()
+
+  // Notify target
+  const [requester] = await db.select({ full_name: profiles.full_name }).from(profiles).where(eq(profiles.id, req.user.id)).limit(1)
+  const requesterName = requester?.full_name || 'موظف'
+  const moduleName = module === 'factory' ? 'المصنع' : 'الأوفرتايم'
+  const msg = `🔄 ${requesterName} يطلب تحويل يوم دورته في ${moduleName} بتاريخ ${entryDate} إليك — يرجى الرد من صفحة التناوب`
+
+  await db.insert(notifications).values({ user_id: target_user_id, message: msg })
+  broadcast(target_user_id, 'notification', { message: msg })
+
+  res.json(swap)
+})
+```
+
+**GET `/my`** — get all swap requests for current user (sent + received):
+```ts
+router.get('/my', requireAuth, async (req, res) => {
+  const sent = await db.select().from(rotationSwapRequests)
+    .where(eq(rotationSwapRequests.requester_id, req.user.id))
+    .orderBy(desc(rotationSwapRequests.created_at))
+
+  const received = await db.select().from(rotationSwapRequests)
+    .where(eq(rotationSwapRequests.target_user_id, req.user.id))
+    .orderBy(desc(rotationSwapRequests.created_at))
+
+  // Enrich with user names
+  const allUserIds = [...new Set([
+    ...sent.map(s => s.target_user_id),
+    ...received.map(r => r.requester_id),
+  ])]
+  const users = allUserIds.length
+    ? await db.select({ id: profiles.id, full_name: profiles.full_name }).from(profiles).where(inArray(profiles.id, allUserIds))
+    : []
+  const nameMap = Object.fromEntries(users.map(u => [u.id, u.full_name]))
+
+  // Enrich with scheduled dates
+  const allScheduleIds = [...new Set([
+    ...sent.map(s => s.schedule_id),
+    ...received.map(r => r.schedule_id),
+    ...sent.filter(s => s.target_schedule_id).map(s => s.target_schedule_id!),
+    ...received.filter(r => r.target_schedule_id).map(r => r.target_schedule_id!),
+  ])]
+
+  // Get dates from both tables
+  const factoryDates = await db.select({ id: factoryRotationSchedule.id, scheduled_date: factoryRotationSchedule.scheduled_date })
+    .from(factoryRotationSchedule).where(inArray(factoryRotationSchedule.id, allScheduleIds))
+  const overtimeDates = await db.select({ id: overtimeRotationSchedule.id, scheduled_date: overtimeRotationSchedule.scheduled_date })
+    .from(overtimeRotationSchedule).where(inArray(overtimeRotationSchedule.id, allScheduleIds))
+  const dateMap = Object.fromEntries([...factoryDates, ...overtimeDates].map(r => [r.id, r.scheduled_date]))
+
+  const enrich = (list: any[], type: 'sent' | 'received') => list.map(s => ({
+    ...s,
+    type,
+    target_name: nameMap[s.target_user_id],
+    requester_name: nameMap[s.requester_id],
+    scheduled_date: dateMap[s.schedule_id],
+    target_scheduled_date: s.target_schedule_id ? dateMap[s.target_schedule_id] : null,
+  }))
+
+  res.json({ sent: enrich(sent, 'sent'), received: enrich(received, 'received') })
+})
+```
+
+**POST `/:id/accept`** — target accepts:
+```ts
+router.post('/:id/accept', requireAuth, async (req, res) => {
+  const [swap] = await db.select().from(rotationSwapRequests).where(eq(rotationSwapRequests.id, req.params.id)).limit(1)
+  if (!swap) return res.status(404).json({ error: 'Swap request not found' })
+  if (swap.target_user_id !== req.user.id) return res.status(403).json({ error: 'غير مصرح' })
+  if (swap.status !== 'pending') return res.status(400).json({ error: 'تم البت في هذا الطلب مسبقاً' })
+
+  // Swap the user_id in the schedule rows
+  const table = swap.module === 'factory' ? factoryRotationSchedule : overtimeRotationSchedule
+  await db.update(table).set({ user_id: swap.target_user_id }).where(eq(table.id, swap.schedule_id))
+  if (swap.target_schedule_id) {
+    await db.update(table).set({ user_id: swap.requester_id }).where(eq(table.id, swap.target_schedule_id))
+  }
+
+  await db.update(rotationSwapRequests)
+    .set({ status: 'accepted', resolved_at: new Date() })
+    .where(eq(rotationSwapRequests.id, swap.id))
+
+  // Notify requester
+  const [accepter] = await db.select({ full_name: profiles.full_name }).from(profiles).where(eq(profiles.id, req.user.id)).limit(1)
+  const moduleName = swap.module === 'factory' ? 'المصنع' : 'الأوفرتايم'
+  const msgRequester = `✅ ${accepter?.full_name || 'الموظف'} قبل طلب التحويل في ${moduleName}`
+  await db.insert(notifications).values({ user_id: swap.requester_id, message: msgRequester })
+  broadcast(swap.requester_id, 'notification', { message: msgRequester })
+
+  // Notify admins
+  const admins = await db.select({ id: profiles.id }).from(profiles).where(inArray(profiles.role, ['admin', 'super_admin']))
+  const [requesterProfile] = await db.select({ full_name: profiles.full_name }).from(profiles).where(eq(profiles.id, swap.requester_id)).limit(1)
+  const adminMsg = `🔄 تم تحويل يوم التناوب في ${moduleName} بين ${requesterProfile?.full_name || 'موظف'} و ${accepter?.full_name || 'موظف'}`
+  for (const admin of admins) {
+    await db.insert(notifications).values({ user_id: admin.id, message: adminMsg })
+    broadcast(admin.id, 'notification', { message: adminMsg })
+  }
+
+  res.json({ success: true })
+})
+```
+
+**POST `/:id/reject`** — target rejects:
+```ts
+router.post('/:id/reject', requireAuth, async (req, res) => {
+  const [swap] = await db.select().from(rotationSwapRequests).where(eq(rotationSwapRequests.id, req.params.id)).limit(1)
+  if (!swap) return res.status(404).json({ error: 'Swap request not found' })
+  if (swap.target_user_id !== req.user.id) return res.status(403).json({ error: 'غير مصرح' })
+  if (swap.status !== 'pending') return res.status(400).json({ error: 'تم البت في هذا الطلب مسبقاً' })
+
+  await db.update(rotationSwapRequests)
+    .set({ status: 'rejected', resolved_at: new Date() })
+    .where(eq(rotationSwapRequests.id, swap.id))
+
+  const [rejecter] = await db.select({ full_name: profiles.full_name }).from(profiles).where(eq(profiles.id, req.user.id)).limit(1)
+  const moduleName = swap.module === 'factory' ? 'المصنع' : 'الأوفرتايم'
+  const msg = `❌ ${rejecter?.full_name || 'الموظف'} رفض طلب التحويل في ${moduleName}`
+  await db.insert(notifications).values({ user_id: swap.requester_id, message: msg })
+  broadcast(swap.requester_id, 'notification', { message: msg })
+
+  res.json({ success: true })
+})
+```
+
+Required imports at the top of this file:
+```ts
+import { Router } from 'express'
+import { requireAuth } from '../auth'
+import { db } from '../db'
+import { rotationSwapRequests, factoryRotationSchedule, overtimeRotationSchedule, profiles, notifications } from '../../shared/schema'
+import { eq, and, inArray, desc } from 'drizzle-orm'
+import { broadcast } from '../ws'
+```
+
+---
+
+### Step 9 — Register the new route in `server/app.ts`
+
+```ts
+import rotationSwapsRoutes from './routes/rotation-swaps'
+// ...
+app.use('/api/rotation-swaps', rotationSwapsRoutes)
+```
+
+---
+
+### Step 10 — Add API functions to `src/lib/api.js`
+
+```js
+// Rotation swaps
+createRotationSwap: (data) => request('POST', '/rotation-swaps', data),
+getMyRotationSwaps: () => request('GET', '/rotation-swaps/my'),
+acceptRotationSwap: (id) => request('POST', `/rotation-swaps/${id}/accept`, {}),
+rejectRotationSwap: (id) => request('POST', `/rotation-swaps/${id}/reject`, {}),
+```
+
+---
+
+### Step 11 — UI changes in `FactoryRotationPage.jsx`
+
+In the **employee view**, in the section that shows upcoming scheduled days:
+
+1. Add state: `const [swaps, setSwaps] = useState({ sent: [], received: [] })`
+2. Add state: `const [swapModal, setSwapModal] = useState(null)` — will hold the schedule entry the employee wants to transfer
+3. Add state: `const [swapTarget, setSwapTarget] = useState('')`
+4. Add state: `const [swapNote, setSwapNote] = useState('')`
+5. Add state: `const [swapSaving, setSwapSaving] = useState(false)`
+
+6. Fetch swaps on mount alongside existing data:
+```js
+const swapData = await api.getMyRotationSwaps()
+setSwaps(swapData)
+```
+
+7. For each **upcoming** day entry (scheduled_date > today), add a small `🔄 طلب تحويل` button:
+```jsx
+<button
+  onClick={() => { setSwapModal(d); setSwapTarget(''); setSwapNote('') }}
+  className="px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs hover:bg-amber-500/30 transition"
+>
+  🔄 طلب تحويل
+</button>
+```
+
+8. Add the swap request modal (show when `swapModal !== null`):
+```jsx
+{swapModal && (
+  <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+    <div className="bg-slate-800 rounded-2xl p-6 w-full max-w-sm border border-slate-700 shadow-2xl">
+      <h3 className="text-white font-bold text-lg mb-1">🔄 طلب تحويل يوم</h3>
+      <p className="text-slate-400 text-sm mb-4">
+        يوم: <span className="text-amber-400 font-bold">{normDate(swapModal.scheduled_date)}</span>
+      </p>
+
+      <label className="block text-slate-400 text-xs mb-1">اختر الموظف</label>
+      <select
+        value={swapTarget}
+        onChange={e => setSwapTarget(e.target.value)}
+        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm mb-3"
+      >
+        <option value="">-- اختر موظف --</option>
+        {/* Render group members excluding current user — fetch from existing groups state */}
+        {groupMembers
+          .filter(m => m.user_id !== profile.id)
+          .map(m => (
+            <option key={m.user_id} value={m.user_id}>{m.full_name || m.email}</option>
+          ))
+        }
+      </select>
+
+      <label className="block text-slate-400 text-xs mb-1">ملاحظة (اختياري)</label>
+      <input
+        type="text"
+        value={swapNote}
+        onChange={e => setSwapNote(e.target.value)}
+        placeholder="سبب الطلب..."
+        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm mb-4"
+      />
+
+      <div className="flex gap-2">
+        <button
+          disabled={!swapTarget || swapSaving}
+          onClick={async () => {
+            setSwapSaving(true)
+            try {
+              await api.createRotationSwap({
+                module: 'factory',
+                schedule_id: swapModal.id,
+                target_user_id: swapTarget,
+                requester_note: swapNote || undefined,
+              })
+              setSwapModal(null)
+              const updated = await api.getMyRotationSwaps()
+              setSwaps(updated)
+              setAttendToast('✅ تم إرسال طلب التحويل')
+              setTimeout(() => setAttendToast(''), 3000)
+            } catch (e) {
+              setAttendToast('❌ ' + (e.message || 'فشل الإرسال'))
+              setTimeout(() => setAttendToast(''), 3000)
+            }
+            setSwapSaving(false)
+          }}
+          className="flex-1 py-2 rounded-xl bg-amber-500 text-black font-bold text-sm disabled:opacity-40"
+        >
+          {swapSaving ? 'جاري الإرسال...' : 'إرسال الطلب'}
+        </button>
+        <button
+          onClick={() => setSwapModal(null)}
+          className="px-4 py-2 rounded-xl bg-slate-700 text-slate-300 text-sm"
+        >
+          إلغاء
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+```
+
+9. Add **"طلبات التحويل الواردة"** section below the upcoming days — show only `swaps.received` where `status === 'pending'`:
+```jsx
+{swaps.received?.filter(s => s.status === 'pending').length > 0 && (
+  <div className="mt-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl p-4">
+    <h4 className="text-amber-400 font-bold text-sm mb-3">🔄 طلبات التحويل الواردة</h4>
+    <div className="flex flex-col gap-2">
+      {swaps.received.filter(s => s.status === 'pending').map(s => (
+        <div key={s.id} className="flex items-center justify-between bg-slate-700/50 rounded-xl px-3 py-2.5">
+          <div>
+            <p className="text-white text-sm font-medium">{s.requester_name}</p>
+            <p className="text-slate-400 text-xs">
+              يريد تحويل يوم <span className="text-amber-400">{normDate(s.scheduled_date)}</span> إليك
+              {s.requester_note && <span className="text-slate-500"> — {s.requester_note}</span>}
+            </p>
+          </div>
+          <div className="flex gap-1.5">
+            <button
+              onClick={async () => {
+                await api.acceptRotationSwap(s.id)
+                const updated = await api.getMyRotationSwaps()
+                setSwaps(updated)
+                // Also refresh schedule
+                load()
+              }}
+              className="px-2.5 py-1 rounded-lg bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-400"
+            >
+              ✅ قبول
+            </button>
+            <button
+              onClick={async () => {
+                await api.rejectRotationSwap(s.id)
+                const updated = await api.getMyRotationSwaps()
+                setSwaps(updated)
+              }}
+              className="px-2.5 py-1 rounded-lg bg-red-500/80 text-white text-xs font-bold hover:bg-red-500"
+            >
+              ❌ رفض
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+```
+
+You need to figure out the correct `groupMembers` variable from the existing state — the employee view already fetches `myDays` which includes a `group_id`. Use that to find the matching group from the groups data loaded by the page, and pass its members list to the modal.
+
+---
+
+### Step 12 — UI changes in `OvertimeRotationPage.jsx`
+
+Apply **identical** swap UI as Step 11, but with:
+- `module: 'overtime'` in the `createRotationSwap` call
+- Same modal, same incoming requests panel
+- Same logic for finding group members from existing state
+
+---
+
+## Final checklist
+
+- [ ] `shared/schema.ts` has `is_absent` added to both `factoryRotationSchedule` and `overtimeRotationSchedule`
+- [ ] `shared/schema.ts` has `attended_at` added to `overtimeRotationSchedule`
+- [ ] `shared/schema.ts` has `rotationSwapRequests` table added
+- [ ] `npm run db:push` was run after all schema changes
+- [ ] `server/routes/overtime-rotation.ts` has the `/schedule/:id/attend` endpoint
+- [ ] `server/index.ts` has `runAbsentMarkingJob` running at 23:55 Cairo
+- [ ] `server/routes/rotation-swaps.ts` is created with all 4 endpoints
+- [ ] `server/app.ts` registers `/api/rotation-swaps`
+- [ ] `src/lib/api.js` has all new API functions
+- [ ] `FactoryRotationPage.jsx` shows `is_absent` badge + swap button + incoming requests panel
+- [ ] `OvertimeRotationPage.jsx` has attendance button + `is_absent` badge + swap button + incoming requests panel
+- [ ] Cairo timezone used consistently everywhere
+- [ ] Existing attendance and schedule generation logic is not broken
+
