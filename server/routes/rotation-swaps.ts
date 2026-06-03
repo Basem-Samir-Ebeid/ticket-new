@@ -98,7 +98,7 @@ router.get('/my', requireAuth as any, async (req: any, res) => {
 router.post('/:id/accept', requireAuth as any, async (req: any, res) => {
   try {
     const { target_schedule_id } = req.body
-    if (!target_schedule_id) return res.status(400).json({ error: 'target_schedule_id required' })
+    // target_schedule_id is optional: if provided → mutual swap; if not → one-way transfer
 
     const [swap] = await db
       .select()
@@ -110,20 +110,22 @@ router.post('/:id/accept', requireAuth as any, async (req: any, res) => {
     if (swap.status !== 'pending') return res.status(400).json({ error: 'Swap is not pending' })
 
     const table = getTable(swap.module)
-    const [targetEntry] = await db.select().from(table).where(eq(table.id, target_schedule_id)).limit(1)
-    if (!targetEntry || targetEntry.user_id !== req.user.id)
-      return res.status(403).json({ error: 'Target schedule entry not found or not yours' })
+    let targetDate: string | null = null
+    if (target_schedule_id) {
+      const [targetEntry] = await db.select().from(table).where(eq(table.id, target_schedule_id)).limit(1)
+      if (!targetEntry || targetEntry.user_id !== req.user.id)
+        return res.status(403).json({ error: 'Target schedule entry not found or not yours' })
+      await db.update(table).set({ user_id: swap.requester_id }).where(eq(table.id, target_schedule_id))
+      targetDate = typeof targetEntry.scheduled_date === 'string'
+        ? targetEntry.scheduled_date
+        : String(targetEntry.scheduled_date)
+    }
 
     await db.update(table).set({ user_id: swap.target_id }).where(eq(table.id, swap.requester_schedule_id))
-    await db.update(table).set({ user_id: swap.requester_id }).where(eq(table.id, target_schedule_id))
-
-    const targetDate = typeof targetEntry.scheduled_date === 'string'
-      ? targetEntry.scheduled_date
-      : String(targetEntry.scheduled_date)
 
     const [updated] = await db
       .update(rotationSwapRequests)
-      .set({ status: 'accepted', target_schedule_id, target_date: targetDate, updated_at: new Date() })
+      .set({ status: 'accepted', target_schedule_id: target_schedule_id || null, target_date: targetDate, updated_at: new Date() })
       .where(eq(rotationSwapRequests.id, req.params.id))
       .returning()
 

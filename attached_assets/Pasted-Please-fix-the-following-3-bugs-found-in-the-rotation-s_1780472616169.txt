@@ -1,0 +1,246 @@
+Please fix the following 3 bugs found in the rotation swap and absent-marking features. Apply all changes exactly as written.
+
+BUG 1 — runAbsentMarkingJob in server/index.ts marks absences silently without sending notifications
+Problem: The current implementation only runs a bulk db.update and never fetches the affected rows, never inserts into notifications, and never calls broadcast. Employees and admins receive no notification when they're marked absent.
+Fix: Replace the entire runAbsentMarkingJob function in server/index.ts with this:
+tsasync function runAbsentMarkingJob() {
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+
+    // ── Factory absences ──────────────────────────────────────────────────────
+    const factoryAbsent = await db
+      .select({ id: factoryRotationSchedule.id, user_id: factoryRotationSchedule.user_id })
+      .from(factoryRotationSchedule)
+      .where(and(
+        eq(factoryRotationSchedule.scheduled_date, today),
+        isNull(factoryRotationSchedule.attended_at),
+        eq(factoryRotationSchedule.is_absent, false),
+      ))
+
+    for (const row of factoryAbsent) {
+      await db.update(factoryRotationSchedule)
+        .set({ is_absent: true })
+        .where(eq(factoryRotationSchedule.id, row.id))
+      const msg = `❌ تم تسجيل غيابك في المصنع بتاريخ ${today}`
+      await db.insert(notifications).values({ user_id: row.user_id, message: msg })
+      broadcast(row.user_id, 'notification', { message: msg })
+    }
+
+    // ── Overtime absences ─────────────────────────────────────────────────────
+    const overtimeAbsent = await db
+      .select({ id: overtimeRotationSchedule.id, user_id: overtimeRotationSchedule.user_id })
+      .from(overtimeRotationSchedule)
+      .where(and(
+        eq(overtimeRotationSchedule.scheduled_date, today),
+        isNull(overtimeRotationSchedule.attended_at),
+        eq(overtimeRotationSchedule.is_absent, false),
+      ))
+
+    for (const row of overtimeAbsent) {
+      await db.update(overtimeRotationSchedule)
+        .set({ is_absent: true })
+        .where(eq(overtimeRotationSchedule.id, row.id))
+      const msg = `❌ تم تسجيل غيابك في الأوفرتايم بتاريخ ${today}`
+      await db.insert(notifications).values({ user_id: row.user_id, message: msg })
+      broadcast(row.user_id, 'notification', { message: msg })
+    }
+
+    // ── Admin summary ─────────────────────────────────────────────────────────
+    if (factoryAbsent.length || overtimeAbsent.length) {
+      const allUserIds = [...new Set([...factoryAbsent, ...overtimeAbsent].map(r => r.user_id))]
+      const empRows = await db
+        .select({ id: profiles.id, full_name: profiles.full_name, email: profiles.email })
+        .from(profiles)
+        .where(inArray(profiles.id, allUserIds))
+      const nameMap = Object.fromEntries(empRows.map(e => [e.id, e.full_name || e.email]))
+
+      const factoryNames = factoryAbsent.map(r => nameMap[r.user_id]).filter(Boolean)
+      const overtimeNames = overtimeAbsent.map(r => nameMap[r.user_id]).filter(Boolean)
+
+      const adminRows = await db
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(inArray(profiles.role, ['admin', 'super_admin']))
+
+      let adminMsg = `📋 تقرير الغياب ليوم ${today}\n`
+      if (factoryNames.length) adminMsg += `🏭 مصنع: ${factoryNames.join('، ')}\n`
+      if (overtimeNames.length) adminMsg += `⏱️ أوفرتايم: ${overtimeNames.join('، ')}`
+
+      for (const admin of adminRows) {
+        await db.insert(notifications).values({ user_id: admin.id, message: adminMsg })
+        broadcast(admin.id, 'notification', { message: adminMsg })
+      }
+    }
+
+    console.log(`[AbsentJob] Factory: ${factoryAbsent.length}, Overtime: ${overtimeAbsent.length} marked absent for ${today}`)
+  } catch (err) {
+    console.error('[AbsentJob error]', err)
+  }
+}
+All required imports (profiles, inArray, isNull, notifications, factoryRotationSchedule, overtimeRotationSchedule) are already at the top of server/index.ts — do not add duplicates.
+
+BUG 2 — POST /api/rotation-swaps/:id/accept fails with 400 when target_schedule_id is not provided
+Problem: The accept endpoint has this hard block at the top:
+tsconst { target_schedule_id } = req.body
+if (!target_schedule_id) return res.status(400).json({ error: 'target_schedule_id required' })
+target_schedule_id should be optional — it's only needed for a mutual swap (both sides give up a day). If the acceptor just wants to take the requester's day without giving one back, this block breaks the entire flow.
+Fix: In server/routes/rotation-swaps.ts, in the POST /:id/accept handler, make the following 3 changes:
+Change 1 — Remove the hard 400 check. Replace:
+tsconst { target_schedule_id } = req.body
+if (!target_schedule_id) return res.status(400).json({ error: 'target_schedule_id required' })
+with:
+tsconst { target_schedule_id } = req.body
+// target_schedule_id is optional: if provided → mutual swap; if not → one-way transfer
+Change 2 — Make the target entry lookup and second update conditional. Replace:
+tsconst [targetEntry] = await db.select().from(table).where(eq(table.id, target_schedule_id)).limit(1)
+if (!targetEntry || targetEntry.user_id !== req.user.id)
+  return res.status(403).json({ error: 'Target schedule entry not found or not yours' })
+
+await db.update(table).set({ user_id: swap.target_id }).where(eq(table.id, swap.requester_schedule_id))
+await db.update(table).set({ user_id: swap.requester_id }).where(eq(table.id, target_schedule_id))
+
+const targetDate = typeof targetEntry.scheduled_date === 'string'
+  ? targetEntry.scheduled_date
+  : String(targetEntry.scheduled_date)
+with:
+tslet targetDate: string | null = null
+if (target_schedule_id) {
+  const [targetEntry] = await db.select().from(table).where(eq(table.id, target_schedule_id)).limit(1)
+  if (!targetEntry || targetEntry.user_id !== req.user.id)
+    return res.status(403).json({ error: 'Target schedule entry not found or not yours' })
+  await db.update(table).set({ user_id: swap.requester_id }).where(eq(table.id, target_schedule_id))
+  targetDate = typeof targetEntry.scheduled_date === 'string'
+    ? targetEntry.scheduled_date
+    : String(targetEntry.scheduled_date)
+}
+
+await db.update(table).set({ user_id: swap.target_id }).where(eq(table.id, swap.requester_schedule_id))
+Change 3 — Update the final db.update(rotationSwapRequests).set(...) call to handle null safely. Replace:
+ts.set({ status: 'accepted', target_schedule_id, target_date: targetDate, updated_at: new Date() })
+with:
+ts.set({ status: 'accepted', target_schedule_id: target_schedule_id || null, target_date: targetDate, updated_at: new Date() })
+
+BUG 3 — setInterval in server/index.ts uses UTC date for todayKey instead of Cairo date
+Problem: The setInterval callback computes todayKey like this:
+tsconst todayKey = cairo.toISOString().slice(0, 10)
+toISOString() always returns UTC, so in Cairo timezone (+3) this date can be off by one day — causing the factory, overtime, and absent cron jobs to either skip a day or fire twice.
+Fix: In server/index.ts, inside the setInterval callback, replace:
+tsconst todayKey = cairo.toISOString().slice(0, 10)
+with:
+tsconst todayKey = now.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+Change only this one line. Do not touch anything else in the setInterval.You said: اكتلي رساله واحده اخدها كوب عشان ابعتها لي ريبليتاكتلي رساله واحده اخدها كوب عشان ابعتها لي ريبليت10:37 AMClaude responded: Please fix the following 3 bugs.Please fix the following 3 bugs. Apply all changes exactly as written.
+
+BUG 1 — runAbsentMarkingJob in server/index.ts marks absences without sending any notifications
+Replace the entire runAbsentMarkingJob function with this:
+tsasync function runAbsentMarkingJob() {
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+
+    const factoryAbsent = await db
+      .select({ id: factoryRotationSchedule.id, user_id: factoryRotationSchedule.user_id })
+      .from(factoryRotationSchedule)
+      .where(and(
+        eq(factoryRotationSchedule.scheduled_date, today),
+        isNull(factoryRotationSchedule.attended_at),
+        eq(factoryRotationSchedule.is_absent, false),
+      ))
+
+    for (const row of factoryAbsent) {
+      await db.update(factoryRotationSchedule).set({ is_absent: true }).where(eq(factoryRotationSchedule.id, row.id))
+      const msg = `❌ تم تسجيل غيابك في المصنع بتاريخ ${today}`
+      await db.insert(notifications).values({ user_id: row.user_id, message: msg })
+      broadcast(row.user_id, 'notification', { message: msg })
+    }
+
+    const overtimeAbsent = await db
+      .select({ id: overtimeRotationSchedule.id, user_id: overtimeRotationSchedule.user_id })
+      .from(overtimeRotationSchedule)
+      .where(and(
+        eq(overtimeRotationSchedule.scheduled_date, today),
+        isNull(overtimeRotationSchedule.attended_at),
+        eq(overtimeRotationSchedule.is_absent, false),
+      ))
+
+    for (const row of overtimeAbsent) {
+      await db.update(overtimeRotationSchedule).set({ is_absent: true }).where(eq(overtimeRotationSchedule.id, row.id))
+      const msg = `❌ تم تسجيل غيابك في الأوفرتايم بتاريخ ${today}`
+      await db.insert(notifications).values({ user_id: row.user_id, message: msg })
+      broadcast(row.user_id, 'notification', { message: msg })
+    }
+
+    if (factoryAbsent.length || overtimeAbsent.length) {
+      const allUserIds = [...new Set([...factoryAbsent, ...overtimeAbsent].map(r => r.user_id))]
+      const empRows = await db
+        .select({ id: profiles.id, full_name: profiles.full_name, email: profiles.email })
+        .from(profiles).where(inArray(profiles.id, allUserIds))
+      const nameMap = Object.fromEntries(empRows.map(e => [e.id, e.full_name || e.email]))
+
+      const factoryNames = factoryAbsent.map(r => nameMap[r.user_id]).filter(Boolean)
+      const overtimeNames = overtimeAbsent.map(r => nameMap[r.user_id]).filter(Boolean)
+
+      const adminRows = await db.select({ id: profiles.id }).from(profiles)
+        .where(inArray(profiles.role, ['admin', 'super_admin']))
+
+      let adminMsg = `📋 تقرير الغياب ليوم ${today}\n`
+      if (factoryNames.length) adminMsg += `🏭 مصنع: ${factoryNames.join('، ')}\n`
+      if (overtimeNames.length) adminMsg += `⏱️ أوفرتايم: ${overtimeNames.join('، ')}`
+
+      for (const admin of adminRows) {
+        await db.insert(notifications).values({ user_id: admin.id, message: adminMsg })
+        broadcast(admin.id, 'notification', { message: adminMsg })
+      }
+    }
+
+    console.log(`[AbsentJob] Factory: ${factoryAbsent.length}, Overtime: ${overtimeAbsent.length} marked absent for ${today}`)
+  } catch (err) {
+    console.error('[AbsentJob error]', err)
+  }
+}
+All imports needed (profiles, inArray, isNull, notifications, factoryRotationSchedule, overtimeRotationSchedule) are already at the top of server/index.ts — do not add duplicates.
+
+BUG 2 — POST /api/rotation-swaps/:id/accept in server/routes/rotation-swaps.ts returns 400 when target_schedule_id is not sent
+target_schedule_id must be optional. Make these 3 changes inside the POST /:id/accept handler:
+Change 1 — Remove the hard 400 check. Replace:
+tsconst { target_schedule_id } = req.body
+if (!target_schedule_id) return res.status(400).json({ error: 'target_schedule_id required' })
+with:
+tsconst { target_schedule_id } = req.body
+Change 2 — Make the target entry lookup and second update conditional. Replace:
+tsconst [targetEntry] = await db.select().from(table).where(eq(table.id, target_schedule_id)).limit(1)
+if (!targetEntry || targetEntry.user_id !== req.user.id)
+  return res.status(403).json({ error: 'Target schedule entry not found or not yours' })
+
+await db.update(table).set({ user_id: swap.target_id }).where(eq(table.id, swap.requester_schedule_id))
+await db.update(table).set({ user_id: swap.requester_id }).where(eq(table.id, target_schedule_id))
+
+const targetDate = typeof targetEntry.scheduled_date === 'string'
+  ? targetEntry.scheduled_date
+  : String(targetEntry.scheduled_date)
+with:
+tslet targetDate: string | null = null
+if (target_schedule_id) {
+  const [targetEntry] = await db.select().from(table).where(eq(table.id, target_schedule_id)).limit(1)
+  if (!targetEntry || targetEntry.user_id !== req.user.id)
+    return res.status(403).json({ error: 'Target schedule entry not found or not yours' })
+  await db.update(table).set({ user_id: swap.requester_id }).where(eq(table.id, target_schedule_id))
+  targetDate = typeof targetEntry.scheduled_date === 'string'
+    ? targetEntry.scheduled_date
+    : String(targetEntry.scheduled_date)
+}
+
+await db.update(table).set({ user_id: swap.target_id }).where(eq(table.id, swap.requester_schedule_id))
+Change 3 — Update the final .set(...) on rotationSwapRequests. Replace:
+ts.set({ status: 'accepted', target_schedule_id, target_date: targetDate, updated_at: new Date() })
+with:
+ts.set({ status: 'accepted', target_schedule_id: target_schedule_id || null, target_date: targetDate, updated_at: new Date() })
+
+BUG 3 — setInterval in server/index.ts uses UTC date for todayKey instead of Cairo date
+Inside the setInterval callback, replace:
+tsconst todayKey = cairo.toISOString().slice(0, 10)
+with:
+tsconst todayKey = now.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+Change only this one line, do not touch anything else in the setInterval.Sonnet 4.6 LowClaude is AI and can make mistakes. Please double-check responses.Contentticket-new.zipzipPlease implement the following 2 features for **both** the Factory Rotation (`factoryRotationSchedule`) and Overtime Rotation (`overtimeRotationSchedule`) modules. Read all steps carefully before writing any code, then execute them in order.
+
+---
+
+## FEATURE 1 — Attendance Tracking + Auto-Absentpasted

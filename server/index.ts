@@ -130,23 +130,73 @@ const lastRun: Record<string, string> = {}
 async function runAbsentMarkingJob() {
   try {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
-    const [factoryResult] = await Promise.allSettled([
-      db.update(factoryRotationSchedule)
+
+    // ── Factory absences ──────────────────────────────────────────────────────
+    const factoryAbsent = await db
+      .select({ id: factoryRotationSchedule.id, user_id: factoryRotationSchedule.user_id })
+      .from(factoryRotationSchedule)
+      .where(and(
+        eq(factoryRotationSchedule.scheduled_date, today),
+        isNull(factoryRotationSchedule.attended_at),
+        eq(factoryRotationSchedule.is_absent, false),
+      ))
+
+    for (const row of factoryAbsent) {
+      await db.update(factoryRotationSchedule)
         .set({ is_absent: true })
-        .where(and(
-          eq(factoryRotationSchedule.scheduled_date, today),
-          isNull(factoryRotationSchedule.attended_at),
-          eq(factoryRotationSchedule.is_absent, false),
-        )),
-      db.update(overtimeRotationSchedule)
+        .where(eq(factoryRotationSchedule.id, row.id))
+      const msg = `❌ تم تسجيل غيابك في المصنع بتاريخ ${today}`
+      await db.insert(notifications).values({ user_id: row.user_id, message: msg })
+      broadcast(row.user_id, 'notification', { message: msg })
+    }
+
+    // ── Overtime absences ─────────────────────────────────────────────────────
+    const overtimeAbsent = await db
+      .select({ id: overtimeRotationSchedule.id, user_id: overtimeRotationSchedule.user_id })
+      .from(overtimeRotationSchedule)
+      .where(and(
+        eq(overtimeRotationSchedule.scheduled_date, today),
+        isNull(overtimeRotationSchedule.attended_at),
+        eq(overtimeRotationSchedule.is_absent, false),
+      ))
+
+    for (const row of overtimeAbsent) {
+      await db.update(overtimeRotationSchedule)
         .set({ is_absent: true })
-        .where(and(
-          eq(overtimeRotationSchedule.scheduled_date, today),
-          isNull(overtimeRotationSchedule.attended_at),
-          eq(overtimeRotationSchedule.is_absent, false),
-        )),
-    ])
-    console.log(`[AbsentJob] Marked absences for ${today}`)
+        .where(eq(overtimeRotationSchedule.id, row.id))
+      const msg = `❌ تم تسجيل غيابك في الأوفرتايم بتاريخ ${today}`
+      await db.insert(notifications).values({ user_id: row.user_id, message: msg })
+      broadcast(row.user_id, 'notification', { message: msg })
+    }
+
+    // ── Admin summary ─────────────────────────────────────────────────────────
+    if (factoryAbsent.length || overtimeAbsent.length) {
+      const allUserIds = [...new Set([...factoryAbsent, ...overtimeAbsent].map(r => r.user_id))]
+      const empRows = await db
+        .select({ id: profiles.id, full_name: profiles.full_name, email: profiles.email })
+        .from(profiles)
+        .where(inArray(profiles.id, allUserIds))
+      const nameMap = Object.fromEntries(empRows.map(e => [e.id, e.full_name || e.email]))
+
+      const factoryNames = factoryAbsent.map(r => nameMap[r.user_id]).filter(Boolean)
+      const overtimeNames = overtimeAbsent.map(r => nameMap[r.user_id]).filter(Boolean)
+
+      const adminRows = await db
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(inArray(profiles.role, ['admin', 'super_admin']))
+
+      let adminMsg = `📋 تقرير الغياب ليوم ${today}\n`
+      if (factoryNames.length) adminMsg += `🏭 مصنع: ${factoryNames.join('، ')}\n`
+      if (overtimeNames.length) adminMsg += `⏱️ أوفرتايم: ${overtimeNames.join('، ')}`
+
+      for (const admin of adminRows) {
+        await db.insert(notifications).values({ user_id: admin.id, message: adminMsg })
+        broadcast(admin.id, 'notification', { message: adminMsg })
+      }
+    }
+
+    console.log(`[AbsentJob] Factory: ${factoryAbsent.length}, Overtime: ${overtimeAbsent.length} marked absent for ${today}`)
   } catch (err) {
     console.error('[AbsentJob error]', err)
   }
@@ -155,7 +205,7 @@ async function runAbsentMarkingJob() {
 setInterval(() => {
   const now = new Date()
   const cairo = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }))
-  const todayKey = cairo.toISOString().slice(0, 10)
+  const todayKey = now.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 
   if (cairo.getHours() === 8 && !lastRun[`factory-${todayKey}`]) {
     lastRun[`factory-${todayKey}`] = '1'
