@@ -17,7 +17,17 @@ function todayStr() {
 
 function normDate(d) {
   if (!d) return ''
-  return String(d).slice(0, 10)
+  // If it's already YYYY-MM-DD, return as-is
+  const s = String(d)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  // Handle ISO datetime strings like "2026-05-20T00:00:00.000Z"
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10)
+  // Handle Date objects or any other format — reformat to Cairo date
+  try {
+    return new Date(d).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+  } catch {
+    return s.slice(0, 10)
+  }
 }
 
 function tomorrowStr() {
@@ -1054,12 +1064,14 @@ function EmployeeView() {
           <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3">الأيام القادمة</h3>
           <div className="space-y-2">
             {futureDays.map(entry => {
-              const isTomorrow = normDate(entry.scheduled_date) === tomorrow
+              const dateStr = normDate(entry.scheduled_date)
+              const isTomorrow = dateStr === tomorrow
+              const isActuallyPastOrToday = dateStr <= today && !entry.attended_at
               return (
                 <div key={entry.id} className="rounded-xl p-3.5 flex items-center justify-between"
                   style={{
-                    background: isTomorrow ? 'rgba(8,145,178,0.1)' : 'rgba(255,255,255,0.03)',
-                    border: isTomorrow ? '1px solid rgba(8,145,178,0.35)' : '1px solid rgba(255,255,255,0.06)',
+                    background: isActuallyPastOrToday ? 'rgba(239,68,68,0.06)' : isTomorrow ? 'rgba(8,145,178,0.1)' : 'rgba(255,255,255,0.03)',
+                    border: isActuallyPastOrToday ? '1px solid rgba(239,68,68,0.15)' : isTomorrow ? '1px solid rgba(8,145,178,0.35)' : '1px solid rgba(255,255,255,0.06)',
                   }}>
                   <div className="flex items-center gap-3">
                     <span className="text-lg">🏭</span>
@@ -1067,24 +1079,41 @@ function EmployeeView() {
                       <p className="text-white text-sm font-medium">
                         {new Date(entry.scheduled_date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                       </p>
-                      {isTomorrow
-                        ? <span className="text-[11px] text-cyan-300 font-medium">◎ غداً</span>
-                        : <span className="text-slate-500 text-xs">قادم</span>}
+                      {isActuallyPastOrToday
+                        ? <span className="text-[11px] text-red-400/70">لم يُسجَّل الحضور</span>
+                        : isTomorrow
+                          ? <span className="text-[11px] text-cyan-300 font-medium">◎ غداً</span>
+                          : <span className="text-slate-500 text-xs">قادم</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {groupMembers.length > 1 && (
+                    {isActuallyPastOrToday ? (
                       <button
-                        onClick={() => { setSwapModal(entry); setSwapTarget(''); setSwapNote('') }}
-                        className="text-[11px] px-2.5 py-1 rounded-full border border-violet-500/35 text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 transition-all"
+                        onClick={() => handleAttend(entry)}
+                        disabled={markingId === entry.id}
+                        className="text-[11px] font-semibold px-3 py-1.5 rounded-xl text-white disabled:opacity-50 transition-all active:scale-95"
+                        style={{background:'linear-gradient(135deg,#0891b2,#06b6d4)', boxShadow:'0 2px 10px rgba(8,145,178,0.3)'}}
                       >
-                        🔄 تبديل
+                        {markingId === entry.id
+                          ? <span className="flex items-center gap-1.5"><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />...</span>
+                          : '✋ سجّل حضور'}
                       </button>
+                    ) : (
+                      <>
+                        {groupMembers.length > 1 && (
+                          <button
+                            onClick={() => { setSwapModal(entry); setSwapTarget(''); setSwapNote('') }}
+                            className="text-[11px] px-2.5 py-1 rounded-full border border-violet-500/35 text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 transition-all"
+                          >
+                            🔄 تبديل
+                          </button>
+                        )}
+                        <span className="text-[11px] font-medium px-3 py-1 rounded-full"
+                          style={{background:'rgba(100,116,139,0.15)', color:'#94a3b8', border:'1px solid rgba(100,116,139,0.2)'}}>
+                          لم يحن بعد
+                        </span>
+                      </>
                     )}
-                    <span className="text-[11px] font-medium px-3 py-1 rounded-full"
-                      style={{background:'rgba(100,116,139,0.15)', color:'#94a3b8', border:'1px solid rgba(100,116,139,0.2)'}}>
-                      لم يحن بعد
-                    </span>
                   </div>
                 </div>
               )
