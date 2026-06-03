@@ -230,6 +230,7 @@ router.post('/generate', requireAuth as any, async (req: any, res) => {
 // ── GET /my-next ──────────────────────────────────────────────────────────────
 router.get('/my-next', requireAuth as any, async (req: any, res) => {
   try {
+    const today = toDateStr(new Date())
     const pastFrom = toDateStr(addDays(new Date(), -60))
     const rows = await db
       .select()
@@ -241,7 +242,8 @@ router.get('/my-next', requireAuth as any, async (req: any, res) => {
         )
       )
       .orderBy(asc(factoryRotationSchedule.scheduled_date))
-    res.json(rows)
+    // Return rows with server-side today so the client doesn't need to compute it
+    res.json({ rows, today })
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to load schedule' })
   }

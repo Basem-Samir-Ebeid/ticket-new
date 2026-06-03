@@ -580,6 +580,7 @@ function GroupModal({ group, users, onSave, onClose, saving }) {
 function EmployeeView() {
   const { profile } = useAuth()
   const [allDays, setAllDays] = useState([])
+  const [serverToday, setServerToday] = useState('')
   const [loading, setLoading] = useState(true)
   const [markingId, setMarkingId] = useState(null)
   const [toast, setToast] = useState('')
@@ -592,7 +593,7 @@ function EmployeeView() {
   const [acceptingSwap, setAcceptingSwap] = useState(null)
   const [myDayForSwap, setMyDayForSwap] = useState('')
 
-  const today = todayStr()
+  const today = serverToday || todayStr()
   const tomorrow = tomorrowStr()
 
   function showToast(msg) {
@@ -602,8 +603,11 @@ function EmployeeView() {
 
   async function loadDays() {
     try {
-      const rows = await api.getMyNextOvertime()
+      const data = await api.getMyNextOvertime()
+      const rows = Array.isArray(data) ? data : (data.rows || [])
+      const srvToday = Array.isArray(data) ? '' : (data.today || '')
       setAllDays(rows)
+      if (srvToday) setServerToday(srvToday)
       const groupId = rows[0]?.group_id
       if (groupId) {
         try {
@@ -822,12 +826,14 @@ function EmployeeView() {
           <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3">الأيام القادمة</h3>
           <div className="space-y-2">
             {futureDays.map(entry => {
-              const isTomorrow = normDate(entry.scheduled_date) === tomorrow
+              const dateStr = normDate(entry.scheduled_date)
+              const isTomorrow = dateStr === tomorrow
+              const isActuallyPastOrToday = dateStr <= today && !entry.attended_at
               return (
                 <div key={entry.id} className="rounded-xl p-3.5 flex items-center justify-between"
                   style={{
-                    background: isTomorrow ? 'rgba(180,83,9,0.1)' : 'rgba(255,255,255,0.03)',
-                    border: isTomorrow ? '1px solid rgba(245,158,11,0.35)' : '1px solid rgba(255,255,255,0.06)',
+                    background: isActuallyPastOrToday ? 'rgba(239,68,68,0.06)' : isTomorrow ? 'rgba(180,83,9,0.1)' : 'rgba(255,255,255,0.03)',
+                    border: isActuallyPastOrToday ? '1px solid rgba(239,68,68,0.15)' : isTomorrow ? '1px solid rgba(245,158,11,0.35)' : '1px solid rgba(255,255,255,0.06)',
                   }}>
                   <div className="flex items-center gap-3">
                     <span className="text-lg">🌙</span>
@@ -835,24 +841,41 @@ function EmployeeView() {
                       <p className="text-white text-sm font-medium">
                         {new Date(entry.scheduled_date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                       </p>
-                      {isTomorrow
-                        ? <span className="text-[11px] text-amber-300 font-medium">◎ غداً</span>
-                        : <span className="text-slate-500 text-xs">قادم</span>}
+                      {isActuallyPastOrToday
+                        ? <span className="text-[11px] text-red-400/70">لم يُسجَّل الحضور</span>
+                        : isTomorrow
+                          ? <span className="text-[11px] text-amber-300 font-medium">◎ غداً</span>
+                          : <span className="text-slate-500 text-xs">قادم</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {groupMembers.length > 1 && (
+                    {isActuallyPastOrToday ? (
                       <button
-                        onClick={() => { setSwapModal(entry); setSwapTarget(''); setSwapNote('') }}
-                        className="text-[11px] px-2.5 py-1 rounded-full border border-amber-500/35 text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 transition-all"
+                        onClick={() => handleAttend(entry)}
+                        disabled={markingId === entry.id}
+                        className="text-[11px] font-semibold px-3 py-1.5 rounded-xl text-white disabled:opacity-50 transition-all active:scale-95"
+                        style={{background:'linear-gradient(135deg,#d97706,#f59e0b)', boxShadow:'0 2px 10px rgba(217,119,6,0.3)'}}
                       >
-                        🔄 تبديل
+                        {markingId === entry.id
+                          ? <span className="flex items-center gap-1.5"><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />...</span>
+                          : '✋ سجّل حضور'}
                       </button>
+                    ) : (
+                      <>
+                        {groupMembers.length > 1 && (
+                          <button
+                            onClick={() => { setSwapModal(entry); setSwapTarget(''); setSwapNote('') }}
+                            className="text-[11px] px-2.5 py-1 rounded-full border border-amber-500/35 text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 transition-all"
+                          >
+                            🔄 تبديل
+                          </button>
+                        )}
+                        <span className="text-[11px] font-medium px-3 py-1 rounded-full"
+                          style={{background:'rgba(100,116,139,0.15)', color:'#94a3b8', border:'1px solid rgba(100,116,139,0.2)'}}>
+                          لم يحن بعد
+                        </span>
+                      </>
                     )}
-                    <span className="text-[11px] font-medium px-3 py-1 rounded-full"
-                      style={{background:'rgba(100,116,139,0.15)', color:'#94a3b8', border:'1px solid rgba(100,116,139,0.2)'}}>
-                      لم يحن بعد
-                    </span>
                   </div>
                 </div>
               )

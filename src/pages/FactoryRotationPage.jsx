@@ -92,7 +92,8 @@ function AdminView() {
 
   async function loadMyDays() {
     try {
-      const rows = await api.getMyNextFactory()
+      const data = await api.getMyNextFactory()
+      const rows = Array.isArray(data) ? data : (data.rows || [])
       setMyDays(rows)
     } catch (e) { console.error(e) }
   }
@@ -820,6 +821,7 @@ function GroupModal({ group, users, onSave, onClose, saving }) {
 function EmployeeView() {
   const { profile } = useAuth()
   const [allDays, setAllDays] = useState([])
+  const [serverToday, setServerToday] = useState('')
   const [loading, setLoading] = useState(true)
   const [markingId, setMarkingId] = useState(null)
   const [toast, setToast] = useState('')
@@ -832,7 +834,7 @@ function EmployeeView() {
   const [acceptingSwap, setAcceptingSwap] = useState(null)
   const [myDayForSwap, setMyDayForSwap] = useState('')
 
-  const today = todayStr()
+  const today = serverToday || todayStr()
   const tomorrow = tomorrowStr()
 
   function showToast(msg) {
@@ -842,8 +844,12 @@ function EmployeeView() {
 
   async function loadDays() {
     try {
-      const rows = await api.getMyNextFactory()
+      const data = await api.getMyNextFactory()
+      // API returns { rows, today } or plain array (backwards compat)
+      const rows = Array.isArray(data) ? data : (data.rows || [])
+      const srvToday = Array.isArray(data) ? '' : (data.today || '')
       setAllDays(rows)
+      if (srvToday) setServerToday(srvToday)
       const groupId = rows[0]?.group_id
       if (groupId) {
         try {
