@@ -390,6 +390,37 @@ async function ensureSchema() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
 
+      CREATE TABLE IF NOT EXISTS missions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title TEXT NOT NULL,
+        description TEXT,
+        assigned_to UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        assigned_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        location TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        priority TEXT NOT NULL DEFAULT 'medium',
+        start_date DATE,
+        end_date DATE,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS rotation_swap_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        module TEXT NOT NULL,
+        requester_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        target_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        requester_schedule_id UUID NOT NULL,
+        requester_date DATE NOT NULL,
+        target_schedule_id UUID,
+        target_date DATE,
+        note TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
       INSERT INTO office_settings (id, latitude, longitude, radius_meters)
       VALUES ('main', 30.0803897, 31.3524335, 20)
       ON CONFLICT (id) DO NOTHING;
@@ -436,6 +467,9 @@ async function ensureSchema() {
       `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS leave_type TEXT NOT NULL DEFAULT 'annual'`,
       `ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS days_count INTEGER NOT NULL DEFAULT 1`,
       `ALTER TABLE factory_rotation_schedule ADD COLUMN IF NOT EXISTS attended_at TIMESTAMPTZ`,
+      `ALTER TABLE factory_rotation_schedule ADD COLUMN IF NOT EXISTS is_absent BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE overtime_rotation_schedule ADD COLUMN IF NOT EXISTS attended_at TIMESTAMPTZ`,
+      `ALTER TABLE overtime_rotation_schedule ADD COLUMN IF NOT EXISTS is_absent BOOLEAN NOT NULL DEFAULT false`,
     ]
     for (const sql of alters) {
       try { await db.query(sql) } catch (_) {}
@@ -2775,6 +2809,247 @@ app.get('/api/reports/staff-overview', requireAuth, async (req, res) => {
     console.error('GET /api/reports/staff-overview error:', err)
     res.status(500).json({ error: err?.message || 'Failed to load staff overview' })
   }
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MISSIONS
+// ══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/missions', requireAuth, async (req, res) => {
+  try {
+    const db = getPool()
+    const { rows } = await db.query(`
+      SELECT m.*, p.full_name AS assignee_name, p.email AS assignee_email,
+             a.full_name AS assigner_name
+      FROM missions m
+      LEFT JOIN profiles p ON m.assigned_to = p.id
+      LEFT JOIN profiles a ON m.assigned_by = a.id
+      ORDER BY m.created_at DESC
+    `)
+    const role = req.profile.role
+    if (role !== 'admin' && role !== 'super_admin') {
+      return res.json(rows.filter(r => r.assigned_to === req.user.id || r.assigned_by === req.user.id))
+    }
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+app.post('/api/missions', requireAuth, async (req, res) => {
+  try {
+    const db = getPool()
+    const { title, description, assigned_to, location, priority, start_date, end_date, notes } = req.body
+    if (!title?.trim()) return res.status(400).json({ error: 'العنوان مطلوب' })
+    const role = req.profile.role
+    const isAdmin = role === 'admin' || role === 'super_admin'
+    const effectiveAssignedTo = isAdmin ? (assigned_to || null) : req.user.id
+    const initialStatus = isAdmin ? 'pending' : 'pending_approval'
+    const { rows } = await db.query(
+      `INSERT INTO missions (title, description, assigned_to, assigned_by, location, priority, status, start_date, end_date, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [title.trim(), description||null, effectiveAssignedTo, req.user.id, location||null, priority||'medium', initialStatus, start_date||null, end_date||null, notes||null]
+    )
+    res.status(201).json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+app.post('/api/missions/:id/approve', requireAuth, async (req, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+    const db = getPool()
+    const { rows: ex } = await db.query('SELECT * FROM missions WHERE id=$1', [req.params.id])
+    if (!ex[0]) return res.status(404).json({ error: 'Not found' })
+    if (ex[0].status !== 'pending_approval') return res.status(400).json({ error: 'Not pending approval' })
+    const { rows } = await db.query(`UPDATE missions SET status='pending', updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+app.post('/api/missions/:id/admin-reject', requireAuth, async (req, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+    const db = getPool()
+    const { rows: ex } = await db.query('SELECT * FROM missions WHERE id=$1', [req.params.id])
+    if (!ex[0]) return res.status(404).json({ error: 'Not found' })
+    const { rows } = await db.query(`UPDATE missions SET status='rejected', updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+app.put('/api/missions/:id', requireAuth, async (req, res) => {
+  try {
+    const role = req.profile.role
+    if (role !== 'admin' && role !== 'super_admin') return res.status(403).json({ error: 'Admin only' })
+    const db = getPool()
+    const { title, description, assigned_to, location, priority, status, start_date, end_date, notes } = req.body
+    const { rows: ex } = await db.query('SELECT * FROM missions WHERE id=$1', [req.params.id])
+    if (!ex[0]) return res.status(404).json({ error: 'Not found' })
+    const { rows } = await db.query(`
+      UPDATE missions SET title=COALESCE($1,title), description=COALESCE($2,description),
+        assigned_to=COALESCE($3,assigned_to), location=COALESCE($4,location),
+        priority=COALESCE($5,priority), status=COALESCE($6,status),
+        start_date=COALESCE($7,start_date), end_date=COALESCE($8,end_date),
+        notes=COALESCE($9,notes), updated_at=NOW()
+      WHERE id=$10 RETURNING *`,
+      [title||null, description||null, assigned_to||null, location||null, priority||null, status||null, start_date||null, end_date||null, notes||null, req.params.id]
+    )
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+app.patch('/api/missions/:id/status', requireAuth, async (req, res) => {
+  try {
+    const { status } = req.body
+    const allowed = ['pending','in_progress','completed','cancelled']
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' })
+    const db = getPool()
+    const { rows: ex } = await db.query('SELECT * FROM missions WHERE id=$1', [req.params.id])
+    if (!ex[0]) return res.status(404).json({ error: 'Not found' })
+    const role = req.profile.role
+    const isAdmin = role === 'admin' || role === 'super_admin'
+    if (!isAdmin && ex[0].assigned_to !== req.user.id) return res.status(403).json({ error: 'غير مصرح' })
+    const { rows } = await db.query(`UPDATE missions SET status=$1, updated_at=NOW() WHERE id=$2 RETURNING *`, [status, req.params.id])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+app.delete('/api/missions/:id', requireAuth, async (req, res) => {
+  try {
+    const db = getPool()
+    const { rows: ex } = await db.query('SELECT * FROM missions WHERE id=$1', [req.params.id])
+    if (!ex[0]) return res.status(404).json({ error: 'Not found' })
+    const role = req.profile.role
+    const isAdmin = role === 'admin' || role === 'super_admin'
+    if (!isAdmin && (ex[0].assigned_by !== req.user.id || ex[0].status !== 'pending_approval'))
+      return res.status(403).json({ error: 'غير مصرح' })
+    await db.query('DELETE FROM missions WHERE id=$1', [req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ROTATION SWAP REQUESTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+app.post('/api/rotation-swaps', requireAuth, async (req, res) => {
+  try {
+    const db = getPool()
+    const { module, requester_schedule_id, requester_date, target_id, note } = req.body
+    if (!module || !requester_schedule_id || !requester_date || !target_id)
+      return res.status(400).json({ error: 'Missing required fields' })
+    if (!['factory','overtime'].includes(module)) return res.status(400).json({ error: 'Invalid module' })
+    if (target_id === req.user.id) return res.status(400).json({ error: 'Cannot swap with yourself' })
+    const tbl = module === 'factory' ? 'factory_rotation_schedule' : 'overtime_rotation_schedule'
+    const { rows: ent } = await db.query(`SELECT * FROM ${tbl} WHERE id=$1`, [requester_schedule_id])
+    if (!ent[0] || ent[0].user_id !== req.user.id) return res.status(403).json({ error: 'Not your schedule entry' })
+    const { rows } = await db.query(
+      `INSERT INTO rotation_swap_requests (module, requester_id, target_id, requester_schedule_id, requester_date, note)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [module, req.user.id, target_id, requester_schedule_id, requester_date, note||null]
+    )
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+app.get('/api/rotation-swaps/my', requireAuth, async (req, res) => {
+  try {
+    const db = getPool()
+    const { rows } = await db.query(
+      `SELECT s.*, rp.full_name AS requester_name, tp.full_name AS target_name
+       FROM rotation_swap_requests s
+       LEFT JOIN profiles rp ON s.requester_id = rp.id
+       LEFT JOIN profiles tp ON s.target_id = tp.id
+       WHERE s.requester_id=$1 OR s.target_id=$1
+       ORDER BY s.created_at DESC`,
+      [req.user.id]
+    )
+    res.json({
+      incoming: rows.filter(s => s.target_id === req.user.id && s.status === 'pending'),
+      outgoing: rows.filter(s => s.requester_id === req.user.id),
+      pending_admin: rows.filter(s => s.status === 'peer_accepted'),
+    })
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+app.get('/api/rotation-swaps/admin-pending', requireAuth, async (req, res) => {
+  try {
+    const role = req.profile.role
+    if (role !== 'admin' && role !== 'super_admin') return res.status(403).json({ error: 'Admin only' })
+    const db = getPool()
+    const { rows } = await db.query(
+      `SELECT s.*, rp.full_name AS requester_name, tp.full_name AS target_name
+       FROM rotation_swap_requests s
+       LEFT JOIN profiles rp ON s.requester_id = rp.id
+       LEFT JOIN profiles tp ON s.target_id = tp.id
+       WHERE s.status='peer_accepted'
+       ORDER BY s.created_at DESC`
+    )
+    res.json(rows)
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+app.post('/api/rotation-swaps/:id/accept', requireAuth, async (req, res) => {
+  try {
+    const db = getPool()
+    const { target_schedule_id } = req.body
+    const { rows: sw } = await db.query('SELECT * FROM rotation_swap_requests WHERE id=$1', [req.params.id])
+    if (!sw[0]) return res.status(404).json({ error: 'Not found' })
+    if (sw[0].target_id !== req.user.id) return res.status(403).json({ error: 'Not authorized' })
+    if (sw[0].status !== 'pending') return res.status(400).json({ error: 'Not pending' })
+    let targetDate = null
+    if (target_schedule_id) {
+      const tbl = sw[0].module === 'factory' ? 'factory_rotation_schedule' : 'overtime_rotation_schedule'
+      const { rows: te } = await db.query(`SELECT * FROM ${tbl} WHERE id=$1`, [target_schedule_id])
+      if (!te[0] || te[0].user_id !== req.user.id) return res.status(403).json({ error: 'Not your entry' })
+      targetDate = te[0].scheduled_date
+    }
+    const { rows } = await db.query(
+      `UPDATE rotation_swap_requests SET status='peer_accepted', target_schedule_id=$1, target_date=$2, updated_at=NOW() WHERE id=$3 RETURNING *`,
+      [target_schedule_id||null, targetDate, req.params.id]
+    )
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+app.post('/api/rotation-swaps/:id/reject', requireAuth, async (req, res) => {
+  try {
+    const db = getPool()
+    const { rows: sw } = await db.query('SELECT * FROM rotation_swap_requests WHERE id=$1', [req.params.id])
+    if (!sw[0]) return res.status(404).json({ error: 'Not found' })
+    if (sw[0].target_id !== req.user.id) return res.status(403).json({ error: 'Not authorized' })
+    if (sw[0].status !== 'pending') return res.status(400).json({ error: 'Not pending' })
+    const { rows } = await db.query(`UPDATE rotation_swap_requests SET status='rejected', updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+app.post('/api/rotation-swaps/:id/admin-approve', requireAuth, async (req, res) => {
+  try {
+    const role = req.profile.role
+    if (role !== 'admin' && role !== 'super_admin') return res.status(403).json({ error: 'Admin only' })
+    const db = getPool()
+    const { rows: sw } = await db.query('SELECT * FROM rotation_swap_requests WHERE id=$1', [req.params.id])
+    if (!sw[0]) return res.status(404).json({ error: 'Not found' })
+    if (sw[0].status !== 'peer_accepted') return res.status(400).json({ error: 'Not peer_accepted' })
+    const tbl = sw[0].module === 'factory' ? 'factory_rotation_schedule' : 'overtime_rotation_schedule'
+    await db.query(`UPDATE ${tbl} SET user_id=$1 WHERE id=$2`, [sw[0].target_id, sw[0].requester_schedule_id])
+    if (sw[0].target_schedule_id) {
+      await db.query(`UPDATE ${tbl} SET user_id=$1 WHERE id=$2`, [sw[0].requester_id, sw[0].target_schedule_id])
+    }
+    const { rows } = await db.query(`UPDATE rotation_swap_requests SET status='admin_approved', updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message }) }
+})
+
+app.post('/api/rotation-swaps/:id/admin-reject', requireAuth, async (req, res) => {
+  try {
+    const role = req.profile.role
+    if (role !== 'admin' && role !== 'super_admin') return res.status(403).json({ error: 'Admin only' })
+    const db = getPool()
+    const { rows: sw } = await db.query('SELECT * FROM rotation_swap_requests WHERE id=$1', [req.params.id])
+    if (!sw[0]) return res.status(404).json({ error: 'Not found' })
+    const { rows } = await db.query(`UPDATE rotation_swap_requests SET status='admin_rejected', updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id])
+    res.json(rows[0])
+  } catch (err) { res.status(500).json({ error: err?.message }) }
 })
 
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
