@@ -31,6 +31,7 @@ import factoryRotationRoutes from './routes/factory-rotation'
 import overtimeRotationRoutes from './routes/overtime-rotation'
 import rotationSwapsRoutes from './routes/rotation-swaps'
 import aiTicketsRoutes from './routes/ai-tickets'
+import missionsRoutes from './routes/missions'
 
 const app = express()
 
@@ -104,6 +105,7 @@ app.use('/api/search', searchRoutes)
 app.use('/api/factory-rotation', factoryRotationRoutes)
 app.use('/api/overtime-rotation', overtimeRotationRoutes)
 app.use('/api/rotation-swaps', rotationSwapsRoutes)
+app.use('/api/missions', missionsRoutes)
 
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(process.cwd(), 'dist')))

@@ -111,7 +111,37 @@ function AdminView() {
     }
   }
 
-  useEffect(() => { load(); loadMyDays() }, [])
+  const [adminPendingSwaps, setAdminPendingSwaps] = useState([])
+  const [adminSwapProcessing, setAdminSwapProcessing] = useState(null)
+
+  async function loadAdminPendingSwaps() {
+    try {
+      const data = await api.getAdminPendingSwaps()
+      setAdminPendingSwaps((data || []).filter(s => s.module === 'factory'))
+    } catch {}
+  }
+
+  async function handleAdminApproveSwap(id) {
+    setAdminSwapProcessing(id)
+    try {
+      await api.adminApproveSwap(id)
+      setSuccess('✅ تمت الموافقة وتطبيق التبديل')
+      loadAdminPendingSwaps()
+    } catch (e) { setErr(e.message) }
+    setAdminSwapProcessing(null)
+  }
+
+  async function handleAdminRejectSwap(id) {
+    setAdminSwapProcessing(id)
+    try {
+      await api.adminRejectSwap(id)
+      setSuccess('تم رفض طلب التبديل')
+      loadAdminPendingSwaps()
+    } catch (e) { setErr(e.message) }
+    setAdminSwapProcessing(null)
+  }
+
+  useEffect(() => { load(); loadMyDays(); loadAdminPendingSwaps() }, [])
 
   useEffect(() => {
     if (selectedGroup) loadSchedule(selectedGroup, monthOffset)
@@ -321,6 +351,46 @@ function AdminView() {
 
       {err && <div className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{err}</div>}
       {success && <div className="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">{success}</div>}
+
+      {/* ── Admin Pending Swap Approvals ── */}
+      {adminPendingSwaps.length > 0 && (
+        <div className="rounded-2xl p-4 space-y-3" style={{background:'rgba(245,158,11,0.05)', border:'1px solid rgba(245,158,11,0.25)'}}>
+          <h3 className="text-amber-400 text-sm font-semibold flex items-center gap-2">
+            <span>⏳</span> طلبات تبديل تنتظر موافقتك ({adminPendingSwaps.length})
+          </h3>
+          <div className="space-y-2">
+            {adminPendingSwaps.map(swap => (
+              <div key={swap.id} className="rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap"
+                style={{background:'rgba(255,255,255,0.03)', border:'1px solid rgba(245,158,11,0.15)'}}>
+                <div>
+                  <p className="text-white text-sm font-medium">
+                    <span className="text-amber-300">{swap.requester_name}</span> ↔ <span className="text-cyan-300">{swap.target_name}</span>
+                  </p>
+                  <p className="text-slate-400 text-xs mt-0.5">
+                    يوم {swap.requester_date}{swap.target_date ? ` ↔ ${swap.target_date}` : ''}
+                  </p>
+                  {swap.note && <p className="text-slate-500 text-xs italic mt-0.5">"{swap.note}"</p>}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleAdminApproveSwap(swap.id)}
+                    disabled={adminSwapProcessing === swap.id}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50 transition-all"
+                    style={{background:'linear-gradient(135deg,#059669,#10b981)'}}>
+                    {adminSwapProcessing === swap.id ? '...' : '✓ موافقة'}
+                  </button>
+                  <button
+                    onClick={() => handleAdminRejectSwap(swap.id)}
+                    disabled={adminSwapProcessing === swap.id}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-300 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50 transition-all">
+                    ✕ رفض
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Groups list */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -826,7 +896,9 @@ function EmployeeView() {
   const [markingId, setMarkingId] = useState(null)
   const [toast, setToast] = useState('')
   const [groupMembers, setGroupMembers] = useState([])
-  const [swaps, setSwaps] = useState({ incoming: [], outgoing: [] })
+  const [swaps, setSwaps] = useState({ incoming: [], outgoing: [], pending_admin: [] })
+  const [adminSwaps, setAdminSwaps] = useState([])
+  const [adminSwapLoading, setAdminSwapLoading] = useState(false)
   const [swapModal, setSwapModal] = useState(null)
   const [swapTarget, setSwapTarget] = useState('')
   const [swapNote, setSwapNote] = useState('')
@@ -870,6 +942,7 @@ function EmployeeView() {
       setSwaps({
         incoming: (data.incoming || []).filter(s => s.module === 'factory'),
         outgoing: (data.outgoing || []).filter(s => s.module === 'factory'),
+        pending_admin: (data.pending_admin || []).filter(s => s.module === 'factory'),
       })
     } catch {}
   }
@@ -911,10 +984,9 @@ function EmployeeView() {
   }
 
   async function handleAcceptSwap(swap) {
-    if (!myDayForSwap) return
     try {
-      await api.acceptRotationSwap(swap.id, myDayForSwap)
-      showToast('✅ تم قبول طلب التبديل — تم تبديل الأيام بنجاح!')
+      await api.acceptRotationSwap(swap.id, myDayForSwap || null)
+      showToast('✅ تم قبول الطلب — في انتظار موافقة الإدارة')
       setAcceptingSwap(null); setMyDayForSwap('')
       loadSwaps(); loadDays()
     } catch (e) {
@@ -1200,6 +1272,42 @@ function EmployeeView() {
         <div className="rounded-2xl p-10 text-center" style={{background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)'}}>
           <div className="text-4xl mb-3">🏭</div>
           <p className="text-slate-400 text-sm">لا توجد أيام مصنع مجدولة لك حالياً</p>
+        </div>
+      )}
+
+      {/* Outgoing swap requests (my requests to others) */}
+      {swaps.outgoing.length > 0 && (
+        <div>
+          <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2">
+            <span className="text-cyan-400">📤</span> طلبات التبديل التي أرسلتها
+          </h3>
+          <div className="space-y-2">
+            {swaps.outgoing.map(swap => {
+              const statusCfg = {
+                pending:        { label: 'في انتظار موافقة الزميل', color: '#f59e0b', bg: 'rgba(245,158,11,0.06)',  border: 'rgba(245,158,11,0.2)'  },
+                peer_accepted:  { label: 'وافق الزميل — تنتظر الإدارة', color: '#06b6d4', bg: 'rgba(6,182,212,0.06)',  border: 'rgba(6,182,212,0.2)'   },
+                admin_approved: { label: 'موافَق عليه ✓',               color: '#10b981', bg: 'rgba(16,185,129,0.06)', border: 'rgba(16,185,129,0.2)'  },
+                admin_rejected: { label: 'مرفوض من الإدارة',            color: '#ef4444', bg: 'rgba(239,68,68,0.06)',  border: 'rgba(239,68,68,0.15)'  },
+                rejected:       { label: 'مرفوض من الزميل',             color: '#ef4444', bg: 'rgba(239,68,68,0.06)',  border: 'rgba(239,68,68,0.15)'  },
+              }[swap.status] || { label: swap.status, color: '#94a3b8', bg: 'rgba(100,116,139,0.06)', border: 'rgba(100,116,139,0.2)' }
+              return (
+                <div key={swap.id} className="rounded-xl p-3.5"
+                  style={{background: statusCfg.bg, border: `1px solid ${statusCfg.border}`}}>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-white text-sm font-medium">{swap.target_name}</p>
+                      <p className="text-slate-400 text-xs mt-0.5">يومك: {swap.requester_date}</p>
+                      {swap.note && <p className="text-slate-500 text-xs italic mt-0.5">"{swap.note}"</p>}
+                    </div>
+                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
+                      style={{color: statusCfg.color, background: statusCfg.bg, border: `1px solid ${statusCfg.border}`}}>
+                      {statusCfg.label}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 

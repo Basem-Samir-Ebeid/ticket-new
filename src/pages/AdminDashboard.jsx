@@ -25,6 +25,7 @@ import FactoryRotationPage from './FactoryRotationPage'
 import OvertimeRotationPage from './OvertimeRotationPage'
 import AnalyticsPage from './AnalyticsPage'
 import StaffOverviewPage from './StaffOverviewPage'
+import MissionsPage from './MissionsPage'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -1336,6 +1337,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     { key: 'analytics',         label: 'Analytics',       icon: 'performance' },
     { key: 'factory-rotation',  label: 'تناوب المصنع',    icon: 'factory' },
     { key: 'overtime-rotation', label: 'تناوب الأوفر',    icon: 'overtime' },
+    { key: 'missions',          label: 'الماموريات',       icon: 'missions' },
     ...(isSuperAdmin ? [
       { key: 'audit-logs',     label: 'Audit Logs',     icon: 'settings' },
     ] : []),
@@ -4871,6 +4873,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Overtime Rotation Tab */}
         {tab === 'overtime-rotation' && (
           <OvertimeRotationPage />
+        )}
+
+        {/* Missions Tab */}
+        {tab === 'missions' && (
+          <MissionsPage />
         )}
 
         {/* Audit Logs Tab (super admin only) */}

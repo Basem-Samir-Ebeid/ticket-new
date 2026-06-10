@@ -439,6 +439,23 @@ export const overtimeRotationSchedule = pgTable('overtime_rotation_schedule', {
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+// ─── Missions (ماموريات) ──────────────────────────────────────────────────────
+export const missions = pgTable('missions', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  title: text('title').notNull(),
+  description: text('description'),
+  assigned_to: uuid('assigned_to').references(() => profiles.id, { onDelete: 'set null' }),
+  assigned_by: uuid('assigned_by').references(() => profiles.id, { onDelete: 'set null' }),
+  location: text('location'),
+  status: text('status').notNull().default('pending'),
+  priority: text('priority').notNull().default('medium'),
+  start_date: date('start_date'),
+  end_date: date('end_date'),
+  notes: text('notes'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 // ─── Rotation Swap Requests ───────────────────────────────────────────────────
 export const rotationSwapRequests = pgTable('rotation_swap_requests', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),

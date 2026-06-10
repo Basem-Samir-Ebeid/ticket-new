@@ -10,6 +10,7 @@ import AssetsPage from './AssetsPage'
 import KnowledgeSuggest from '../components/KnowledgeSuggest'
 import FactoryRotationPage from './FactoryRotationPage'
 import OvertimeRotationPage from './OvertimeRotationPage'
+import MissionsPage from './MissionsPage'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -455,6 +456,7 @@ export default function MemberDashboard() {
     ...(profile?.can_view_whatsapp_contacts ? [{ key: 'whatsappContacts', label: 'WhatsApp', icon: 'whatsapp' }] : []),
     { key: 'factory-rotation',  label: 'Factory Rotation', icon: 'factory' },
     { key: 'overtime-rotation', label: 'Overtime Rotation', icon: 'overtime' },
+    { key: 'missions',          label: 'الماموريات',        icon: 'missions' },
     { key: 'profile',           label: 'Profile',           icon: 'profile' },
   ]
 
@@ -1152,6 +1154,10 @@ export default function MemberDashboard() {
 
         {activeTab === 'overtime-rotation' && (
           <OvertimeRotationPage />
+        )}
+
+        {activeTab === 'missions' && (
+          <MissionsPage />
         )}
 
         {activeTab === 'profile' && (

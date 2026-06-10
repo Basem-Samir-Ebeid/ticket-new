@@ -11,6 +11,7 @@ import ComplaintsPage from './ComplaintsPage'
 import AssetsPage from './AssetsPage'
 import FactoryRotationPage from './FactoryRotationPage'
 import OvertimeRotationPage from './OvertimeRotationPage'
+import MissionsPage from './MissionsPage'
 import KnowledgeSuggest from '../components/KnowledgeSuggest'
 import { TagPills } from '../components/TagChipInput'
 
@@ -472,6 +473,7 @@ export default function EmployeeDashboard() {
     ...(profile?.can_view_assets ? [{ key: 'assets', label: 'Assets', icon: 'assets' }] : []),
     { key: 'factory-rotation',  label: 'Factory Rotation',  icon: 'factory' },
     { key: 'overtime-rotation', label: 'Overtime Rotation', icon: 'overtime' },
+    { key: 'missions',          label: 'الماموريات',         icon: 'missions' },
     { key: 'profile',     label: 'Profile',     icon: 'profile' },
   ]
 
@@ -1225,6 +1227,10 @@ export default function EmployeeDashboard() {
 
         {activeTab === 'overtime-rotation' && (
           <OvertimeRotationPage />
+        )}
+
+        {activeTab === 'missions' && (
+          <MissionsPage />
         )}
 
         {activeTab === 'attendance' && profile?.can_view_attendance && (

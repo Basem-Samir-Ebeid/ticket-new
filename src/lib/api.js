@@ -355,6 +355,16 @@ export const api = {
   getMyRotationSwaps: () => request('GET', '/rotation-swaps/my'),
   acceptRotationSwap: (id, target_schedule_id) => request('POST', `/rotation-swaps/${id}/accept`, { target_schedule_id }),
   rejectRotationSwap: (id) => request('POST', `/rotation-swaps/${id}/reject`, {}),
+  getAdminPendingSwaps: () => request('GET', '/rotation-swaps/admin-pending'),
+  adminApproveSwap: (id) => request('POST', `/rotation-swaps/${id}/admin-approve`, {}),
+  adminRejectSwap: (id) => request('POST', `/rotation-swaps/${id}/admin-reject`, {}),
+
+  // Missions (ماموريات)
+  getMissions: () => request('GET', '/missions'),
+  createMission: (data) => request('POST', '/missions', data),
+  updateMission: (id, data) => request('PUT', `/missions/${id}`, data),
+  updateMissionStatus: (id, status) => request('PATCH', `/missions/${id}/status`, { status }),
+  deleteMission: (id) => request('DELETE', `/missions/${id}`),
 }
 
 // ─── CSV Export helper ───────────────────────────────────────────────────────
