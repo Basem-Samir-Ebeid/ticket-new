@@ -364,6 +364,8 @@ export const api = {
   createMission: (data) => request('POST', '/missions', data),
   updateMission: (id, data) => request('PUT', `/missions/${id}`, data),
   updateMissionStatus: (id, status) => request('PATCH', `/missions/${id}/status`, { status }),
+  approveMission: (id) => request('POST', `/missions/${id}/approve`, {}),
+  adminRejectMission: (id) => request('POST', `/missions/${id}/admin-reject`, {}),
   deleteMission: (id) => request('DELETE', `/missions/${id}`),
 }
 
