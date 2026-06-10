@@ -131,12 +131,12 @@ async function runAbsentMarkingJob() {
   try {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 
-    // ── Factory absences ──────────────────────────────────────────────────────
+    // ── Factory absences (today AND any unprocessed past days) ───────────────
     const factoryAbsent = await db
       .select({ id: factoryRotationSchedule.id, user_id: factoryRotationSchedule.user_id })
       .from(factoryRotationSchedule)
       .where(and(
-        eq(factoryRotationSchedule.scheduled_date, today),
+        lte(factoryRotationSchedule.scheduled_date, today),
         isNull(factoryRotationSchedule.attended_at),
         eq(factoryRotationSchedule.is_absent, false),
       ))
@@ -150,12 +150,12 @@ async function runAbsentMarkingJob() {
       broadcast(row.user_id, 'notification', { message: msg })
     }
 
-    // ── Overtime absences ─────────────────────────────────────────────────────
+    // ── Overtime absences (today AND any unprocessed past days) ──────────────
     const overtimeAbsent = await db
       .select({ id: overtimeRotationSchedule.id, user_id: overtimeRotationSchedule.user_id })
       .from(overtimeRotationSchedule)
       .where(and(
-        eq(overtimeRotationSchedule.scheduled_date, today),
+        lte(overtimeRotationSchedule.scheduled_date, today),
         isNull(overtimeRotationSchedule.attended_at),
         eq(overtimeRotationSchedule.is_absent, false),
       ))
@@ -201,6 +201,11 @@ async function runAbsentMarkingJob() {
     console.error('[AbsentJob error]', err)
   }
 }
+
+// ─── Startup scan: catch any historical unprocessed absences ─────────────────
+setTimeout(() => {
+  runAbsentMarkingJob().catch(err => console.error('[StartupAbsentScan]', err))
+}, 15000)
 
 setInterval(() => {
   const now = new Date()
