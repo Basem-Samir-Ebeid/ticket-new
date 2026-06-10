@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "postinstall": "bash scripts/setup-git-hooks.sh || true",
-    "dev": "concurrently --kill-others-on-fail \"npm run dev:server\" \"npm run dev:client\"",
+    "dev": "npm run dev:server & npm run dev:client",
     "dev:client": "vite --host 0.0.0.0 --port 5000",
     "dev:server": "tsx watch server/index.ts",
     "build": "vite build",
@@ -19,7 +19,6 @@
     "@anthropic-ai/sdk": "^0.97.1",
     "@neondatabase/serverless": "^1.1.0",
     "bcryptjs": "^2.4.3",
-    "concurrently": "^9.2.1",
     "cors": "^2.8.6",
     "drizzle-orm": "^0.39.3",
     "drizzle-zod": "^0.8.3",
