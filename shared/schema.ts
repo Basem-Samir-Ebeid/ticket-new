@@ -456,6 +456,38 @@ export const missions = pgTable('missions', {
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+// ─── Departments ──────────────────────────────────────────────────────────────
+export const departments = pgTable('departments', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name: text('name').notNull().unique(),
+  description: text('description'),
+  manager_id: uuid('manager_id').references(() => profiles.id, { onDelete: 'set null' }),
+  color: text('color').default('#6366f1'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Announcements ────────────────────────────────────────────────────────────
+export const announcements = pgTable('announcements', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  type: text('type').notNull().default('info'),
+  target_roles: text('target_roles').array().default(sql`'{}'::text[]`),
+  is_active: boolean('is_active').notNull().default(true),
+  expires_at: timestamp('expires_at', { withTimezone: true }),
+  created_by: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const announcementReads = pgTable('announcement_reads', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  announcement_id: uuid('announcement_id').notNull().references(() => announcements.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  read_at: timestamp('read_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  uniqueRead: uniqueIndex('announcement_reads_unique').on(t.announcement_id, t.user_id),
+}))
+
 // ─── Rotation Swap Requests ───────────────────────────────────────────────────
 export const rotationSwapRequests = pgTable('rotation_swap_requests', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),

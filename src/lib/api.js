@@ -367,6 +367,18 @@ export const api = {
   approveMission: (id) => request('POST', `/missions/${id}/approve`, {}),
   adminRejectMission: (id) => request('POST', `/missions/${id}/admin-reject`, {}),
   deleteMission: (id) => request('DELETE', `/missions/${id}`),
+
+  // Announcements
+  getAnnouncements: () => request('GET', '/announcements'),
+  createAnnouncement: (data) => request('POST', '/announcements', data),
+  markAnnouncementRead: (id) => request('PATCH', `/announcements/${id}/read`),
+  deleteAnnouncement: (id) => request('DELETE', `/announcements/${id}`),
+
+  // Departments
+  getDepartments: () => request('GET', '/departments'),
+  createDepartment: (data) => request('POST', '/departments', data),
+  updateDepartment: (id, data) => request('PATCH', `/departments/${id}`, data),
+  deleteDepartment: (id) => request('DELETE', `/departments/${id}`),
 }
 
 // ─── CSV Export helper ───────────────────────────────────────────────────────

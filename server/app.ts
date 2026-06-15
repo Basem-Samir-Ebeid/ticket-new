@@ -32,6 +32,8 @@ import overtimeRotationRoutes from './routes/overtime-rotation'
 import rotationSwapsRoutes from './routes/rotation-swaps'
 import aiTicketsRoutes from './routes/ai-tickets'
 import missionsRoutes from './routes/missions'
+import announcementsRoutes from './routes/announcements'
+import departmentsRoutes from './routes/departments'
 
 const app = express()
 
@@ -106,6 +108,8 @@ app.use('/api/factory-rotation', factoryRotationRoutes)
 app.use('/api/overtime-rotation', overtimeRotationRoutes)
 app.use('/api/rotation-swaps', rotationSwapsRoutes)
 app.use('/api/missions', missionsRoutes)
+app.use('/api/announcements', announcementsRoutes)
+app.use('/api/departments', departmentsRoutes)
 
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(process.cwd(), 'dist')))

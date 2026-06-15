@@ -26,6 +26,11 @@ import OvertimeRotationPage from './OvertimeRotationPage'
 import AnalyticsPage from './AnalyticsPage'
 import StaffOverviewPage from './StaffOverviewPage'
 import MissionsPage from './MissionsPage'
+import AnnouncementsPage from './AnnouncementsPage'
+import DepartmentsPage from './DepartmentsPage'
+import DashboardOverview from '../components/DashboardOverview'
+import LeaveCalendar from '../components/LeaveCalendar'
+import { exportTicketsPDF, exportAttendancePDF, exportLeavesPDF, exportUsersPDF } from '../lib/pdfExport'
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -1338,6 +1343,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     { key: 'factory-rotation',  label: 'تناوب المصنع',    icon: 'factory' },
     { key: 'overtime-rotation', label: 'تناوب الأوفر',    icon: 'overtime' },
     { key: 'missions',          label: 'الماموريات',       icon: 'missions' },
+    { key: 'announcements',     label: 'الإعلانات',        icon: 'notifications' },
+    { key: 'departments',       label: 'الأقسام',          icon: 'users' },
     ...(isSuperAdmin ? [
       { key: 'audit-logs',     label: 'Audit Logs',     icon: 'settings' },
     ] : []),
@@ -4878,6 +4885,16 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Missions Tab */}
         {tab === 'missions' && (
           <MissionsPage />
+        )}
+
+        {/* Announcements Tab */}
+        {tab === 'announcements' && (
+          <AnnouncementsPage isAdmin={true} />
+        )}
+
+        {/* Departments Tab */}
+        {tab === 'departments' && (
+          <DepartmentsPage users={users} />
         )}
 
         {/* Audit Logs Tab (super admin only) */}

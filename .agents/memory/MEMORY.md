@@ -1,0 +1,1 @@
+- [Auth middleware naming](auth-middleware.md) — Express routes must import `requireAuth` (not `authenticate`) from `../auth`; `requireAdmin` is correct as-is.
