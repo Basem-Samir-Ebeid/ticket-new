@@ -11,11 +11,6 @@ export default defineConfig({
     port: 5000,
     strictPort: true,
     allowedHosts: true,
-    hmr: {
-      clientPort: 443,
-      protocol: 'wss',
-      host: process.env.REPLIT_DEV_DOMAIN,
-    },
     proxy: {
       '/api': {
         target: 'http://localhost:3000',
@@ -29,7 +24,7 @@ export default defineConfig({
           })
         },
       },
-      '/ws': {
+      '/socket.io': {
         target: 'ws://localhost:3000',
         ws: true,
         changeOrigin: true,
