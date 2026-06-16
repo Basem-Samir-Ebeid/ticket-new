@@ -37,6 +37,7 @@ import departmentsRoutes from './routes/departments'
 import evaluationsRoutes from './routes/evaluations'
 import rotationAttendanceRoutes from './routes/rotation-attendance'
 import evaluationReportsRoutes from './routes/evaluation-reports'
+import tripsRoutes from './routes/trips'
 
 const app = express()
 
@@ -116,6 +117,7 @@ app.use('/api/departments', departmentsRoutes)
 app.use('/api/evaluations', evaluationsRoutes)
 app.use('/api/rotation-attendance', rotationAttendanceRoutes)
 app.use('/api/evaluation-reports', evaluationReportsRoutes)
+app.use('/api/trips', tripsRoutes)
 
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(process.cwd(), 'dist')))

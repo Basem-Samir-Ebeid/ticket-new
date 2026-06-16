@@ -1,21 +1,32 @@
-export default function StatusBadge({ status }) {
+export default function StatusBadge({ status, label, className = '', size = 'md', showIcon = true }) {
   const map = {
-    opened:  { label: 'Opened',   bg: 'rgba(37,99,235,0.12)',  border: 'rgba(59,130,246,0.28)',  text: '#60a5fa',  dot: '#3b82f6' },
-    pending: { label: 'Pending',  bg: 'rgba(180,83,9,0.12)',   border: 'rgba(251,146,60,0.28)',  text: '#fbbf24',  dot: '#f59e0b' },
-    solved:  { label: 'Solved',   bg: 'rgba(16,185,129,0.12)', border: 'rgba(52,211,153,0.28)',  text: '#34d399',  dot: '#10b981' },
-    accepted:{ label: 'Accepted', bg: 'rgba(16,185,129,0.12)', border: 'rgba(52,211,153,0.28)',  text: '#34d399',  dot: '#10b981' },
-    refused: { label: 'Refused',  bg: 'rgba(153,27,27,0.12)',  border: 'rgba(239,68,68,0.28)',   text: '#f87171',  dot: '#ef4444' },
-    approved:{ label: 'Approved', bg: 'rgba(16,185,129,0.12)', border: 'rgba(52,211,153,0.28)',  text: '#34d399',  dot: '#10b981' },
-    rejected:{ label: 'Rejected', bg: 'rgba(153,27,27,0.12)',  border: 'rgba(239,68,68,0.28)',   text: '#f87171',  dot: '#ef4444' },
+    opened:  { label: 'Opened',   bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af', icon: '○' },
+    pending: { label: 'Pending',  bg: '#fef3c7', border: '#fcd34d', text: '#92400e', icon: '⏳' },
+    solved:  { label: 'Solved',   bg: '#d1fae5', border: '#a7f3d0', text: '#065f46', icon: '✓' },
+    accepted:{ label: 'Accepted', bg: '#d1fae5', border: '#a7f3d0', text: '#065f46', icon: '✓' },
+    refused: { label: 'Refused',  bg: '#fee2e2', border: '#fecaca', text: '#991b1b', icon: '✗' },
+    approved:{ label: 'Approved', bg: '#d1fae5', border: '#a7f3d0', text: '#065f46', icon: '✓' },
+    rejected:{ label: 'Rejected', bg: '#fee2e2', border: '#fecaca', text: '#991b1b', icon: '✗' },
+    present: { label: 'Present',  bg: '#d1fae5', border: '#a7f3d0', text: '#065f46', icon: '✓' },
+    absent:  { label: 'Absent',   bg: '#fee2e2', border: '#fecaca', text: '#991b1b', icon: '✗' },
+    'in-progress': { label: 'In Progress', bg: '#dbeafe', border: '#93c5fd', text: '#0c4a6e', icon: '→' },
+    completed: { label: 'Completed', bg: '#d1fae5', border: '#a7f3d0', text: '#065f46', icon: '✓' },
+    draft: { label: 'Draft', bg: '#f3f4f6', border: '#d1d5db', text: '#374151', icon: '📝' },
   }
-  const s = map[status] || { label: status, bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.12)', text: '#94a3b8', dot: '#64748b' }
+  const s = map[status] || { label: label || status, bg: '#f3f4f6', border: '#d1d5db', text: '#475569', icon: '?' }
+  
+  const sizes = {
+    sm: 'px-2 py-1 text-xs',
+    md: 'px-3 py-1.5 text-sm',
+    lg: 'px-4 py-2 text-base',
+  }
 
   return (
     <span
-      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full capitalize tracking-wide"
-      style={{ background: s.bg, border: `1px solid ${s.border}`, color: s.text }}
+      className={`inline-flex items-center gap-1.5 font-medium rounded-full border ${sizes[size]} ${className}`}
+      style={{ background: s.bg, borderColor: s.border, color: s.text }}
     >
-      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 animate-pulse-slow" style={{ background: s.dot }} />
+      {showIcon && <span className="text-xs">{s.icon}</span>}
       {s.label}
     </span>
   )
