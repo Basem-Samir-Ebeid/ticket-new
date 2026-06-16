@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db'
-import { employeeEvaluations, profiles, notifications } from '../../shared/schema'
-import { eq, desc, and, inArray } from 'drizzle-orm'
+import { employeeEvaluations, profiles, notifications, evaluationReports } from '../../shared/schema'
+import { eq, desc, and, inArray, avg, count } from 'drizzle-orm'
 import { requireAuth } from '../auth'
 import { broadcast } from '../ws'
 import { sendEmail } from '../email'
@@ -156,7 +156,7 @@ router.post('/:id/submit', requireAuth as any, async (req: any, res) => {
         message,
       }).returning()
       broadcast(admin.id, 'notification', notif)
-      sendEmail(admin.email, `تقييم موظف — ${emp?.full_name || ''}`, `<p>${message}</p><p>يرجى مراجعة تقييم الموظف في لوحة التحكم.</p>`).catch(() => {})
+      sendEmail(admin.email, `تقييم مو��ف — ${emp?.full_name || ''}`, `<p>${message}</p><p>يرجى مراجعة تقييم الموظف في لوحة التحكم.</p>`).catch(() => {})
     }
 
     res.json(ev)
@@ -209,22 +209,353 @@ router.post('/:id/notify-employee', requireAuth as any, async (req: any, res) =>
   }
 })
 
-router.delete('/:id', requireAuth as any, async (req: any, res) => {
+// ── GET /monthly-report — get monthly aggregated report ───────────────────────
+router.get('/monthly-report', requireAuth as any, async (req: any, res) => {
   try {
-    if (req.profile.role !== 'super_admin')
-      return res.status(403).json({ error: 'Super admin only' })
+    const { month, year } = req.query
+    if (!month || !year) return res.status(400).json({ error: 'month and year are required' })
 
-    const [existing] = await db.select().from(employeeEvaluations).where(eq(employeeEvaluations.id, req.params.id))
-    if (!existing) return res.status(404).json({ error: 'Not found' })
-    if (existing.status !== 'draft')
-      return res.status(400).json({ error: 'Only draft evaluations can be deleted' })
+    const [report] = await db
+      .select()
+      .from(evaluationReports)
+      .where(and(
+        eq(evaluationReports.month, parseInt(month)),
+        eq(evaluationReports.year, parseInt(year))
+      ))
+      .limit(1)
 
-    await db.delete(employeeEvaluations).where(eq(employeeEvaluations.id, req.params.id))
-    res.json({ success: true })
+    if (!report) {
+      return res.json({
+        exists: false,
+        message: 'No report generated for this month yet'
+      })
+    }
+
+    // Get all evaluations for this month
+    const evaluations = await db
+      .select()
+      .from(employeeEvaluations)
+      .where(and(
+        eq(employeeEvaluations.month, parseInt(month)),
+        eq(employeeEvaluations.year, parseInt(year)),
+        eq(employeeEvaluations.status, 'employee_notified')
+      ))
+
+    // Enrich with employee data
+    const empIds = [...new Set(evaluations.map(e => e.employee_id))]
+    const empProfiles = empIds.length > 0
+      ? await db
+          .select({
+            id: profiles.id,
+            full_name: profiles.full_name,
+            email: profiles.email,
+            department: profiles.department,
+          })
+          .from(profiles)
+          .where(inArray(profiles.id, empIds))
+      : []
+    const empMap = new Map(empProfiles.map(p => [p.id, p]))
+
+    const enriched = evaluations.map(e => ({
+      ...e,
+      employee: empMap.get(e.employee_id) || null
+    }))
+
+    // Sort by overall score
+    enriched.sort((a, b) => (b.overall_score || 0) - (a.overall_score || 0))
+
+    res.json({
+      ...report,
+      evaluations: enriched,
+      top_performers: enriched.slice(0, 5),
+      bottom_performers: enriched.slice(-5).reverse(),
+    })
   } catch (err: any) {
-    console.error('DELETE /evaluations/:id error:', err)
-    res.status(500).json({ error: err?.message || 'Failed to delete evaluation' })
+    console.error('GET /monthly-report error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get monthly report' })
   }
 })
+
+// ── POST /generate-monthly-report — generate and save monthly report ─────────────
+router.post('/generate-monthly-report', requireAuth as any, async (req: any, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Super admin only' })
+    }
+
+    const { month, year } = req.body
+    if (!month || !year) return res.status(400).json({ error: 'month and year are required' })
+
+    // Get all submitted evaluations for this month
+    const evaluations = await db
+      .select()
+      .from(employeeEvaluations)
+      .where(and(
+        eq(employeeEvaluations.month, month),
+        eq(employeeEvaluations.year, year),
+        eq(employeeEvaluations.status, 'employee_notified')
+      ))
+
+    if (evaluations.length === 0) {
+      return res.status(400).json({ error: 'No evaluations submitted for this month' })
+    }
+
+    // Calculate averages
+    const calcAvg = (field: keyof typeof evaluations[0]) => {
+      const vals = evaluations
+        .map(e => e[field])
+        .filter(v => v !== null && v !== undefined && !isNaN(Number(v)))
+      return vals.length > 0 ? vals.reduce((s: any, v: any) => s + Number(v), 0) / vals.length : null
+    }
+
+    const report = {
+      month,
+      year,
+      total_employees_evaluated: evaluations.length,
+      avg_technical_skills: calcAvg('technical_skills'),
+      avg_communication: calcAvg('communication'),
+      avg_punctuality: calcAvg('punctuality'),
+      avg_task_completion: calcAvg('task_completion'),
+      avg_initiative: calcAvg('initiative'),
+      avg_work_quality: calcAvg('work_quality'),
+      avg_overall_score: calcAvg('overall_score'),
+      generated_by: req.user.id,
+    }
+
+    // Try to update existing or insert new
+    const existing = await db
+      .select()
+      .from(evaluationReports)
+      .where(and(
+        eq(evaluationReports.month, month),
+        eq(evaluationReports.year, year)
+      ))
+      .limit(1)
+
+    let result
+    if (existing.length > 0) {
+      const updated = await db
+        .update(evaluationReports)
+        .set({
+          ...report,
+          generated_at: new Date(),
+        })
+        .where(eq(evaluationReports.id, existing[0].id))
+        .returning()
+      result = updated[0]
+    } else {
+      const inserted = await db
+        .insert(evaluationReports)
+        .values(report)
+        .returning()
+      result = inserted[0]
+    }
+
+    res.json({ success: true, report: result })
+  } catch (err: any) {
+    console.error('POST /generate-monthly-report error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to generate report' })
+  }
+})
+
+// ── GET /employee/:employee_id/history — get evaluation history for employee ─────
+router.get('/employee/:employee_id/history', requireAuth as any, async (req: any, res) => {
+  try {
+    const { employee_id } = req.params
+
+    // Check authorization: employee can only view their own, admin can view all
+    if (req.profile.role !== 'super_admin' && req.profile.role !== 'admin' && req.user.id !== employee_id) {
+      return res.status(403).json({ error: 'Not authorized' })
+    }
+
+    // Get last 12 months of evaluations
+    const evaluations = await db
+      .select()
+      .from(employeeEvaluations)
+      .where(and(
+        eq(employeeEvaluations.employee_id, employee_id),
+        eq(employeeEvaluations.status, 'employee_notified')
+      ))
+      .orderBy(desc(employeeEvaluations.created_at))
+      .limit(12)
+
+    // Get employee profile
+    const [emp] = await db
+      .select({
+        id: profiles.id,
+        full_name: profiles.full_name,
+        email: profiles.email,
+        department: profiles.department,
+        job_title: profiles.job_title,
+      })
+      .from(profiles)
+      .where(eq(profiles.id, employee_id))
+      .limit(1)
+
+    res.json({
+      employee: emp,
+      history: evaluations,
+      trend: evaluations.length > 0 ? {
+        latest_score: evaluations[0].overall_score,
+        oldest_score: evaluations[evaluations.length - 1].overall_score,
+        average_score: evaluations.reduce((s, e) => s + (e.overall_score || 0), 0) / evaluations.length,
+      } : null
+    })
+  } catch (err: any) {
+    console.error('GET /employee/:employee_id/history error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get history' })
+  }
+})
+
+// ── GET /monthly-report (التقرير الشهري الموحد) ──────────────────────────────────
+router.get('/monthly-report', requireAuth as any, async (req: any, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+
+    const { month, year } = req.query
+    if (!month || !year) return res.status(400).json({ error: 'month and year are required' })
+
+    // Get the report
+    const report = await db
+      .select()
+      .from(evaluationReports)
+      .where(
+        and(
+          eq(evaluationReports.month, Number(month)),
+          eq(evaluationReports.year, Number(year))
+        )
+      )
+      .limit(1)
+
+    // Get all evaluations for this month
+    const evaluations = await db
+      .select({
+        id: employeeEvaluations.id,
+        employee_id: employeeEvaluations.employee_id,
+        full_name: profiles.full_name,
+        email: profiles.email,
+        department: profiles.department,
+        job_title: profiles.job_title,
+        technical_skills: employeeEvaluations.technical_skills,
+        communication: employeeEvaluations.communication,
+        punctuality: employeeEvaluations.punctuality,
+        task_completion: employeeEvaluations.task_completion,
+        initiative: employeeEvaluations.initiative,
+        work_quality: employeeEvaluations.work_quality,
+        overall_score: employeeEvaluations.overall_score,
+      })
+      .from(employeeEvaluations)
+      .leftJoin(profiles, eq(employeeEvaluations.employee_id, profiles.id))
+      .where(
+        and(
+          eq(employeeEvaluations.month, Number(month)),
+          eq(employeeEvaluations.year, Number(year))
+        )
+      )
+
+    res.json({
+      report: report[0] || null,
+      evaluations,
+    })
+  } catch (err: any) {
+    console.error('GET /monthly-report error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to load report' })
+  }
+})
+
+// ── POST /generate-monthly-report (إنشاء التقرير الشهري) ──────────────────────────
+router.post('/generate-monthly-report', requireAuth as any, async (req: any, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+
+    const { month, year } = req.body
+    if (!month || !year) return res.status(400).json({ error: 'month and year are required' })
+
+    // Get all evaluations for this month
+    const evaluations = await db
+      .select()
+      .from(employeeEvaluations)
+      .where(
+        and(
+          eq(employeeEvaluations.month, Number(month)),
+          eq(employeeEvaluations.year, Number(year))
+        )
+      )
+
+    if (evaluations.length === 0) {
+      return res.status(400).json({ error: 'No evaluations found for this month' })
+    }
+
+    // Calculate averages
+    const fields = ['technical_skills', 'communication', 'punctuality', 'task_completion', 'initiative', 'work_quality']
+    const averages: any = {}
+
+    for (const field of fields) {
+      const values = evaluations
+        .map((e: any) => e[field])
+        .filter((v: any) => v !== null && !isNaN(v))
+      averages[field] = values.length > 0 ? Math.round((values.reduce((a: number, b: number) => a + b, 0) / values.length) * 100) / 100 : null
+    }
+
+    // Calculate overall average
+    const overallScores = evaluations
+      .map((e: any) => e.overall_score)
+      .filter((v: any) => v !== null && !isNaN(v))
+    const avgOverall = overallScores.length > 0 ? Math.round((overallScores.reduce((a: number, b: number) => a + b, 0) / overallScores.length) * 100) / 100 : null
+
+    // Delete existing report if any
+    await db
+      .delete(evaluationReports)
+      .where(
+        and(
+          eq(evaluationReports.month, Number(month)),
+          eq(evaluationReports.year, Number(year))
+        )
+      )
+
+    // Insert new report
+    const [report] = await db
+      .insert(evaluationReports)
+      .values({
+        month: Number(month),
+        year: Number(year),
+        total_employees_evaluated: evaluations.length,
+        avg_technical_skills: averages.technical_skills,
+        avg_communication: averages.communication,
+        avg_punctuality: averages.punctuality,
+        avg_task_completion: averages.task_completion,
+        avg_initiative: averages.initiative,
+        avg_work_quality: averages.work_quality,
+        avg_overall_score: avgOverall,
+        generated_by: req.user.id,
+      })
+      .returning()
+
+    const monthNames = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
+    const monthLabel = monthNames[(Number(month) || 1) - 1]
+    const message = `📊 تم إنشاء التقرير الشهري لـ ${monthLabel} ${year} — ${evaluations.length} موظف/ة`
+
+    // Notify admins
+    const admins = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(eq(profiles.role, 'super_admin'))
+
+    for (const admin of admins) {
+      await db.insert(notifications).values({
+        user_id: admin.id,
+        message,
+      })
+      broadcast(admin.id, 'notification', { message })
+    }
+
+    res.json(report)
+  } catch (err: any) {
+    console.error('POST /generate-monthly-report error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to generate report' })
+  }
+})
+
+export default router
 
 export default router

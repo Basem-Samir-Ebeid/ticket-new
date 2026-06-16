@@ -7,6 +7,8 @@ import {
   factoryRotationSchedule,
   profiles,
   notifications,
+  rotationSwapRequests,
+  rotationAttendanceLogs,
 } from '../../shared/schema'
 import { eq, and, gte, lte, asc, desc, inArray } from 'drizzle-orm'
 import { broadcast } from '../ws'
@@ -387,6 +389,173 @@ router.get('/groups/:id/members', requireAuth as any, async (req: any, res) => {
     res.json(members)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to load members' })
+  }
+})
+
+export default router
+
+// ── POST /schedule/:id/mark-attendance (الحضور/عدم الحضور) ─────────────────────
+router.post('/schedule/:id/mark-attendance', requireAuth as any, async (req: any, res) => {
+  try {
+    const { action, note, target_user_id } = req.body
+    const entry = await db
+      .select()
+      .from(factoryRotationSchedule)
+      .where(eq(factoryRotationSchedule.id, req.params.id))
+      .limit(1)
+
+    if (!entry.length) return res.status(404).json({ error: 'Entry not found' })
+    const row = entry[0]
+
+    // Only the assigned employee can mark attendance
+    if (row.user_id !== req.user.id) return res.status(403).json({ error: 'ليس يومك المحدد' })
+
+    // Only allowed on or after the scheduled day
+    const today = toDateStr(new Date())
+    const rowDateStr = typeof row.scheduled_date === 'string'
+      ? row.scheduled_date.slice(0, 10)
+      : new Date(row.scheduled_date as any).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+    if (rowDateStr > today) {
+      return res.status(400).json({ error: 'لا يمكن تسجيل الحضور قبل يوم الدورة' })
+    }
+
+    if (action === 'present') {
+      // Mark as present
+      const [updated] = await db
+        .update(factoryRotationSchedule)
+        .set({
+          user_status: 'present',
+          marked_by_user_at: new Date(),
+          attended_at: new Date(),
+        })
+        .where(eq(factoryRotationSchedule.id, req.params.id))
+        .returning()
+
+      // Log action
+      await db.insert(rotationAttendanceLogs).values({
+        schedule_id: req.params.id,
+        module: 'factory',
+        action: 'marked_present',
+        performed_by: req.user.id,
+        reason_note: note,
+      })
+
+      // Notification
+      await db.insert(notifications).values({
+        user_id: req.user.id,
+        message: `✅ تم تسجيل حضورك في المصنع بتاريخ ${today}`,
+      })
+      broadcast(req.user.id, 'notification', { message: `✅ تم تسجيل حضورك في المصنع بتاريخ ${today}` })
+
+      res.json(updated)
+    } else if (action === 'swap_requested') {
+      if (!target_user_id) return res.status(400).json({ error: 'target_user_id required for swap_requested' })
+
+      // Create swap request
+      const [swapRequest] = await db
+        .insert(rotationSwapRequests)
+        .values({
+          module: 'factory',
+          requester_id: req.user.id,
+          target_id: target_user_id,
+          requester_schedule_id: req.params.id,
+          requester_date: rowDateStr,
+          note: note,
+          status: 'pending',
+          user_approval_status: 'pending',
+        })
+        .returning()
+
+      // Update schedule status
+      await db
+        .update(factoryRotationSchedule)
+        .set({ user_status: 'swap_pending' })
+        .where(eq(factoryRotationSchedule.id, req.params.id))
+
+      // Log action
+      await db.insert(rotationAttendanceLogs).values({
+        schedule_id: req.params.id,
+        module: 'factory',
+        action: 'swap_requested',
+        performed_by: req.user.id,
+        reason_note: note,
+      })
+
+      // Notify target user
+      const [requester] = await db
+        .select({ full_name: profiles.full_name })
+        .from(profiles)
+        .where(eq(profiles.id, req.user.id))
+      const requesterName = requester?.full_name || 'موظف'
+
+      await db.insert(notifications).values({
+        user_id: target_user_id,
+        message: `📋 ${requesterName} يطلب تبديل دوره معك في ${rowDateStr}`,
+      })
+      broadcast(target_user_id, 'notification', {
+        message: `📋 ${requesterName} يطلب تبديل دوره معك في ${rowDateStr}`,
+      })
+
+      res.json(swapRequest)
+    } else {
+      return res.status(400).json({ error: 'Invalid action' })
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to mark attendance' })
+  }
+})
+
+// ── POST /schedule/:id/mark-absent-admin (تسجيل الغياب من السوبر أدمن) ─────────
+router.post('/schedule/:id/mark-absent-admin', requireAuth as any, async (req: any, res) => {
+  try {
+    if (req.profile.role !== 'super_admin') return res.status(403).json({ error: 'Super admin only' })
+    const { note } = req.body
+
+    const entry = await db
+      .select()
+      .from(factoryRotationSchedule)
+      .where(eq(factoryRotationSchedule.id, req.params.id))
+      .limit(1)
+
+    if (!entry.length) return res.status(404).json({ error: 'Entry not found' })
+
+    const [updated] = await db
+      .update(factoryRotationSchedule)
+      .set({
+        user_status: 'absent',
+        is_absent: true,
+        marked_by_admin_at: new Date(),
+      })
+      .where(eq(factoryRotationSchedule.id, req.params.id))
+      .returning()
+
+    // Log action
+    await db.insert(rotationAttendanceLogs).values({
+      schedule_id: req.params.id,
+      module: 'factory',
+      action: 'marked_absent_admin',
+      performed_by: req.user.id,
+      reason_note: note,
+    })
+
+    // Notify employee
+    const [emp] = await db
+      .select({ full_name: profiles.full_name })
+      .from(profiles)
+      .where(eq(profiles.id, entry[0].user_id))
+    const empName = emp?.full_name || 'موظف'
+
+    await db.insert(notifications).values({
+      user_id: entry[0].user_id,
+      message: `❌ تم تسجيل غيابك في المصنع بتاريخ ${entry[0].scheduled_date}`,
+    })
+    broadcast(entry[0].user_id, 'notification', {
+      message: `❌ تم تسجيل غيابك في المصنع بتاريخ ${entry[0].scheduled_date}`,
+    })
+
+    res.json(updated)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to mark absent' })
   }
 })
 

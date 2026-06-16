@@ -381,6 +381,21 @@ export const api = {
   submitEvaluation: (id) => request('POST', `/evaluations/${id}/submit`),
   notifyEmployeeEvaluation: (id) => request('POST', `/evaluations/${id}/notify-employee`),
   deleteEvaluation: (id) => request('DELETE', `/evaluations/${id}`),
+  getMonthlyReport: (month, year) => request('GET', `/evaluations/monthly-report?month=${month}&year=${year}`),
+  generateMonthlyReport: (month, year) => request('POST', '/evaluations/generate-monthly-report', { month, year }),
+  getEmployeeEvaluationHistory: (employee_id) => request('GET', `/evaluations/employee/${employee_id}/history`),
+  
+  // Advanced Attendance (new endpoints)
+  markAttendanceAdvanced: (schedule_id, module, action, note, target_user_id) => 
+    request('POST', `/${module}-rotation/schedule/${schedule_id}/mark-attendance`, { action, note, target_user_id }),
+  markAbsentAdmin: (schedule_id, module, note) => 
+    request('POST', `/${module}-rotation/schedule/${schedule_id}/mark-absent-admin`, { note }),
+  approveSwapUser: (swap_id, note) => request('POST', `/rotation-swaps/${swap_id}/approve-user`, { note }),
+  rejectSwapUser: (swap_id, note) => request('POST', `/rotation-swaps/${swap_id}/reject-user`, { note }),
+  approveSwapAdmin: (swap_id) => request('POST', `/rotation-swaps/${swap_id}/approve-admin`, {}),
+  getPendingSwaps: () => request('GET', '/rotation-swaps/pending'),
+  getMySwapRequests: () => request('GET', '/rotation-swaps/my-requests'),
+  getAllSwapsAdmin: () => request('GET', '/rotation-swaps/admin/all'),
 
   // Departments
   getDepartments: () => request('GET', '/departments'),
