@@ -34,10 +34,27 @@ export default function RotationAttendancePanel({
     setLoading(true)
     setError('')
     try {
-      const endpoint = `/api/${module}-rotation/schedule/${schedule.id}/mark-attendance`
-      await api.post(endpoint, {
-        action: 'present',
-        note: 'تم التسجيل يدويًا'
+      await api.post('/api/rotation-attendance/mark-present', {
+        scheduleId: schedule.id,
+        module
+      })
+      onStatusChange?.()
+    } catch (err) {
+      setError(err.message || 'حدث خطأ')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleMarkAbsentUser = async () => {
+    if (!isCurrentUser) return
+    setLoading(true)
+    setError('')
+    try {
+      await api.post('/api/rotation-attendance/mark-absent', {
+        scheduleId: schedule.id,
+        module,
+        reason: 'لن أستطيع الحضور'
       })
       onStatusChange?.()
     } catch (err) {
@@ -55,11 +72,11 @@ export default function RotationAttendancePanel({
     setLoading(true)
     setError('')
     try {
-      const endpoint = `/api/${module}-rotation/schedule/${schedule.id}/mark-attendance`
-      await api.post(endpoint, {
-        action: 'swap_requested',
-        target_user_id: selectedTarget,
-        note: swapNote || 'طلب تحويل دوام'
+      await api.post('/api/rotation-attendance/request-swap', {
+        module,
+        scheduleId: schedule.id,
+        targetUserId: selectedTarget,
+        note: swapNote || null
       })
       onStatusChange?.()
       setShowSwapModal(false)
@@ -72,14 +89,14 @@ export default function RotationAttendancePanel({
     }
   }
 
-  const handleMarkAbsent = async () => {
+  const handleMarkAbsentAdmin = async () => {
     if (!isAdmin) return
     setLoading(true)
     setError('')
     try {
-      const endpoint = `/api/${module}-rotation/schedule/${schedule.id}/mark-absent-admin`
-      await api.post(endpoint, {
-        note: 'تم التسجيل من قبل الإدارة'
+      await api.post(`/api/rotation-attendance/mark-absent-admin/${schedule.id}`, {
+        module,
+        reason: 'تم التسجيل من قبل الإدارة'
       })
       onStatusChange?.()
     } catch (err) {
@@ -106,7 +123,7 @@ export default function RotationAttendancePanel({
         )}
       </div>
 
-      {/* Actions */}
+      {/* Actions for current user */}
       {isCurrentUser && !isAfterDeadline && schedule.user_status === 'pending' && (
         <div className="flex gap-2">
           <button
@@ -115,6 +132,13 @@ export default function RotationAttendancePanel({
             className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
           >
             {loading ? 'جاري...' : 'تسجيل حضور'}
+          </button>
+          <button
+            onClick={handleMarkAbsentUser}
+            disabled={loading}
+            className="flex-1 px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
+          >
+            غير قادر على الحضور
           </button>
           <button
             onClick={() => setShowSwapModal(true)}
@@ -128,7 +152,7 @@ export default function RotationAttendancePanel({
 
       {isAdmin && schedule.user_status !== 'absent' && isAfterDeadline && (
         <button
-          onClick={handleMarkAbsent}
+          onClick={handleMarkAbsentAdmin}
           disabled={loading}
           className="w-full px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
         >
