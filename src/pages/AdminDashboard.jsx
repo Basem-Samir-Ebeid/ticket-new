@@ -1893,8 +1893,21 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Tickets Tab */}
         {tab === 'tickets' && (
           <div>
-            <div className="flex justify-end items-center mb-4 gap-2 flex-wrap">
-              <div className="flex gap-2">
+            {/* ── Header ── */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+              <div>
+                <h1 className="text-white text-lg font-bold tracking-tight flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-sm" style={{background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.25)'}}>🎫</span>
+                  All Tickets
+                </h1>
+                <p className="text-slate-500 text-xs mt-0.5">
+                  <span className="text-slate-300 font-medium">{tickets.length}</span> total ·
+                  <span className="text-emerald-400 font-medium ml-1">{tickets.filter(t=>t.status==='solved').length}</span> solved ·
+                  <span className="text-amber-400 font-medium ml-1">{tickets.filter(t=>t.status==='pending').length}</span> pending ·
+                  <span className="text-indigo-400 font-medium ml-1">{tickets.filter(t=>t.status==='opened').length}</span> open
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
                 <button onClick={() => exportCsv('tickets.csv', tickets, [
                     { label: 'Title', value: r => r.title },
                     { label: 'Status', value: r => r.status },
@@ -1905,28 +1918,40 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
                     { label: 'Affected Person', value: r => r.affected_person || '' },
                     { label: 'Due Date', value: r => r.due_date || '' },
                     { label: 'Created At', value: r => r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : '' },
-                  ])} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                  ])}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all"
+                  style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.09)',color:'#94a3b8'}}
+                  onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.08)';e.currentTarget.style.color='#cbd5e1'}}
+                  onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.04)';e.currentTarget.style.color='#94a3b8'}}>
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-                  Export CSV
+                  CSV
                 </button>
                 <button onClick={() => exportTicketsToExcel(tickets.map(t => ({...t, assigned_to_name: t.assigned_to_profile?.full_name || t.assigned_to_profile?.email, created_by_name: t.created_by_profile?.full_name || t.created_by_profile?.email})), 'tickets.xlsx')}
-                  className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5"
-                  style={{color:'#10b981'}}>
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all"
+                  style={{background:'rgba(16,185,129,0.07)',border:'1px solid rgba(16,185,129,0.18)',color:'#34d399'}}
+                  onMouseEnter={e=>{e.currentTarget.style.background='rgba(16,185,129,0.14)'}}
+                  onMouseLeave={e=>{e.currentTarget.style.background='rgba(16,185,129,0.07)'}}>
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" /></svg>
                   Excel
                 </button>
                 {isSuperAdmin && (
-                  <button
-                    onClick={() => setShowStaffOverview(true)}
-                    className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5"
-                  >
+                  <button onClick={() => setShowStaffOverview(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all"
+                    style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.09)',color:'#94a3b8'}}
+                    onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.08)';e.currentTarget.style.color='#cbd5e1'}}
+                    onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.04)';e.currentTarget.style.color='#94a3b8'}}>
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
-                    Staff Overview
+                    Staff
                   </button>
                 )}
-                <button onClick={() => setShowCreateTicket(v=>!v)} className="btn-primary text-sm px-4 py-2">+ New Ticket</button>
+                <button onClick={() => setShowCreateTicket(v=>!v)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all"
+                  style={{background: showCreateTicket ? 'rgba(99,102,241,0.3)' : (isSuperAdmin ? 'linear-gradient(135deg,#f59e0b,#d97706)' : 'linear-gradient(135deg,#6366f1,#4f46e5)'), color: isSuperAdmin && !showCreateTicket ? '#1c1004' : 'white', boxShadow: isSuperAdmin ? '0 4px 14px rgba(245,158,11,0.3)' : '0 4px 14px rgba(99,102,241,0.3)'}}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d={showCreateTicket ? 'M6 18L18 6M6 6l12 12' : 'M12 4.5v15m7.5-7.5h-15'} /></svg>
+                  {showCreateTicket ? 'Cancel' : 'New Ticket'}
+                </button>
               </div>
             </div>
 
@@ -2091,127 +2116,277 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               </form>
             )}
 
-            <div className="flex flex-col gap-2.5 mb-4">
+            {/* ── Search + Filters ── */}
+            <div className="rounded-2xl p-4 mb-4 space-y-3" style={{background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.07)'}}>
+              {/* Search bar */}
               <div className="relative">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{color:'#475569'}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                 </svg>
                 <input
                   value={ticketSearch}
                   onChange={e => setTicketSearch(e.target.value)}
-                  placeholder="Search tickets..."
-                  className="w-full bg-white/5 border border-white/8 rounded-xl pl-9 pr-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all"
+                  placeholder="Search by title, description, person, category…"
+                  className="w-full rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none transition-all"
+                  style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)'}}
+                  onFocus={e=>{e.target.style.borderColor='rgba(99,102,241,0.45)';e.target.style.background='rgba(99,102,241,0.06)'}}
+                  onBlur={e=>{e.target.style.borderColor='rgba(255,255,255,0.08)';e.target.style.background='rgba(255,255,255,0.04)'}}
                 />
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <span className="text-slate-600 text-xs self-center mr-1">Status:</span>
-                {['all','opened','pending','solved'].map(f => (
-                  <button key={f} onClick={() => setTicketStatusFilter(f)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize transition-all ${ticketStatusFilter === f ? (isSuperAdmin ? 'tab-active-amber' : 'tab-active-indigo') : 'tab-inactive border border-white/8'}`}>
-                    {f}
-                  </button>
-                ))}
-                <span className="text-slate-600 text-xs self-center ml-3 mr-1">Priority:</span>
-                {['all','low','medium','high','urgent'].map(f => (
-                  <button key={f} onClick={() => setTicketPriorityFilter(f)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize transition-all ${ticketPriorityFilter === f ? (isSuperAdmin ? 'tab-active-amber' : 'tab-active-indigo') : 'tab-inactive border border-white/8'}`}>
-                    {f}
-                  </button>
-                ))}
-                <span className="text-slate-600 text-xs self-center ml-3 mr-1">Sort:</span>
-                <button onClick={() => setTicketSortByPriority(v => !v)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${ticketSortByPriority ? (isSuperAdmin ? 'tab-active-amber' : 'tab-active-indigo') : 'tab-inactive border border-white/8'}`}>
-                  Priority ↑
-                </button>
-                {ticketTagFilter && (
-                  <button onClick={() => setTicketTagFilter('')}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all tab-active-indigo">
-                    🏷 {ticketTagFilter} ✕
-                  </button>
+                {ticketSearch && (
+                  <button onClick={()=>setTicketSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center transition-all hover:bg-white/10" style={{color:'#64748b'}}>✕</button>
                 )}
               </div>
-              {/* Tag quick-filter pills */}
-              {Array.from(new Set(tickets.flatMap(t => t.tags || []))).length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  <span className="text-slate-600 text-[11px] self-center">Tags:</span>
-                  {Array.from(new Set(tickets.flatMap(t => t.tags || []))).map(tag => (
-                    <button key={tag} onClick={() => setTicketTagFilter(ticketTagFilter === tag ? '' : tag)}
-                      className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium transition-all border ${ticketTagFilter === tag ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'}`}>
-                      {tag}
+
+              {/* Status filter */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-semibold uppercase tracking-widest" style={{color:'#475569',minWidth:'44px'}}>Status</span>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[
+                    {v:'all', label:'All', color:'#94a3b8', bg:'rgba(148,163,184,0.1)', activeBg:'rgba(148,163,184,0.18)', border:'rgba(148,163,184,0.2)'},
+                    {v:'opened', label:'Open', color:'#818cf8', bg:'rgba(99,102,241,0.08)', activeBg:'rgba(99,102,241,0.2)', border:'rgba(99,102,241,0.3)'},
+                    {v:'pending', label:'Pending', color:'#fbbf24', bg:'rgba(245,158,11,0.08)', activeBg:'rgba(245,158,11,0.2)', border:'rgba(245,158,11,0.3)'},
+                    {v:'solved', label:'Solved', color:'#34d399', bg:'rgba(16,185,129,0.08)', activeBg:'rgba(16,185,129,0.2)', border:'rgba(16,185,129,0.3)'},
+                  ].map(f => (
+                    <button key={f.v} onClick={() => setTicketStatusFilter(f.v)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                      style={{
+                        background: ticketStatusFilter === f.v ? f.activeBg : f.bg,
+                        border: `1px solid ${ticketStatusFilter === f.v ? f.border : 'rgba(255,255,255,0.07)'}`,
+                        color: ticketStatusFilter === f.v ? f.color : '#64748b',
+                      }}>
+                      {f.label}
+                      <span className="ml-1.5 text-[10px] opacity-70">
+                        {f.v === 'all' ? tickets.length : tickets.filter(t=>t.status===f.v).length}
+                      </span>
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Priority filter */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-semibold uppercase tracking-widest" style={{color:'#475569',minWidth:'44px'}}>Priority</span>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[
+                    {v:'all', label:'All', dot:'#64748b'},
+                    {v:'low', label:'Low', dot:'#22c55e'},
+                    {v:'medium', label:'Medium', dot:'#eab308'},
+                    {v:'high', label:'High', dot:'#f97316'},
+                    {v:'urgent', label:'Urgent', dot:'#ef4444'},
+                  ].map(f => (
+                    <button key={f.v} onClick={() => setTicketPriorityFilter(f.v)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                      style={{
+                        background: ticketPriorityFilter === f.v ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${ticketPriorityFilter === f.v ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.07)'}`,
+                        color: ticketPriorityFilter === f.v ? '#e2e8f0' : '#64748b',
+                      }}>
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background: f.dot, boxShadow: ticketPriorityFilter===f.v ? `0 0 6px ${f.dot}` : 'none'}} />
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setTicketSortByPriority(v => !v)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ml-auto"
+                  style={{
+                    background: ticketSortByPriority ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${ticketSortByPriority ? 'rgba(245,158,11,0.35)' : 'rgba(255,255,255,0.07)'}`,
+                    color: ticketSortByPriority ? '#fbbf24' : '#64748b',
+                  }}>
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" /></svg>
+                  Sort by Priority
+                </button>
+              </div>
+
+              {/* Tag pills */}
+              {Array.from(new Set(tickets.flatMap(t => t.tags || []))).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1 border-t" style={{borderColor:'rgba(255,255,255,0.06)'}}>
+                  <span className="text-[11px] font-semibold uppercase tracking-widest self-center" style={{color:'#475569'}}>Tags</span>
+                  {Array.from(new Set(tickets.flatMap(t => t.tags || []))).map(tag => (
+                    <button key={tag} onClick={() => setTicketTagFilter(ticketTagFilter === tag ? '' : tag)}
+                      className="text-[11px] px-2.5 py-1 rounded-full font-medium transition-all"
+                      style={{
+                        background: ticketTagFilter === tag ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${ticketTagFilter === tag ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                        color: ticketTagFilter === tag ? '#a5b4fc' : '#64748b',
+                      }}>
+                      # {tag}
+                    </button>
+                  ))}
+                  {ticketTagFilter && (
+                    <button onClick={() => setTicketTagFilter('')} className="text-[11px] px-2 py-1 rounded-full transition-all" style={{color:'#ef4444',border:'1px solid rgba(239,68,68,0.2)',background:'rgba(239,68,68,0.06)'}}>✕ clear</button>
+                  )}
+                </div>
               )}
             </div>
 
+            {/* Results count */}
             {(ticketSearch || ticketStatusFilter !== 'all' || ticketPriorityFilter !== 'all' || ticketTagFilter) && (
-              <p className="text-slate-600 text-xs mb-3">
-                Showing {filteredTickets.length} of {tickets.length} tickets
-                {ticketSearch && <> matching "<span className="text-slate-400">{ticketSearch}</span>"</>}
-                {ticketTagFilter && <> tagged "<span className="text-slate-400">{ticketTagFilter}</span>"</>}
+              <p className="text-slate-500 text-xs mb-3 px-1">
+                Showing <span className="text-slate-300 font-semibold">{filteredTickets.length}</span> of {tickets.length} tickets
+                {ticketSearch && <> · matching "<span className="text-slate-300">{ticketSearch}</span>"</>}
+                {ticketTagFilter && <> · tagged <span className="text-indigo-400">#{ticketTagFilter}</span></>}
               </p>
             )}
 
-            <div className="space-y-2">
+            {/* ── Ticket Cards ── */}
+            <div className="space-y-2.5">
               {filteredTickets.length === 0 && (
-                <div className="glass-card rounded-2xl py-12" style={{border:'1px solid rgba(255,255,255,0.06)'}}>
-                  <div className="empty-state">
-                    <div className="empty-state-icon">
-                      <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a3 3 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z" />
-                      </svg>
-                    </div>
-                    <p className="text-slate-500 text-sm">{tickets.length === 0 ? 'No tickets yet' : 'No tickets match your search'}</p>
-                  </div>
+                <div className="rounded-2xl py-16 text-center" style={{background:'rgba(255,255,255,0.02)',border:'1px dashed rgba(255,255,255,0.08)'}}>
+                  <div className="text-3xl mb-3">🔍</div>
+                  <p className="text-slate-400 font-medium text-sm">{tickets.length === 0 ? 'No tickets yet' : 'No tickets match your filters'}</p>
+                  <p className="text-slate-600 text-xs mt-1">{tickets.length > 0 && 'Try adjusting your search or filters'}</p>
                 </div>
               )}
-              {filteredTickets.slice((ticketPage-1)*TICKETS_PER_PAGE, ticketPage*TICKETS_PER_PAGE).map((t, i) => (
-                <div key={t.id}
-                  className="group rounded-2xl p-4 transition-all animate-fadeIn glass-card"
-                  style={{border:'1px solid rgba(255,255,255,0.06)', animationDelay:`${i*0.04}s`}}
-                  onMouseEnter={e=>{ e.currentTarget.style.background='rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.1)' }}
-                  onMouseLeave={e=>{ e.currentTarget.style.background=''; e.currentTarget.style.borderColor='rgba(255,255,255,0.06)' }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0 cursor-pointer" onClick={()=>setSelectedTicket(t)}>
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <StatusBadge status={t.status} />
-                        {(() => { const pb = getPriorityBadge(t.priority); return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${pb.cls}`}>{pb.label}</span> })()}
-                        <SLABadge ticket={t} />
-                        <span className="text-slate-600 text-[11px]">{new Date(t.created_at).toLocaleDateString()}</span>
-                        {t.rating && <span className="text-amber-400 text-[10px]">{'★'.repeat(t.rating)}{'☆'.repeat(5-t.rating)}</span>}
+
+              {filteredTickets.slice((ticketPage-1)*TICKETS_PER_PAGE, ticketPage*TICKETS_PER_PAGE).map((t, i) => {
+                const priorityAccent = {urgent:'#ef4444', high:'#f97316', medium:'#eab308', low:'#22c55e'}[t.priority] || '#6366f1'
+                const statusDot = {opened:'#6366f1', pending:'#f59e0b', solved:'#10b981'}[t.status] || '#64748b'
+                const statusLabel = {opened:'Open', pending:'Pending', solved:'Solved'}[t.status] || t.status
+                const assigneeList = t.assignees?.length > 0
+                  ? t.assignees.map(a => a.profile?.full_name || a.profile?.email).join(', ')
+                  : (t.assigned_to_profile?.full_name || t.assigned_to_profile?.email || null)
+                return (
+                  <div key={t.id}
+                    className="group relative rounded-2xl transition-all duration-200 animate-fadeIn overflow-hidden"
+                    style={{
+                      background: 'rgba(255,255,255,0.025)',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                      animationDelay: `${i*0.03}s`,
+                    }}
+                    onMouseEnter={e=>{ e.currentTarget.style.background='rgba(255,255,255,0.045)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.12)'; e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 8px 30px rgba(0,0,0,0.25)' }}
+                    onMouseLeave={e=>{ e.currentTarget.style.background='rgba(255,255,255,0.025)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.07)'; e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}
+                  >
+                    {/* Priority accent bar */}
+                    <div className="absolute left-0 top-0 bottom-0 w-0.5 rounded-l-2xl" style={{background: priorityAccent, boxShadow: `0 0 8px ${priorityAccent}55`}} />
+
+                    <div className="flex items-stretch gap-0 pl-3">
+                      {/* Main content */}
+                      <div className="flex-1 min-w-0 py-4 pr-3 cursor-pointer" onClick={()=>setSelectedTicket(t)}>
+                        {/* Top row: badges + date */}
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          {/* Status */}
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{background:`${statusDot}18`, color: statusDot, border:`1px solid ${statusDot}35`}}>
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:statusDot, boxShadow:`0 0 5px ${statusDot}`}} />
+                            {statusLabel}
+                          </span>
+                          {/* Priority */}
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full capitalize"
+                            style={{background:`${priorityAccent}15`, color: priorityAccent, border:`1px solid ${priorityAccent}30`}}>
+                            {t.priority === 'urgent' ? '🔴' : t.priority === 'high' ? '🟠' : t.priority === 'medium' ? '🟡' : '🟢'} {t.priority}
+                          </span>
+                          {/* SLA */}
+                          <SLABadge ticket={t} />
+                          {/* Category */}
+                          {t.category && (
+                            <span className="text-[11px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'#64748b',border:'1px solid rgba(255,255,255,0.07)'}}>
+                              {t.category}{t.subcategory ? ` › ${t.subcategory}` : ''}
+                            </span>
+                          )}
+                          {/* Date */}
+                          <span className="text-slate-600 text-[11px] ml-auto">
+                            {new Date(t.created_at).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'})}
+                          </span>
+                        </div>
+
+                        {/* Title */}
+                        <h3 className="text-slate-100 text-sm font-semibold leading-snug group-hover:text-white transition-colors mb-1.5">{t.title}</h3>
+
+                        {/* Description */}
+                        {t.description && (
+                          <p className="text-slate-500 text-xs leading-relaxed line-clamp-2 mb-2">{t.description}</p>
+                        )}
+
+                        {/* Footer row: affected person + assignee + tags + rating */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {t.affected_person && (
+                            <span className="flex items-center gap-1 text-[11px]" style={{color:'#64748b'}}>
+                              <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
+                              <span className="text-slate-400">{t.affected_person}</span>
+                            </span>
+                          )}
+                          {assigneeList && (
+                            <span className="flex items-center gap-1 text-[11px]" style={{color:'#64748b'}}>
+                              <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                              <span className="text-indigo-400/80">{assigneeList}</span>
+                            </span>
+                          )}
+                          {!assigneeList && (
+                            <span className="text-[11px] text-slate-600 italic">Unassigned</span>
+                          )}
+                          {t.rating && (
+                            <span className="flex items-center gap-0.5 text-[11px] text-amber-400">
+                              {'★'.repeat(t.rating)}{'☆'.repeat(5-t.rating)}
+                            </span>
+                          )}
+                          {t.tags?.length > 0 && (
+                            <div className="flex items-center gap-1">
+                              {t.tags.map(tag => (
+                                <button key={tag} onClick={e=>{e.stopPropagation();setTicketTagFilter(ticketTagFilter===tag?'':tag)}}
+                                  className="text-[10px] px-1.5 py-0.5 rounded font-medium transition-all"
+                                  style={{background:'rgba(99,102,241,0.1)',color:'#818cf8',border:'1px solid rgba(99,102,241,0.2)'}}>
+                                  #{tag}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <h3 className="text-slate-100 text-sm font-semibold group-hover:text-white transition-colors leading-snug">{t.title}</h3>
-                      {t.description && <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 leading-relaxed">{t.description}</p>}
-                      {t.affected_person && <p className="text-slate-600 text-xs mt-1.5 flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>{t.affected_person}</p>}
-                      {t.tags?.length > 0 && <div className="mt-1.5"><TagPills tags={t.tags} /></div>}
-                      {t.category && <span className="text-[10px] text-slate-500 mt-1 block">{t.category}{t.subcategory ? ` › ${t.subcategory}` : ''}</span>}
-                      <p className="text-slate-600 text-[11px] mt-1">→ <span className="text-slate-400">{t.assignees?.length > 0 ? t.assignees.map(a => a.profile?.full_name || a.profile?.email).join(', ') : (t.assigned_to_profile?.full_name || 'Unassigned')}</span></p>
-                    </div>
-                    <div className="flex flex-col gap-2 flex-shrink-0">
-                      <select value={t.status} onChange={e=>updateStatus(t.id, e.target.value)}
-                        className="rounded-xl px-2.5 py-1.5 text-slate-300 text-xs outline-none border border-white/10 transition-colors hover:border-white/20 cursor-pointer"
-                        style={{background:'rgba(255,255,255,0.06)'}}>
-                        <option value="opened">Opened</option>
-                        <option value="pending">Pending</option>
-                        <option value="solved">Solved</option>
-                      </select>
-                      <button onClick={()=>deleteTicket(t.id)} disabled={loading}
-                        className="text-xs text-red-400/70 hover:text-red-400 border border-red-500/10 hover:border-red-500/25 rounded-xl px-2.5 py-1.5 transition-all"
-                        style={{background:'rgba(239,68,68,0.04)'}}>
-                        Delete
-                      </button>
+
+                      {/* Action column */}
+                      <div className="flex flex-col gap-2 justify-center px-3 py-3 flex-shrink-0 border-l" style={{borderColor:'rgba(255,255,255,0.06)'}}>
+                        <select value={t.status} onChange={e=>updateStatus(t.id, e.target.value)}
+                          className="rounded-xl px-2.5 py-2 text-xs font-semibold outline-none cursor-pointer transition-all"
+                          style={{
+                            background: `${statusDot}15`,
+                            border: `1px solid ${statusDot}30`,
+                            color: statusDot,
+                            minWidth: '90px',
+                          }}>
+                          <option value="opened">Opened</option>
+                          <option value="pending">Pending</option>
+                          <option value="solved">Solved</option>
+                        </select>
+                        <button onClick={()=>deleteTicket(t.id)} disabled={loading}
+                          className="flex items-center justify-center gap-1 rounded-xl px-2.5 py-2 text-xs font-medium transition-all disabled:opacity-40"
+                          style={{background:'rgba(239,68,68,0.06)',border:'1px solid rgba(239,68,68,0.15)',color:'#f87171'}}
+                          onMouseEnter={e=>{e.currentTarget.style.background='rgba(239,68,68,0.14)';e.currentTarget.style.borderColor='rgba(239,68,68,0.3)'}}
+                          onMouseLeave={e=>{e.currentTarget.style.background='rgba(239,68,68,0.06)';e.currentTarget.style.borderColor='rgba(239,68,68,0.15)'}}>
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
+
+            {/* ── Pagination ── */}
             {filteredTickets.length > TICKETS_PER_PAGE && (
-              <div className="flex items-center justify-between mt-4 px-1">
-                <p className="text-slate-500 text-xs">Showing {Math.min((ticketPage-1)*TICKETS_PER_PAGE+1, filteredTickets.length)}–{Math.min(ticketPage*TICKETS_PER_PAGE, filteredTickets.length)} of {filteredTickets.length}</p>
-                <div className="flex gap-2">
-                  <button onClick={()=>setTicketPage(p=>Math.max(1,p-1))} disabled={ticketPage===1} className="btn-ghost text-xs px-3 py-1.5 disabled:opacity-40">← Prev</button>
-                  <button onClick={()=>setTicketPage(p=>Math.min(Math.ceil(filteredTickets.length/TICKETS_PER_PAGE),p+1))} disabled={ticketPage>=Math.ceil(filteredTickets.length/TICKETS_PER_PAGE)} className="btn-ghost text-xs px-3 py-1.5 disabled:opacity-40">Next →</button>
+              <div className="flex items-center justify-between mt-5 px-1">
+                <p className="text-slate-500 text-xs">
+                  Showing <span className="text-slate-300 font-medium">{Math.min((ticketPage-1)*TICKETS_PER_PAGE+1, filteredTickets.length)}–{Math.min(ticketPage*TICKETS_PER_PAGE, filteredTickets.length)}</span> of <span className="text-slate-300 font-medium">{filteredTickets.length}</span>
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={()=>setTicketPage(p=>Math.max(1,p-1))} disabled={ticketPage===1}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium transition-all disabled:opacity-30"
+                    style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',color:'#94a3b8'}}
+                    onMouseEnter={e=>{if(ticketPage>1){e.currentTarget.style.background='rgba(255,255,255,0.08)'}}}
+                    onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.04)'}}>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                    Prev
+                  </button>
+                  <span className="text-xs text-slate-500 px-2">Page {ticketPage} / {Math.ceil(filteredTickets.length/TICKETS_PER_PAGE)}</span>
+                  <button onClick={()=>setTicketPage(p=>Math.min(Math.ceil(filteredTickets.length/TICKETS_PER_PAGE),p+1))} disabled={ticketPage>=Math.ceil(filteredTickets.length/TICKETS_PER_PAGE)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium transition-all disabled:opacity-30"
+                    style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',color:'#94a3b8'}}
+                    onMouseEnter={e=>{if(ticketPage<Math.ceil(filteredTickets.length/TICKETS_PER_PAGE)){e.currentTarget.style.background='rgba(255,255,255,0.08)'}}}
+                    onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.04)'}}>
+                    Next
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                  </button>
                 </div>
               </div>
             )}
