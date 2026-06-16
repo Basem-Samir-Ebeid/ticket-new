@@ -13,6 +13,7 @@ import FactoryRotationPage from './FactoryRotationPage'
 import OvertimeRotationPage from './OvertimeRotationPage'
 import MissionsPage from './MissionsPage'
 import AnnouncementsPage from './AnnouncementsPage'
+import EvaluationsPage from './EvaluationsPage'
 import KnowledgeSuggest from '../components/KnowledgeSuggest'
 import { TagPills } from '../components/TagChipInput'
 
@@ -476,6 +477,7 @@ export default function EmployeeDashboard() {
     { key: 'overtime-rotation', label: 'Overtime Rotation', icon: 'overtime' },
     { key: 'missions',          label: 'الماموريات',         icon: 'missions' },
     { key: 'announcements',     label: 'الإعلانات',           icon: 'notifications' },
+    { key: 'evaluations',       label: 'تقييمي',              icon: 'performance' },
     { key: 'profile',     label: 'Profile',     icon: 'profile' },
   ]
 
@@ -1241,6 +1243,10 @@ export default function EmployeeDashboard() {
 
         {activeTab === 'announcements' && (
           <AnnouncementsPage isAdmin={false} />
+        )}
+
+        {activeTab === 'evaluations' && (
+          <EvaluationsPage employeeView={true} />
         )}
 
         {activeTab === 'attendance' && profile?.can_view_attendance && (

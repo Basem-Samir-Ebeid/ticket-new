@@ -28,6 +28,7 @@ import StaffOverviewPage from './StaffOverviewPage'
 import MissionsPage from './MissionsPage'
 import AnnouncementsPage from './AnnouncementsPage'
 import DepartmentsPage from './DepartmentsPage'
+import EvaluationsPage from './EvaluationsPage'
 import DashboardOverview from '../components/DashboardOverview'
 import LeaveCalendar from '../components/LeaveCalendar'
 import { exportTicketsPDF, exportAttendancePDF, exportLeavesPDF, exportUsersPDF } from '../lib/pdfExport'
@@ -1346,6 +1347,7 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
     { key: 'announcements',     label: 'الإعلانات',        icon: 'notifications' },
     { key: 'departments',       label: 'الأقسام',          icon: 'users' },
     ...(isSuperAdmin ? [
+      { key: 'evaluations',    label: 'تقييم الموظفين',  icon: 'performance' },
       { key: 'audit-logs',     label: 'Audit Logs',     icon: 'settings' },
     ] : []),
     { key: 'settings',          label: 'Settings',        icon: 'settings' },
@@ -4906,6 +4908,11 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
         {/* Departments Tab */}
         {tab === 'departments' && (
           <DepartmentsPage users={users} />
+        )}
+
+        {/* Evaluations Tab */}
+        {tab === 'evaluations' && (
+          <EvaluationsPage />
         )}
 
         {/* Audit Logs Tab (super admin only) */}

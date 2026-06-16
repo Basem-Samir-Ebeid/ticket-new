@@ -374,6 +374,14 @@ export const api = {
   markAnnouncementRead: (id) => request('PATCH', `/announcements/${id}/read`),
   deleteAnnouncement: (id) => request('DELETE', `/announcements/${id}`),
 
+  // Evaluations
+  getEvaluations: () => request('GET', '/evaluations'),
+  createEvaluation: (data) => request('POST', '/evaluations', data),
+  updateEvaluation: (id, data) => request('PUT', `/evaluations/${id}`, data),
+  submitEvaluation: (id) => request('POST', `/evaluations/${id}/submit`),
+  notifyEmployeeEvaluation: (id) => request('POST', `/evaluations/${id}/notify-employee`),
+  deleteEvaluation: (id) => request('DELETE', `/evaluations/${id}`),
+
   // Departments
   getDepartments: () => request('GET', '/departments'),
   createDepartment: (data) => request('POST', '/departments', data),

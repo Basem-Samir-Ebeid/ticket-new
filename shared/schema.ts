@@ -488,6 +488,30 @@ export const announcementReads = pgTable('announcement_reads', {
   uniqueRead: uniqueIndex('announcement_reads_unique').on(t.announcement_id, t.user_id),
 }))
 
+// ─── Employee Evaluations (تقييم الموظفين) ────────────────────────────────────
+export const employeeEvaluations = pgTable('employee_evaluations', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  employee_id: uuid('employee_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  evaluated_by: uuid('evaluated_by').references(() => profiles.id, { onDelete: 'set null' }),
+  month: integer('month').notNull(),
+  year: integer('year').notNull(),
+  technical_skills: integer('technical_skills'),
+  communication: integer('communication'),
+  punctuality: integer('punctuality'),
+  task_completion: integer('task_completion'),
+  initiative: integer('initiative'),
+  work_quality: integer('work_quality'),
+  overall_score: doublePrecision('overall_score'),
+  notes: text('notes'),
+  strengths: text('strengths'),
+  areas_for_improvement: text('areas_for_improvement'),
+  status: text('status').notNull().default('draft'),
+  submitted_at: timestamp('submitted_at', { withTimezone: true }),
+  employee_notified_at: timestamp('employee_notified_at', { withTimezone: true }),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 // ─── Rotation Swap Requests ───────────────────────────────────────────────────
 export const rotationSwapRequests = pgTable('rotation_swap_requests', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
