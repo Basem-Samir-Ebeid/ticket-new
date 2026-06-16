@@ -26,9 +26,9 @@ const ICONS = {
   missions:    'M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z',
 }
 
-function NavIcon({ name, size = 'w-[18px] h-[18px]' }) {
+function NavIcon({ name, size = 'w-[17px] h-[17px]' }) {
   return (
-    <svg className={`${size} flex-shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+    <svg className={`${size} flex-shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
       <path strokeLinecap="round" strokeLinejoin="round" d={ICONS[name] || ICONS.dashboard} />
     </svg>
   )
@@ -47,12 +47,16 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
   const swipeStartY = useRef(null)
 
   const isAmber = isSuperAdmin
-  const accentActive = isAmber
-    ? { background: 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(217,119,6,0.1))', border: '1px solid rgba(245,158,11,0.3)', color: '#fbbf24', boxShadow: '0 0 16px rgba(245,158,11,0.1)' }
-    : { background: 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.12))', border: '1px solid rgba(99,102,241,0.3)', color: '#a5b4fc', boxShadow: '0 0 16px rgba(99,102,241,0.1)' }
+  const accentColor = isAmber ? '#f59e0b' : '#6366f1'
+  const accentLight = isAmber ? '#fbbf24' : '#a5b4fc'
+  const accentBg = isAmber
+    ? 'linear-gradient(135deg, rgba(245,158,11,0.16), rgba(217,119,6,0.08))'
+    : 'linear-gradient(135deg, rgba(99,102,241,0.18), rgba(139,92,246,0.1))'
+  const accentBorder = isAmber ? 'rgba(245,158,11,0.28)' : 'rgba(99,102,241,0.28)'
+  const accentGlow = isAmber ? '0 0 16px rgba(245,158,11,0.1)' : '0 0 16px rgba(99,102,241,0.12)'
 
-  const badgeBg = isAmber ? 'rgba(245,158,11,0.25)' : 'rgba(99,102,241,0.3)'
-  const badgeColor = isAmber ? '#fbbf24' : '#a5b4fc'
+  const badgeBg    = isAmber ? 'rgba(245,158,11,0.2)'   : 'rgba(99,102,241,0.25)'
+  const badgeColor = isAmber ? '#fbbf24'                 : '#a5b4fc'
   const unreadCount = notifs.length
 
   useEffect(() => {
@@ -68,9 +72,7 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
   }, [open])
 
   useEffect(() => {
-    // null = waiting, 'h' = horizontal swipe, 'v' = vertical scroll (cancelled)
     const intent = { current: null }
-
     function hasHorizontalScroll(el) {
       while (el && el !== document.body) {
         const style = window.getComputedStyle(el)
@@ -80,14 +82,9 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
       }
       return false
     }
-
     const onTouchStart = (e) => {
       if (open) return
-      // If touched element is inside a horizontally scrollable container, ignore swipe
-      if (hasHorizontalScroll(e.target)) {
-        swipeStartX.current = null
-        return
-      }
+      if (hasHorizontalScroll(e.target)) { swipeStartX.current = null; return }
       swipeStartX.current = e.touches[0].clientX
       swipeStartY.current = e.touches[0].clientY
       intent.current = null
@@ -96,33 +93,27 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
       if (open || intent.current !== null || swipeStartX.current === null) return
       const dx = Math.abs(e.touches[0].clientX - swipeStartX.current)
       const dy = Math.abs(e.touches[0].clientY - swipeStartY.current)
-      // Decide intent on first meaningful movement (>8px)
       if (dx < 8 && dy < 8) return
       intent.current = dy > dx ? 'v' : 'h'
     }
     const onTouchEnd = (e) => {
       if (open || intent.current !== 'h' || swipeStartX.current === null) {
-        swipeStartX.current = null
-        swipeStartY.current = null
-        intent.current = null
-        return
+        swipeStartX.current = null; swipeStartY.current = null; intent.current = null; return
       }
       const dx = e.changedTouches[0].clientX - swipeStartX.current
-      swipeStartX.current = null
-      swipeStartY.current = null
-      intent.current = null
+      swipeStartX.current = null; swipeStartY.current = null; intent.current = null
       if (Math.abs(dx) < 60) return
       const idx = tabs.findIndex(t => t.key === activeTab)
       if (dx < 0 && idx < tabs.length - 1) onTabChange(tabs[idx + 1].key)
       else if (dx > 0 && idx > 0) onTabChange(tabs[idx - 1].key)
     }
     document.addEventListener('touchstart', onTouchStart, { passive: true })
-    document.addEventListener('touchmove', onTouchMove, { passive: true })
-    document.addEventListener('touchend', onTouchEnd, { passive: true })
+    document.addEventListener('touchmove',  onTouchMove,  { passive: true })
+    document.addEventListener('touchend',   onTouchEnd,   { passive: true })
     return () => {
       document.removeEventListener('touchstart', onTouchStart)
-      document.removeEventListener('touchmove', onTouchMove)
-      document.removeEventListener('touchend', onTouchEnd)
+      document.removeEventListener('touchmove',  onTouchMove)
+      document.removeEventListener('touchend',   onTouchEnd)
     }
   }, [open, tabs, activeTab, onTabChange])
 
@@ -131,17 +122,12 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
     const intervalId = setInterval(fetchNotifications, 30000)
     const onWsNotif = () => fetchNotifications()
     window.addEventListener('ws:notification', onWsNotif)
-    return () => {
-      clearInterval(intervalId)
-      window.removeEventListener('ws:notification', onWsNotif)
-    }
+    return () => { clearInterval(intervalId); window.removeEventListener('ws:notification', onWsNotif) }
   }, [])
 
   useEffect(() => {
     const handler = (e) => {
-      if (notifRef.current && !notifRef.current.contains(e.target)) {
-        setNotifOpen(false)
-      }
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false)
     }
     if (notifOpen) document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -150,90 +136,94 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
   async function fetchNotifications() {
     try { setNotifs(await api.getNotifications()) } catch {}
   }
-
   async function handleMarkAllRead() {
     setMarkingAll(true)
-    try {
-      await api.markAllRead()
-      setNotifs([])
-      setNotifOpen(false)
-    } catch {}
+    try { await api.markAllRead(); setNotifs([]); setNotifOpen(false) } catch {}
     setMarkingAll(false)
   }
-
   async function handleSignOut() {
     setSigningOut(true)
     await signOut()
     setSigningOut(false)
   }
-
-  function handleTabClick(key) {
-    onTabChange(key)
-    setOpen(false)
-  }
+  function handleTabClick(key) { onTabChange(key); setOpen(false) }
 
   const topBarStyle = {
-    background: 'rgba(6,6,14,0.97)',
-    backdropFilter: 'blur(24px)',
-    WebkitBackdropFilter: 'blur(24px)',
-    borderBottom: '1px solid rgba(255,255,255,0.065)',
+    background: 'rgba(4,4,12,0.97)',
+    backdropFilter: 'blur(28px)',
+    WebkitBackdropFilter: 'blur(28px)',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
   }
-
   const sidebarStyle = {
-    background: 'rgba(6,6,14,0.97)',
-    backdropFilter: 'blur(24px)',
-    WebkitBackdropFilter: 'blur(24px)',
-    borderRight: '1px solid rgba(255,255,255,0.065)',
+    background: 'rgba(4,4,12,0.97)',
+    backdropFilter: 'blur(28px)',
+    WebkitBackdropFilter: 'blur(28px)',
+    borderRight: '1px solid rgba(255,255,255,0.06)',
   }
 
+  /* ── Notification Panel ── */
   const BellButton = () => (
     <div className="relative" ref={notifRef}>
       <button
         onClick={() => setNotifOpen(v => !v)}
-        className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 border"
+        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150"
         style={{
-          background: notifOpen ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.04)',
-          border: notifOpen ? '1px solid rgba(99,102,241,0.25)' : '1px solid rgba(255,255,255,0.07)',
+          background: notifOpen ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${notifOpen ? 'rgba(99,102,241,0.22)' : 'rgba(255,255,255,0.07)'}`,
           color: unreadCount > 0 ? '#a5b4fc' : '#475569',
         }}
       >
         <div className="relative flex-shrink-0">
-          <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <svg className="w-[17px] h-[17px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
             <path strokeLinecap="round" strokeLinejoin="round" d={ICONS.notifications} />
           </svg>
           {unreadCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold bg-red-500 text-white">
+            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold"
+              style={{ background: '#ef4444', color: 'white' }}>
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
         </div>
-        <span className="text-[13px] font-medium flex-1 text-left">
+        <span className="text-[12.5px] font-medium flex-1 text-left">
           {unreadCount > 0 ? `${unreadCount} unread` : 'Notifications'}
         </span>
       </button>
 
       {notifOpen && (
-        <div
-          className="absolute bottom-full left-0 right-0 mb-2 rounded-xl overflow-hidden shadow-2xl animate-scaleIn"
-          style={{ background: 'rgba(10,10,20,0.98)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(24px)', zIndex: 100 }}
-        >
-          <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/8">
-            <span className="text-white text-xs font-semibold">Notifications</span>
+        <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl overflow-hidden shadow-2xl animate-scaleIn"
+          style={{ background: 'rgba(8,9,20,0.99)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(32px)', zIndex: 100 }}>
+          <div className="flex items-center justify-between px-3 py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+            <div className="flex items-center gap-2">
+              <span className="text-white text-[12px] font-semibold">Notifications</span>
+              {unreadCount > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                  style={{ background: 'rgba(99,102,241,0.2)', color: '#a5b4fc' }}>{unreadCount}</span>
+              )}
+            </div>
             {unreadCount > 0 && (
               <button onClick={handleMarkAllRead} disabled={markingAll}
-                className="text-[11px] text-indigo-400 hover:text-indigo-300 disabled:opacity-50 transition-colors font-medium">
+                className="text-[11px] font-medium transition-colors disabled:opacity-50"
+                style={{ color: isAmber ? '#fbbf24' : '#818cf8' }}>
                 {markingAll ? 'Marking...' : 'Mark all read'}
               </button>
             )}
           </div>
-
           <div className="overflow-y-auto max-h-64">
             {notifs.length === 0 ? (
-              <div className="px-4 py-6 text-center text-slate-500 text-xs">No unread notifications</div>
+              <div className="px-4 py-8 text-center">
+                <div className="w-8 h-8 rounded-lg mx-auto mb-2 flex items-center justify-center"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                  </svg>
+                </div>
+                <p className="text-slate-600 text-xs font-medium">All caught up</p>
+              </div>
             ) : (
               notifs.map(n => (
-                <div key={n.id} className="px-3 py-2.5 border-b border-white/5 hover:bg-white/4 transition-colors">
-                  <p className="text-slate-200 text-xs leading-relaxed">{n.message}</p>
+                <div key={n.id} className="px-3 py-2.5 transition-colors hover:bg-white/3"
+                  style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <p className="text-slate-300 text-[12.5px] leading-relaxed">{n.message}</p>
                   <p className="text-slate-600 text-[10px] mt-0.5">{new Date(n.created_at).toLocaleString()}</p>
                 </div>
               ))
@@ -244,23 +234,26 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
     </div>
   )
 
+  /* ── Sidebar content ── */
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Close button (mobile only) */}
+      {/* Mobile close */}
       <div className="flex items-center justify-between px-4 py-3 flex-shrink-0 lg:hidden">
-        <p className="text-[9px] uppercase tracking-[0.12em] text-slate-600 font-semibold">Navigation</p>
-        <button
-          onClick={() => setOpen(false)}
-          className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/8 transition-all"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <p className="text-[9px] uppercase tracking-[0.14em] font-bold" style={{ color: '#2d3a4f' }}>Navigation</p>
+        <button onClick={() => setOpen(false)}
+          className="w-7 h-7 flex items-center justify-center rounded-lg transition-all"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#64748b' }}>
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
 
-      {/* Section label (desktop only) */}
-      <p className="hidden lg:block px-5 pt-4 pb-2 text-[9px] uppercase tracking-[0.12em] text-slate-600 font-semibold flex-shrink-0">Navigation</p>
+      {/* Section label (desktop) */}
+      <div className="hidden lg:flex items-center gap-2 px-5 pt-5 pb-3 flex-shrink-0">
+        <p className="text-[9px] uppercase tracking-[0.14em] font-bold" style={{ color: '#2d3a4f' }}>Navigation</p>
+        <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.04)' }} />
+      </div>
 
       {/* Nav items */}
       <nav className="flex-1 overflow-y-auto px-3 space-y-0.5 pb-2" style={{ scrollbarWidth: 'none' }}>
@@ -270,27 +263,29 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
             <button
               key={key}
               onClick={() => handleTabClick(key)}
-              style={isActive ? accentActive : {}}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group ${
-                isActive
-                  ? ''
-                  : 'text-slate-400 hover:text-white border border-transparent hover:border-white/5'
-              }`}
-              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-              onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = '' }}
+              className="relative w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group"
+              style={isActive ? {
+                background: accentBg,
+                border: `1px solid ${accentBorder}`,
+                color: accentLight,
+                boxShadow: accentGlow,
+              } : { color: '#4a5a72', border: '1px solid transparent' }}
+              onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)' } }}
+              onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = ''; e.currentTarget.style.color = '#4a5a72'; e.currentTarget.style.borderColor = 'transparent' } }}
             >
-              <span className={`transition-transform duration-150 ${!isActive ? 'group-hover:scale-110' : ''}`}>
+              {/* Active indicator */}
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full"
+                  style={{ height: '55%', background: accentColor, boxShadow: `0 0 8px ${accentColor}` }} />
+              )}
+
+              <span className={`transition-all duration-150 ${isActive ? 'scale-105' : 'group-hover:scale-105'}`}>
                 <NavIcon name={icon} />
               </span>
-              <span className="flex-1 text-left text-[13px] leading-none">{label}</span>
+              <span className="flex-1 text-left text-[12.5px] font-medium leading-none">{label}</span>
               {badge > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold"
-                  style={{ background: badgeBg, color: badgeColor }}>
-                  {badge}
-                </span>
-              )}
-              {isActive && (
-                <span className="w-1 h-1 rounded-full opacity-80" style={{ background: isAmber ? '#fbbf24' : '#a5b4fc' }} />
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-md text-[10px] font-bold"
+                  style={{ background: badgeBg, color: badgeColor }}>{badge}</span>
               )}
             </button>
           )
@@ -298,53 +293,57 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
       </nav>
 
       {/* Divider */}
-      <div className="mx-4 mt-1 mb-3 h-px" style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.07),transparent)' }} />
+      <div className="mx-4 my-2 h-px" style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent)' }} />
 
       {/* Bottom actions */}
-      <div className="px-3 pb-5 space-y-1.5 flex-shrink-0">
+      <div className="px-3 pb-5 space-y-1 flex-shrink-0">
         <BellButton />
 
+        {/* Sound toggle */}
         <button
           onClick={toggleMute}
-          className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-150 border"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150"
           style={{
             background: muted ? 'rgba(255,255,255,0.03)' : 'rgba(59,130,246,0.07)',
-            border: muted ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(59,130,246,0.18)',
-            color: muted ? '#475569' : '#60a5fa',
+            border: muted ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(59,130,246,0.16)',
+            color: muted ? '#3d4f65' : '#60a5fa',
           }}
+          onMouseEnter={e => { e.currentTarget.style.opacity = '0.85' }}
+          onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
         >
           {muted ? (
-            <svg className="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+            <svg className="w-[17px] h-[17px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18" />
             </svg>
           ) : (
-            <svg className="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+            <svg className="w-[17px] h-[17px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
             </svg>
           )}
-          <span className="text-[13px] font-medium">{muted ? 'Notifications muted' : 'Notifications on'}</span>
+          <span className="text-[12.5px] font-medium">{muted ? 'Sound muted' : 'Sound on'}</span>
         </button>
 
+        {/* Sign out */}
         <button
           onClick={handleSignOut}
           disabled={signingOut}
-          className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 disabled:opacity-60"
-          style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.14)', color: '#f87171' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.13)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.26)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.07)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.14)' }}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 disabled:opacity-60"
+          style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.12)', color: '#ef4444' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.12)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.24)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.06)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.12)' }}
         >
           {signingOut ? (
-            <svg className="w-[18px] h-[18px] animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none">
+            <svg className="w-[17px] h-[17px] animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
           ) : (
-            <svg className="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+            <svg className="w-[17px] h-[17px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
             </svg>
           )}
-          <span className="text-[13px]">{signingOut ? 'Signing out...' : 'Sign Out'}</span>
+          <span className="text-[12.5px]">{signingOut ? 'Signing out...' : 'Sign Out'}</span>
         </button>
       </div>
     </div>
@@ -352,19 +351,16 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
 
   return (
     <>
-      {/* ── Top Bar (always visible, full width) ── */}
-      <header
-        className="fixed top-0 left-0 right-0 z-50 h-14 flex items-center px-4 gap-4"
-        style={topBarStyle}
-      >
+      {/* ── Top Bar ── */}
+      <header className="fixed top-0 left-0 right-0 z-50 h-14 flex items-center px-4 gap-4" style={topBarStyle}>
         {/* Mobile hamburger */}
         <button
           onClick={() => setOpen(true)}
           className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl transition-all flex-shrink-0"
-          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)' }}
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
         >
           <div className="relative">
-            <svg className="w-4.5 h-4.5 text-slate-300 w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: '#64748b' }}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
             </svg>
             {unreadCount > 0 && (
@@ -375,85 +371,76 @@ export default function Sidebar({ tabs, activeTab, onTabChange, isSuperAdmin = f
           </div>
         </button>
 
-        {/* Logo + App name */}
-        <div className="flex items-center gap-2.5 flex-shrink-0">
-          <div className="relative flex-shrink-0">
-            <div
-              className="absolute inset-0 rounded-xl blur-md opacity-50"
-              style={{ background: isAmber ? 'linear-gradient(135deg,#d97706,#92400e)' : 'linear-gradient(135deg,#4f46e5,#7c3aed)' }}
-            />
-            <LogoWithStars imgClassName="relative w-8 h-8 rounded-xl object-cover" />
+        {/* Logo */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="relative">
+            <div className="absolute inset-0 rounded-xl opacity-40"
+              style={{ background: isAmber ? 'linear-gradient(135deg,#d97706,#92400e)' : 'linear-gradient(135deg,#4f46e5,#7c3aed)', filter: 'blur(8px)', transform: 'scale(1.2)' }} />
+            <div className="relative rounded-xl p-[2px]"
+              style={{ background: isAmber ? 'linear-gradient(135deg, rgba(245,158,11,0.3), rgba(217,119,6,0.15))' : 'linear-gradient(135deg, rgba(99,102,241,0.3), rgba(139,92,246,0.15))' }}>
+              <LogoWithStars imgClassName="relative w-7 h-7 rounded-lg object-cover" />
+            </div>
           </div>
           <div>
-            <p className="text-white font-bold text-sm tracking-tight leading-none mb-0.5">Finest</p>
-            <p className="text-slate-500 text-[10px] leading-none tracking-wide">IT Management</p>
+            <p className="text-white font-bold text-[13.5px] tracking-tight leading-none">Finest</p>
+            <p className="text-[9.5px] leading-none tracking-wider mt-0.5 font-medium uppercase"
+              style={{ color: isAmber ? '#78350f' : '#312e81', letterSpacing: '0.08em' }}>
+              IT Management
+            </p>
           </div>
         </div>
 
-        {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Global Search */}
         <GlobalSearch />
 
-        {/* User avatar + info */}
+        {/* User info */}
         {profile && (
           <div className="flex items-center gap-2.5">
             <div className="hidden sm:block text-right">
-              <p className="text-white text-xs font-semibold leading-tight truncate max-w-[140px]">{profile?.full_name || profile?.email}</p>
-              <p className="text-[10px] leading-tight mt-0.5 capitalize"
+              <p className="text-white text-[12.5px] font-semibold leading-tight truncate max-w-[140px]">{profile?.full_name || profile?.email}</p>
+              <p className="text-[10px] leading-tight mt-0.5 capitalize font-medium"
                 style={{ color: isAmber ? '#d97706' : '#6366f1' }}>
-                {profile?.role?.replace('_', ' ')}
+                {profile?.role?.replace(/_/g, ' ')}
               </p>
             </div>
-            {profile?.profile_picture_url ? (
-              <img
-                src={profile.profile_picture_url}
-                alt={profile.full_name || 'User'}
-                className="w-8 h-8 rounded-full object-cover border-2 flex-shrink-0"
-                style={{ borderColor: isAmber ? 'rgba(245,158,11,0.4)' : 'rgba(99,102,241,0.4)' }}
-              />
-            ) : (
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold border-2"
-                style={{
-                  background: isAmber ? 'linear-gradient(135deg,#d97706,#92400e)' : 'linear-gradient(135deg,#4f46e5,#7c3aed)',
-                  borderColor: isAmber ? 'rgba(245,158,11,0.35)' : 'rgba(99,102,241,0.35)',
-                }}
-              >
-                {(profile?.full_name || profile?.email || '?')[0].toUpperCase()}
-              </div>
-            )}
-            <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" style={{ boxShadow: '0 0 6px rgba(52,211,153,0.6)' }} />
+            <div className="relative">
+              {profile?.profile_picture_url ? (
+                <img src={profile.profile_picture_url} alt={profile.full_name || 'User'}
+                  className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                  style={{ border: `2px solid ${isAmber ? 'rgba(245,158,11,0.35)' : 'rgba(99,102,241,0.35)'}` }} />
+              ) : (
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
+                  style={{
+                    background: isAmber ? 'linear-gradient(135deg,#d97706,#b45309)' : 'linear-gradient(135deg,#4f46e5,#7c3aed)',
+                    border: `2px solid ${isAmber ? 'rgba(245,158,11,0.3)' : 'rgba(99,102,241,0.3)'}`,
+                  }}>
+                  {(profile?.full_name || profile?.email || '?')[0].toUpperCase()}
+                </div>
+              )}
+              {/* Online dot */}
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2"
+                style={{ borderColor: 'rgba(4,4,12,0.97)' }} />
+            </div>
           </div>
         )}
       </header>
 
-      {/* ── Desktop sidebar (starts below top bar) ── */}
-      <aside
-        className="hidden lg:flex flex-col fixed left-0 z-40 w-64"
-        style={{ ...sidebarStyle, top: '56px', bottom: 0 }}
-      >
-        <SidebarContent />
-      </aside>
-
-      {/* ── Mobile: overlay ── */}
+      {/* ── Mobile overlay ── */}
       {open && (
-        <div
-          className="lg:hidden fixed inset-0 z-40"
-          style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
-          onClick={() => setOpen(false)}
-        />
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <div className="absolute top-0 left-0 bottom-0 w-[260px] animate-slideIn" style={sidebarStyle}>
+            <div className="h-14" />
+            <SidebarContent />
+          </div>
+        </div>
       )}
 
-      {/* ── Mobile: slide-in sidebar (starts below top bar) ── */}
-      <aside
-        className={`lg:hidden fixed left-0 z-50 w-72 flex flex-col transition-transform duration-300 ease-out ${open ? 'translate-x-0' : '-translate-x-full'}`}
-        style={{ ...sidebarStyle, top: '56px', bottom: 0 }}
-      >
+      {/* ── Desktop sidebar ── */}
+      <aside className="hidden lg:flex fixed left-0 top-14 bottom-0 w-64 flex-col z-30" style={sidebarStyle}>
         <SidebarContent />
       </aside>
-
     </>
   )
 }

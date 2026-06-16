@@ -465,7 +465,7 @@ export default function MemberDashboard() {
     const canChangeStatus = (isMyTicket(selectedTicket) || isAssignee) && selectedTicket.status !== 'solved'
     const statuses = ['opened', 'pending', 'solved']
     return (
-      <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 60% -10%, rgba(49,46,129,0.45) 0%, transparent 55%), #05050a'}}>
+      <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 65% -5%, rgba(49,46,129,0.38) 0%, transparent 52%), radial-gradient(ellipse at 5% 85%, rgba(30,15,80,0.18) 0%, transparent 42%), #04040c'}}>
         <Sidebar tabs={memberTabs} activeTab={activeTab} onTabChange={(t) => { setActiveTab(t); setSelectedTicket(null) }} />
         <div className="lg:ml-64">
         <div className="max-w-4xl mx-auto p-4 pt-16 lg:pt-16 lg:p-6 pb-6">
@@ -697,7 +697,7 @@ export default function MemberDashboard() {
   }
 
   return (
-    <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 60% -10%, rgba(49,46,129,0.45) 0%, transparent 55%), #05050a'}}>
+    <div className="min-h-screen" style={{background:'radial-gradient(ellipse at 65% -5%, rgba(49,46,129,0.38) 0%, transparent 52%), radial-gradient(ellipse at 5% 85%, rgba(30,15,80,0.18) 0%, transparent 42%), #04040c'}}>
       <Sidebar tabs={memberTabs} activeTab={activeTab} onTabChange={(t) => setActiveTab(t)} />
       <div className="lg:ml-64">
       <div className="max-w-4xl mx-auto p-4 pt-16 lg:pt-16 lg:p-6 pb-6">
@@ -740,16 +740,18 @@ export default function MemberDashboard() {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
               {[
-                { label: 'Total',   val: assignedTickets.length,                                 color: '#94a3b8', acc: 'rgba(99,102,241,0.06)',  bd: 'rgba(99,102,241,0.14)',  bar: 'rgba(99,102,241,0.5)' },
-                { label: 'Opened',  val: assignedTickets.filter(t=>t.status==='opened').length,  color: '#60a5fa', acc: 'rgba(59,130,246,0.07)',  bd: 'rgba(59,130,246,0.16)',  bar: '#3b82f6' },
-                { label: 'Pending', val: assignedTickets.filter(t=>t.status==='pending').length, color: '#fbbf24', acc: 'rgba(245,158,11,0.07)',  bd: 'rgba(245,158,11,0.16)',  bar: '#f59e0b' },
-                { label: 'Solved',  val: assignedTickets.filter(t=>t.status==='solved').length,  color: '#34d399', acc: 'rgba(16,185,129,0.07)',  bd: 'rgba(16,185,129,0.16)',  bar: '#10b981' },
+                { label: 'Total',   val: assignedTickets.length,                                 color: '#818cf8', acc: 'rgba(99,102,241,0.06)',  bd: 'rgba(99,102,241,0.13)' },
+                { label: 'Opened',  val: assignedTickets.filter(t=>t.status==='opened').length,  color: '#60a5fa', acc: 'rgba(59,130,246,0.06)',  bd: 'rgba(59,130,246,0.14)' },
+                { label: 'Pending', val: assignedTickets.filter(t=>t.status==='pending').length, color: '#fbbf24', acc: 'rgba(245,158,11,0.06)',  bd: 'rgba(245,158,11,0.14)' },
+                { label: 'Solved',  val: assignedTickets.filter(t=>t.status==='solved').length,  color: '#34d399', acc: 'rgba(16,185,129,0.06)',  bd: 'rgba(16,185,129,0.14)' },
               ].map((s, i) => (
-                <div key={s.label} className="relative rounded-2xl p-4 overflow-hidden glass-card animate-fadeIn"
-                  style={{border:`1px solid ${s.bd}`, background:s.acc, animationDelay:`${i*0.07}s`}}>
-                  <div className="absolute top-0 left-0 w-0.5 h-full" style={{background:s.bar}} />
-                  <p className="text-[11px] text-slate-500 mb-2 uppercase tracking-widest font-semibold pl-2">{s.label}</p>
-                  <p className="text-2xl font-black pl-2" style={{color:s.color}}>{s.val}</p>
+                <div key={s.label} className="relative rounded-2xl p-4 overflow-hidden animate-fadeIn"
+                  style={{border:`1px solid ${s.bd}`, background:`linear-gradient(145deg,${s.acc} 0%,rgba(4,4,12,0.95) 100%)`, animationDelay:`${i*0.07}s`, boxShadow:`0 4px 20px rgba(0,0,0,0.22)`}}>
+                  <div className="absolute top-0 right-0 w-14 h-14 rounded-full -translate-y-1/2 translate-x-1/2 opacity-20"
+                    style={{background:`radial-gradient(circle,${s.color} 0%,transparent 70%)`,filter:'blur(10px)'}} />
+                  <p className="text-[10.5px] text-slate-600 mb-2.5 uppercase tracking-widest font-bold">{s.label}</p>
+                  <p className="text-2xl font-black counter-animate" style={{color:s.color,letterSpacing:'-0.02em'}}>{s.val}</p>
+                  <div className="absolute bottom-0 left-2 right-2 h-px" style={{background:`linear-gradient(90deg,transparent,${s.color}20,transparent)`}} />
                 </div>
               ))}
             </div>
@@ -935,16 +937,18 @@ export default function MemberDashboard() {
                 <h3 className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold mb-3">Accepted Tickets</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                   {[
-                    { label: 'Total',   val: myOwnTickets.length,                                color: '#94a3b8', bar: 'rgba(99,102,241,0.5)',  acc: 'rgba(99,102,241,0.06)',  bd: 'rgba(99,102,241,0.14)' },
-                    { label: 'Opened',  val: myOwnTickets.filter(t=>t.status==='opened').length,  color: '#60a5fa', bar: '#3b82f6',               acc: 'rgba(59,130,246,0.07)',  bd: 'rgba(59,130,246,0.16)' },
-                    { label: 'Pending', val: myOwnTickets.filter(t=>t.status==='pending').length, color: '#fbbf24', bar: '#f59e0b',               acc: 'rgba(245,158,11,0.07)',  bd: 'rgba(245,158,11,0.16)' },
-                    { label: 'Solved',  val: myOwnTickets.filter(t=>t.status==='solved').length,  color: '#34d399', bar: '#10b981',               acc: 'rgba(16,185,129,0.07)',  bd: 'rgba(16,185,129,0.16)' },
+                    { label: 'Total',   val: myOwnTickets.length,                                color: '#818cf8', acc: 'rgba(99,102,241,0.06)',  bd: 'rgba(99,102,241,0.13)' },
+                    { label: 'Opened',  val: myOwnTickets.filter(t=>t.status==='opened').length,  color: '#60a5fa', acc: 'rgba(59,130,246,0.06)',  bd: 'rgba(59,130,246,0.14)' },
+                    { label: 'Pending', val: myOwnTickets.filter(t=>t.status==='pending').length, color: '#fbbf24', acc: 'rgba(245,158,11,0.06)',  bd: 'rgba(245,158,11,0.14)' },
+                    { label: 'Solved',  val: myOwnTickets.filter(t=>t.status==='solved').length,  color: '#34d399', acc: 'rgba(16,185,129,0.06)',  bd: 'rgba(16,185,129,0.14)' },
                   ].map((s, i) => (
-                    <div key={s.label} className="relative rounded-2xl p-4 overflow-hidden glass-card animate-fadeIn"
-                      style={{border:`1px solid ${s.bd}`, background:s.acc, animationDelay:`${i*0.07}s`}}>
-                      <div className="absolute top-0 left-0 w-0.5 h-full" style={{background:s.bar}} />
-                      <p className="text-[11px] text-slate-500 mb-2 uppercase tracking-widest font-semibold pl-2">{s.label}</p>
-                      <p className="text-2xl font-black pl-2" style={{color:s.color}}>{s.val}</p>
+                    <div key={s.label} className="relative rounded-2xl p-4 overflow-hidden animate-fadeIn"
+                      style={{border:`1px solid ${s.bd}`, background:`linear-gradient(145deg,${s.acc} 0%,rgba(4,4,12,0.95) 100%)`, animationDelay:`${i*0.07}s`, boxShadow:`0 4px 20px rgba(0,0,0,0.22)`}}>
+                      <div className="absolute top-0 right-0 w-14 h-14 rounded-full -translate-y-1/2 translate-x-1/2 opacity-20"
+                        style={{background:`radial-gradient(circle,${s.color} 0%,transparent 70%)`,filter:'blur(10px)'}} />
+                      <p className="text-[10.5px] text-slate-600 mb-2.5 uppercase tracking-widest font-bold">{s.label}</p>
+                      <p className="text-2xl font-black counter-animate" style={{color:s.color,letterSpacing:'-0.02em'}}>{s.val}</p>
+                      <div className="absolute bottom-0 left-2 right-2 h-px" style={{background:`linear-gradient(90deg,transparent,${s.color}20,transparent)`}} />
                     </div>
                   ))}
                 </div>

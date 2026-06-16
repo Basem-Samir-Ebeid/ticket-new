@@ -43,8 +43,8 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
   const { user } = useAuth()
   const btnPrimary = isSuperAdmin ? 'bg-amber-600 hover:bg-amber-500' : 'bg-indigo-600 hover:bg-indigo-500'
   const bgGrad = isSuperAdmin
-    ? 'radial-gradient(ellipse at 60% -10%, rgba(120,53,15,0.5) 0%, transparent 55%), radial-gradient(ellipse at 90% 60%, rgba(80,30,5,0.25) 0%, transparent 45%), #05050a'
-    : 'radial-gradient(ellipse at 60% -10%, rgba(49,46,129,0.5) 0%, transparent 55%), radial-gradient(ellipse at 10% 80%, rgba(30,15,80,0.25) 0%, transparent 45%), #05050a'
+    ? 'radial-gradient(ellipse at 65% -5%, rgba(120,53,15,0.38) 0%, transparent 52%), radial-gradient(ellipse at 5% 85%, rgba(80,30,5,0.18) 0%, transparent 42%), #04040c'
+    : 'radial-gradient(ellipse at 65% -5%, rgba(49,46,129,0.38) 0%, transparent 52%), radial-gradient(ellipse at 5% 85%, rgba(30,15,80,0.18) 0%, transparent 42%), #04040c'
   const focusBorder = isSuperAdmin ? 'focus:border-amber-500' : 'focus:border-indigo-500'
   const [tab, setTab] = useState('dashboard')
   const [tickets, setTickets] = useState([])
@@ -1743,58 +1743,66 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
 
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               {[
-                { label: 'Total Tickets', val: tickets.length,  color: '#94a3b8', glow: 'stat-glow-blue',   acc: 'rgba(99,102,241,0.06)',  bd: 'rgba(99,102,241,0.14)', bar: 'rgba(99,102,241,0.5)' },
-                { label: 'Opened',        val: openedTickets,   color: '#60a5fa', glow: 'stat-glow-blue',   acc: 'rgba(59,130,246,0.07)',  bd: 'rgba(59,130,246,0.16)', bar: '#3b82f6' },
-                { label: 'Pending',       val: pendingTickets,  color: '#fbbf24', glow: 'stat-glow-amber',  acc: 'rgba(245,158,11,0.07)',  bd: 'rgba(245,158,11,0.16)', bar: '#f59e0b' },
-                { label: 'Solved',        val: solvedTickets,   color: '#34d399', glow: 'stat-glow-green',  acc: 'rgba(16,185,129,0.07)',  bd: 'rgba(16,185,129,0.16)', bar: '#10b981' },
-                { label: 'Total Users',   val: users.length,    color: '#c084fc', glow: 'stat-glow-purple', acc: 'rgba(168,85,247,0.07)',  bd: 'rgba(168,85,247,0.16)', bar: '#a855f7' },
+                { label: 'Total Tickets', val: tickets.length,  color: '#818cf8', acc: 'rgba(99,102,241,0.06)',  bd: 'rgba(99,102,241,0.13)' },
+                { label: 'Opened',        val: openedTickets,   color: '#60a5fa', acc: 'rgba(59,130,246,0.06)',  bd: 'rgba(59,130,246,0.14)' },
+                { label: 'Pending',       val: pendingTickets,  color: '#fbbf24', acc: 'rgba(245,158,11,0.06)',  bd: 'rgba(245,158,11,0.14)' },
+                { label: 'Solved',        val: solvedTickets,   color: '#34d399', acc: 'rgba(16,185,129,0.06)',  bd: 'rgba(16,185,129,0.14)' },
+                { label: 'Total Users',   val: users.length,    color: '#c084fc', acc: 'rgba(168,85,247,0.06)',  bd: 'rgba(168,85,247,0.14)' },
               ].map((s, i) => (
-                <div key={s.label} className={`relative rounded-2xl p-4 hover-lift animate-fadeIn overflow-hidden glass-card ${s.glow}`}
-                  style={{border:`1px solid ${s.bd}`, background:s.acc, animationDelay:`${i*0.07}s`}}>
-                  <div className="absolute top-0 left-0 w-0.5 h-full rounded-l-2xl" style={{background:s.bar}} />
-                  <p className="text-[11px] text-slate-500 mb-2.5 uppercase tracking-widest font-semibold pl-2">{s.label}</p>
-                  <p className="text-3xl font-black pl-2 counter-animate" style={{color:s.color}}>{s.val}</p>
+                <div key={s.label} className="relative rounded-2xl p-4 hover-lift animate-fadeIn overflow-hidden"
+                  style={{border:`1px solid ${s.bd}`, background:`linear-gradient(145deg, ${s.acc} 0%, rgba(4,4,12,0.95) 100%)`, animationDelay:`${i*0.07}s`, boxShadow:`0 4px 24px rgba(0,0,0,0.25)`}}>
+                  <div className="absolute top-0 right-0 w-16 h-16 rounded-full -translate-y-1/2 translate-x-1/2 opacity-25"
+                    style={{background:`radial-gradient(circle, ${s.color} 0%, transparent 70%)`, filter:'blur(12px)'}} />
+                  <p className="text-[10.5px] text-slate-600 mb-3 uppercase tracking-widest font-bold">{s.label}</p>
+                  <p className="text-3xl font-black counter-animate" style={{color:s.color, letterSpacing:'-0.02em'}}>{s.val}</p>
+                  <div className="absolute bottom-0 left-3 right-3 h-px" style={{background:`linear-gradient(90deg, transparent, ${s.color}22, transparent)`}} />
                 </div>
               ))}
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
-                <h3 className="text-white font-semibold mb-4 flex items-center gap-2 text-sm">
-                  <span className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{background:'rgba(168,85,247,0.15)',border:'1px solid rgba(168,85,247,0.2)'}}>👥</span>
+              <div className="rounded-2xl p-5" style={{background:'linear-gradient(145deg,rgba(12,12,28,0.98) 0%,rgba(6,6,18,0.98) 100%)',border:'1px solid rgba(168,85,247,0.12)'}}>
+                <h3 className="text-white font-semibold mb-4 flex items-center gap-2.5 text-sm">
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.2)'}}>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="#a78bfa" strokeWidth={1.7}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                    </svg>
+                  </span>
                   User Breakdown
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {[
                     ['Members', memberCount, '#a78bfa'],
                     ['Employees', employeeCount, '#60a5fa'],
                     ['Admins', users.filter(u=>u.role==='admin').length, '#f59e0b'],
                   ].map(([l,v,c]) => (
-                    <div key={l} className="flex items-center justify-between py-1">
-                      <span className="text-slate-400 text-sm">{l}</span>
-                      <span className="text-sm font-bold" style={{color:c}}>{v}</span>
+                    <div key={l} className="flex items-center justify-between py-2 px-3 rounded-xl" style={{background:'rgba(255,255,255,0.025)'}}>
+                      <span className="text-slate-500 text-sm">{l}</span>
+                      <span className="text-sm font-bold tabular-nums" style={{color:c}}>{v}</span>
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="glass-card rounded-2xl p-5" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
-                <h3 className="text-white font-semibold mb-4 flex items-center gap-2 text-sm">
-                  <span className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{background:'rgba(16,185,129,0.15)',border:'1px solid rgba(16,185,129,0.2)'}}>📈</span>
+              <div className="rounded-2xl p-5" style={{background:'linear-gradient(145deg,rgba(12,12,28,0.98) 0%,rgba(6,6,18,0.98) 100%)',border:'1px solid rgba(16,185,129,0.12)'}}>
+                <h3 className="text-white font-semibold mb-4 flex items-center gap-2.5 text-sm">
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.2)'}}>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="#10b981" strokeWidth={1.7}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                    </svg>
+                  </span>
                   Ticket Statistics
                 </h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between py-1">
-                    <span className="text-slate-400 text-sm">Resolution Rate</span>
-                    <span className="text-emerald-400 font-bold text-sm">{tickets.length > 0 ? ((solvedTickets/tickets.length)*100).toFixed(1) : 0}%</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span className="text-slate-400 text-sm">Active Tickets</span>
-                    <span className="text-amber-400 font-bold text-sm">{openedTickets + pendingTickets}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span className="text-slate-400 text-sm">Avg per User</span>
-                    <span className="text-white font-bold text-sm">{users.length > 0 ? (tickets.length/users.length).toFixed(1) : 0}</span>
-                  </div>
+                <div className="space-y-2">
+                  {[
+                    ['Resolution Rate', `${tickets.length > 0 ? ((solvedTickets/tickets.length)*100).toFixed(1) : 0}%`, '#34d399'],
+                    ['Active Tickets', openedTickets + pendingTickets, '#fbbf24'],
+                    ['Avg per User', users.length > 0 ? (tickets.length/users.length).toFixed(1) : 0, '#94a3b8'],
+                  ].map(([l,v,c]) => (
+                    <div key={l} className="flex items-center justify-between py-2 px-3 rounded-xl" style={{background:'rgba(255,255,255,0.025)'}}>
+                      <span className="text-slate-500 text-sm">{l}</span>
+                      <span className="text-sm font-bold tabular-nums" style={{color:c}}>{v}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1803,7 +1811,10 @@ export default function AdminDashboard({ isSuperAdmin = false }) {
               <div className="glass rounded-xl p-5 animate-fadeIn">
                 <div className="flex items-center justify-between mb-1">
                   <h3 className="text-white font-medium flex items-center gap-2">
-                    <span>🔗</span> GitHub Sync Status
+                    <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+                    </svg>
+                    GitHub Sync Status
                   </h3>
                   <button onClick={fetchGithubSyncStatus} className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-white/10 transition-colors">↻ Refresh</button>
                 </div>

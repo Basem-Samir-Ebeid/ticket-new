@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import LogoWithStars from '../components/LogoWithStars'
 
-const BG_STYLES = { background: '#05050a' }
+const BG_STYLES = { background: 'radial-gradient(ellipse at 50% -10%, rgba(49,46,129,0.28) 0%, transparent 55%), #04040c' }
 const CARD_STYLES = {
   background: 'linear-gradient(160deg, rgba(18,20,38,0.98) 0%, rgba(10,12,24,0.98) 100%)',
   border: '1px solid rgba(255,255,255,0.08)',
