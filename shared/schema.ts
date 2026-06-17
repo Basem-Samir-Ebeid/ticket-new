@@ -410,6 +410,9 @@ export const factoryRotationSchedule = pgTable('factory_rotation_schedule', {
   notified: boolean('notified').notNull().default(false),
   attended_at: timestamp('attended_at', { withTimezone: true }),
   is_absent: boolean('is_absent').notNull().default(false),
+  user_status: text('user_status').notNull().default('pending'),
+  marked_by_user_at: timestamp('marked_by_user_at', { withTimezone: true }),
+  marked_by_admin_at: timestamp('marked_by_admin_at', { withTimezone: true }),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -436,6 +439,9 @@ export const overtimeRotationSchedule = pgTable('overtime_rotation_schedule', {
   notified: boolean('notified').notNull().default(false),
   attended_at: timestamp('attended_at', { withTimezone: true }),
   is_absent: boolean('is_absent').notNull().default(false),
+  user_status: text('user_status').notNull().default('pending'),
+  marked_by_user_at: timestamp('marked_by_user_at', { withTimezone: true }),
+  marked_by_admin_at: timestamp('marked_by_admin_at', { withTimezone: true }),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -506,6 +512,7 @@ export const employeeEvaluations = pgTable('employee_evaluations', {
   strengths: text('strengths'),
   areas_for_improvement: text('areas_for_improvement'),
   status: text('status').notNull().default('draft'),
+  evaluation_period_locked: boolean('evaluation_period_locked').notNull().default(false),
   submitted_at: timestamp('submitted_at', { withTimezone: true }),
   employee_notified_at: timestamp('employee_notified_at', { withTimezone: true }),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -524,6 +531,71 @@ export const rotationSwapRequests = pgTable('rotation_swap_requests', {
   target_date: date('target_date'),
   note: text('note'),
   status: text('status').notNull().default('pending'),
+  user_approval_status: text('user_approval_status').notNull().default('pending'),
+  user_approved_at: timestamp('user_approved_at', { withTimezone: true }),
+  user_approval_note: text('user_approval_note'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Rotation Attendance Logs (سجل الحضور) ──────────────────────────────────────
+export const rotationAttendanceLogs = pgTable('rotation_attendance_logs', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  schedule_id: uuid('schedule_id').notNull(),
+  module: text('module').notNull(),
+  action: text('action').notNull(),
+  performed_by: uuid('performed_by').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  reason_note: text('reason_note'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Evaluation Reports (تقارير التقييمات) ────────────────────────────────────
+export const evaluationReports = pgTable('evaluation_reports', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  month: integer('month').notNull(),
+  year: integer('year').notNull(),
+  total_employees_evaluated: integer('total_employees_evaluated'),
+  avg_technical_skills: doublePrecision('avg_technical_skills'),
+  avg_communication: doublePrecision('avg_communication'),
+  avg_punctuality: doublePrecision('avg_punctuality'),
+  avg_task_completion: doublePrecision('avg_task_completion'),
+  avg_initiative: doublePrecision('avg_initiative'),
+  avg_work_quality: doublePrecision('avg_work_quality'),
+  avg_overall_score: doublePrecision('avg_overall_score'),
+  generated_at: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
+  generated_by: uuid('generated_by').references(() => profiles.id, { onDelete: 'set null' }),
+}, (t) => ({
+  uniqueMonthYear: uniqueIndex('evaluation_reports_month_year_unique').on(t.month, t.year),
+}))
+
+// ─── Employee Trips (الماموريات) ──────────────────────────────────────
+export const employeeTrips = pgTable('employee_trips', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  employee_id: uuid('employee_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  approved_by: uuid('approved_by').references(() => profiles.id, { onDelete: 'set null' }),
+  trip_name: text('trip_name').notNull(),
+  purpose: text('purpose').notNull(),
+  location_from: text('location_from').notNull(),
+  location_to: text('location_to').notNull(),
+  departure_time: timestamp('departure_time', { withTimezone: true }).notNull(),
+  return_time: timestamp('return_time', { withTimezone: true }).notNull(),
+  transport_type: text('transport_type').notNull(),
+  transport_notes: text('transport_notes'),
+  status: text('status').notNull().default('pending'),
+  approval_notes: text('approval_notes'),
+  actual_departure: timestamp('actual_departure', { withTimezone: true }),
+  actual_return: timestamp('actual_return', { withTimezone: true }),
+  notes: text('notes'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ─── Trip Logs ────────────────────────────────────────────────────────
+export const tripLogs = pgTable('trip_logs', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  trip_id: uuid('trip_id').notNull().references(() => employeeTrips.id, { onDelete: 'cascade' }),
+  action: text('action').notNull(),
+  performed_by: uuid('performed_by').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  notes: text('notes'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })

@@ -7,6 +7,8 @@ import {
   overtimeRotationSchedule,
   profiles,
   notifications,
+  rotationSwapRequests,
+  rotationAttendanceLogs,
 } from '../../shared/schema'
 import { eq, and, gte, lte, asc, isNull, inArray } from 'drizzle-orm'
 import { broadcast } from '../ws'
@@ -380,6 +382,179 @@ router.put('/schedule/:id', requireAuth as any, async (req: any, res) => {
     res.json(row)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to update entry' })
+  }
+})
+
+// ── POST /schedule/:id/mark-attendance — user marks present/swap ─────────────────
+router.post('/schedule/:id/mark-attendance', requireAuth as any, async (req: any, res) => {
+  try {
+    const { action, note, target_user_id } = req.body
+    if (!action || !['present', 'swap_requested'].includes(action))
+      return res.status(400).json({ error: 'Invalid action' })
+
+    const [entry] = await db
+      .select()
+      .from(overtimeRotationSchedule)
+      .where(eq(overtimeRotationSchedule.id, req.params.id))
+      .limit(1)
+
+    if (!entry) return res.status(404).json({ error: 'Schedule entry not found' })
+    if (entry.user_id !== req.user.id) return res.status(403).json({ error: 'Not authorized' })
+
+    if (action === 'present') {
+      // User marks attendance as present
+      const [updated] = await db
+        .update(overtimeRotationSchedule)
+        .set({
+          user_status: 'present',
+          marked_by_user_at: new Date(),
+        })
+        .where(eq(overtimeRotationSchedule.id, req.params.id))
+        .returning()
+
+      // Log this action
+      await db.insert(rotationAttendanceLogs).values({
+        schedule_id: req.params.id,
+        module: 'overtime',
+        action: 'marked_present',
+        performed_by: req.user.id,
+        reason_note: note || null,
+      })
+
+      // Notify admins
+      const [empProfile] = await db
+        .select({ full_name: profiles.full_name })
+        .from(profiles)
+        .where(eq(profiles.id, req.user.id))
+        .limit(1)
+      const empName = empProfile?.full_name || 'الموظف'
+      const adminMsg = `✅ ${empName} سجّل حضوره في الأوفر تايم بتاريخ ${entry.scheduled_date}`
+
+      const admins = await db
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(inArray(profiles.role, ['admin', 'super_admin']))
+
+      for (const admin of admins) {
+        if (admin.id !== req.user.id) {
+          await db.insert(notifications).values({
+            user_id: admin.id,
+            message: adminMsg,
+          })
+          broadcast(admin.id, 'notification', { message: adminMsg })
+        }
+      }
+
+      res.json(updated)
+    } else if (action === 'swap_requested') {
+      // User requests swap with another user
+      if (!target_user_id) return res.status(400).json({ error: 'target_user_id is required' })
+
+      // Update user_status to swap_pending
+      const [updated] = await db
+        .update(overtimeRotationSchedule)
+        .set({
+          user_status: 'swap_pending',
+          marked_by_user_at: new Date(),
+        })
+        .where(eq(overtimeRotationSchedule.id, req.params.id))
+        .returning()
+
+      // Create swap request
+      const [swap] = await db
+        .insert(rotationSwapRequests)
+        .values({
+          module: 'overtime',
+          requester_id: req.user.id,
+          target_id: target_user_id,
+          requester_schedule_id: req.params.id,
+          requester_date: entry.scheduled_date,
+          note: note || null,
+        })
+        .returning()
+
+      // Log this action
+      await db.insert(rotationAttendanceLogs).values({
+        schedule_id: req.params.id,
+        module: 'overtime',
+        action: 'swap_requested',
+        performed_by: req.user.id,
+        reason_note: note || null,
+      })
+
+      // Notify target user
+      const [requesterProfile] = await db
+        .select({ full_name: profiles.full_name })
+        .from(profiles)
+        .where(eq(profiles.id, req.user.id))
+        .limit(1)
+      const requesterName = requesterProfile?.full_name || 'زميل'
+      const msg = `🔄 ${requesterName} يطلب تحويل دوام الأوفر تايم بتاريخ ${entry.scheduled_date} إليك`
+
+      await db.insert(notifications).values({
+        user_id: target_user_id,
+        message: msg,
+      })
+      broadcast(target_user_id, 'notification', { message: msg })
+
+      res.json({ schedule: updated, swap })
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to mark attendance' })
+  }
+})
+
+// ── POST /schedule/:id/mark-absent-admin — admin marks user absent ────────────────
+router.post('/schedule/:id/mark-absent-admin', requireAuth as any, async (req: any, res) => {
+  try {
+    if (!isAdmin(req.profile.role)) return res.status(403).json({ error: 'Admin only' })
+    const { note } = req.body
+
+    const [entry] = await db
+      .select()
+      .from(overtimeRotationSchedule)
+      .where(eq(overtimeRotationSchedule.id, req.params.id))
+      .limit(1)
+
+    if (!entry) return res.status(404).json({ error: 'Schedule entry not found' })
+
+    const [updated] = await db
+      .update(overtimeRotationSchedule)
+      .set({
+        user_status: 'absent',
+        is_absent: true,
+        marked_by_admin_at: new Date(),
+      })
+      .where(eq(overtimeRotationSchedule.id, req.params.id))
+      .returning()
+
+    // Log this action
+    await db.insert(rotationAttendanceLogs).values({
+      schedule_id: req.params.id,
+      module: 'overtime',
+      action: 'marked_absent_admin',
+      performed_by: req.user.id,
+      reason_note: note || null,
+    })
+
+    // Notify user
+    const [empProfile] = await db
+      .select({ full_name: profiles.full_name })
+      .from(profiles)
+      .where(eq(profiles.id, entry.user_id))
+      .limit(1)
+    const empName = empProfile?.full_name || 'الموظف'
+    const msg = `❌ تم تسجيل غيابك في الأوفر تايم بتاريخ ${entry.scheduled_date}`
+
+    await db.insert(notifications).values({
+      user_id: entry.user_id,
+      message: msg,
+    })
+    broadcast(entry.user_id, 'notification', { message: msg })
+
+    res.json(updated)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to mark absent' })
   }
 })
 
