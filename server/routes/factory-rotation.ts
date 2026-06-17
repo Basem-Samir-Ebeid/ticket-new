@@ -392,8 +392,6 @@ router.get('/groups/:id/members', requireAuth as any, async (req: any, res) => {
   }
 })
 
-export default router
-
 // ── POST /schedule/:id/mark-attendance (الحضور/عدم الحضور) ─────────────────────
 router.post('/schedule/:id/mark-attendance', requireAuth as any, async (req: any, res) => {
   try {

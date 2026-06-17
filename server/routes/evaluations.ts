@@ -557,5 +557,3 @@ router.post('/generate-monthly-report', requireAuth as any, async (req: any, res
 })
 
 export default router
-
-export default router
