@@ -6,5 +6,9 @@ dist
 uploads
 attached_assets
 tests
-api
 scripts
+src
+public
+DESIGN_SYSTEM.md
+ADVANCED_ROTATION_SYSTEM.md
+ROTATION_EVALUATION_SYSTEM.md
