@@ -2,6 +2,7 @@
   "installCommand": "npm install --legacy-peer-deps",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "nodeVersion": "20.x",
   "functions": {
     "api/index.js": {
       "maxDuration": 30

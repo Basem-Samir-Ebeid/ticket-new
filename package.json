@@ -2,6 +2,9 @@
   "name": "ticket-system",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "postinstall": "bash scripts/setup-git-hooks.sh || true",
     "dev": "npm run dev:server & npm run dev:client",
