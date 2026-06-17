@@ -2,8 +2,11 @@
   "installCommand": "npm install --legacy-peer-deps",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "env": {
+    "NODE_ENV": "production"
+  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.js" },
-    { "source": "/((?!api|dist).*)", "destination": "/index.html" }
+    { "source": "/((?!api|_next/static|favicon).*)", "destination": "/index.html" }
   ]
 }
