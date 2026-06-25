@@ -52,6 +52,9 @@
     "zod": "^4.4.3",
     "zod-validation-error": "^5.0.0"
   },
+  "optionalDependencies": {
+    "pg-native": "*"
+  },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
