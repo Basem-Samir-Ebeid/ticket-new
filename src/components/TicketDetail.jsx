@@ -2,19 +2,20 @@ import { useState } from 'react'
 import SLABadge from './SLABadge'
 import TagChipInput, { TagPills } from './TagChipInput'
 import FileAttachment from './FileAttachment'
+import { PRIORITY_BADGE_STYLES, STATUS_BADGE_STYLES, getAccentColor, getAccentGradient, getAccentGlow, COMMON_STYLES } from '../config/design'
 
 const PRIORITY_MAP = {
-  urgent: { label: 'Urgent', color: '#ef4444', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.3)' },
-  high:   { label: 'High',   color: '#f97316', bg: 'rgba(249,115,22,0.12)', border: 'rgba(249,115,22,0.3)' },
-  medium: { label: 'Medium', color: '#eab308', bg: 'rgba(234,179,8,0.12)',   border: 'rgba(234,179,8,0.3)' },
-  low:    { label: 'Low',    color: '#22c55e', bg: 'rgba(34,197,94,0.12)',   border: 'rgba(34,197,94,0.3)' },
+  urgent: PRIORITY_BADGE_STYLES.urgent,
+  high: PRIORITY_BADGE_STYLES.high,
+  medium: PRIORITY_BADGE_STYLES.medium,
+  low: PRIORITY_BADGE_STYLES.low,
 }
 
 const STATUS_MAP = {
-  opened:  { label: 'Open',    color: '#818cf8', dot: '#6366f1' },
+  opened: { label: 'Open', color: '#818cf8', dot: '#6366f1' },
   pending: { label: 'Pending', color: '#fbbf24', dot: '#f59e0b' },
-  solved:  { label: 'Solved',  color: '#34d399', dot: '#10b981' },
-  merged:  { label: 'Merged',  color: '#94a3b8', dot: '#64748b' },
+  solved: { label: 'Solved', color: '#34d399', dot: '#10b981' },
+  merged: { label: 'Merged', color: '#94a3b8', dot: '#64748b' },
 }
 
 function Avatar({ name, isMe, size = 9 }) {
@@ -49,9 +50,9 @@ export default function TicketDetail({
   isSuperAdmin,
 }) {
   const [showAssigneeEditor, setShowAssigneeEditor] = useState(false)
-  const accentGrad = isSuperAdmin ? 'linear-gradient(135deg,#d97706,#b45309)' : 'linear-gradient(135deg,#2563eb,#1d4ed8)'
-  const accentGlow = isSuperAdmin ? '0 4px 14px rgba(217,119,6,0.3)' : '0 4px 14px rgba(37,99,235,0.3)'
-  const accentColor = isSuperAdmin ? '#f59e0b' : '#6366f1'
+  const accentGrad = getAccentGradient(isSuperAdmin)
+  const accentGlow = getAccentGlow(isSuperAdmin)
+  const accentColor = getAccentColor(isSuperAdmin)
 
   const priority = PRIORITY_MAP[ticket.priority] || PRIORITY_MAP.medium
   const status = STATUS_MAP[ticket.status] || STATUS_MAP.opened
@@ -87,7 +88,7 @@ export default function TicketDetail({
 
           {/* Ticket Header Card */}
           <div className="rounded-2xl p-5"
-            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            style={COMMON_STYLES.cardBg}>
             {/* Badges row */}
             <div className="flex items-center gap-2 mb-3 flex-wrap">
               {/* Status */}
@@ -130,7 +131,7 @@ export default function TicketDetail({
 
             {/* Metadata pills */}
             <div className="flex flex-wrap items-center gap-3 pt-3"
-              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              style={COMMON_STYLES.divider}>
               {ticket.affected_person && (
                 <span className="flex items-center gap-1.5 text-xs text-slate-400">
                   <svg className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -165,7 +166,7 @@ export default function TicketDetail({
 
             {/* Tags */}
             {(ticket.tags?.length > 0 || editingTags) && (
-              <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="mt-3 pt-3" style={COMMON_STYLES.divider}>
                 {!editingTags ? (
                   <div className="flex items-center gap-2 flex-wrap">
                     <TagPills tags={ticket.tags} />
@@ -194,7 +195,7 @@ export default function TicketDetail({
               </div>
             )}
             {!ticket.tags?.length && !editingTags && (
-              <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="mt-3 pt-3" style={COMMON_STYLES.divider}>
                 <button type="button"
                   onClick={() => { setEditingTags(true); setEditTagsValue([]) }}
                   className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-slate-600 hover:text-slate-300 hover:border-white/20 transition-all">
@@ -206,7 +207,7 @@ export default function TicketDetail({
 
           {/* Replies Thread */}
           <div className="rounded-2xl overflow-hidden"
-            style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            style={COMMON_STYLES.cardBg}>
             {/* Thread header */}
             <div className="flex items-center gap-2 px-5 py-3.5"
               style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.15)' }}>
@@ -290,7 +291,7 @@ export default function TicketDetail({
 
             {/* Reply Form */}
             <div className="px-5 pb-5 pt-3"
-              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              style={COMMON_STYLES.divider}>
               {replyError && (
                 <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-xl px-3 py-2 mb-3">
                   <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

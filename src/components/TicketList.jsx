@@ -1,16 +1,18 @@
 import SLABadge from './SLABadge'
+import { PRIORITY_BADGE_STYLES, STATUS_BADGE_STYLES, getAccentColor, COMMON_STYLES, COLORS } from '../config/design'
 
 const PRIORITY_COLOR = {
-  urgent: '#ef4444',
-  high:   '#f97316',
-  medium: '#eab308',
-  low:    '#22c55e',
+  urgent: COLORS.priority.urgent,
+  high: COLORS.priority.high,
+  medium: COLORS.priority.medium,
+  low: COLORS.priority.low,
 }
+
 const STATUS_CONFIG = {
-  opened:  { label: 'Open',    color: '#818cf8', dot: '#6366f1' },
+  opened: { label: 'Open', color: '#818cf8', dot: '#6366f1' },
   pending: { label: 'Pending', color: '#fbbf24', dot: '#f59e0b' },
-  solved:  { label: 'Solved',  color: '#34d399', dot: '#10b981' },
-  merged:  { label: 'Merged',  color: '#94a3b8', dot: '#64748b' },
+  solved: { label: 'Solved', color: '#34d399', dot: '#10b981' },
+  merged: { label: 'Merged', color: '#94a3b8', dot: '#64748b' },
 }
 
 const TICKETS_PER_PAGE = 20
@@ -30,7 +32,7 @@ export default function TicketList({
   onExportCsv, onExportExcel, onStaffOverview,
   showCreateTicket,
 }) {
-  const accentColor = isSuperAdmin ? '#f59e0b' : '#6366f1'
+  const accentColor = getAccentColor(isSuperAdmin)
   const allTags = [...new Set(tickets.flatMap(t => t.tags || []))]
   const pageCount = Math.ceil(filteredTickets.length / TICKETS_PER_PAGE)
   const paginated = filteredTickets.slice((ticketPage - 1) * TICKETS_PER_PAGE, ticketPage * TICKETS_PER_PAGE)
@@ -113,7 +115,7 @@ export default function TicketList({
 
       {/* ── Filters & Search ── */}
       <div className="rounded-2xl p-4 mb-4 space-y-3"
-        style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)' }}>
+        style={COMMON_STYLES.filterBg}>
 
         {/* Search */}
         <div className="relative">
@@ -255,7 +257,7 @@ export default function TicketList({
       <div className="space-y-2">
         {filteredTickets.length === 0 && (
           <div className="rounded-2xl py-20 text-center"
-            style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.07)' }}>
+            style={COMMON_STYLES.emptyState}>
             <div className="text-4xl mb-3">🔍</div>
             <p className="text-slate-400 font-semibold text-sm">
               {tickets.length === 0 ? 'No tickets yet' : 'No tickets match your filters'}
@@ -277,8 +279,7 @@ export default function TicketList({
             <div key={t.id}
               className="group relative rounded-2xl transition-all duration-200 overflow-hidden cursor-pointer"
               style={{
-                background: 'rgba(255,255,255,0.025)',
-                border: '1px solid rgba(255,255,255,0.07)',
+                ...COMMON_STYLES.cardBg,
                 animationDelay: `${i * 0.03}s`,
               }}
               onMouseEnter={e => {

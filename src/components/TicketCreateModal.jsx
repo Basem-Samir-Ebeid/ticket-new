@@ -1,17 +1,18 @@
 import { useEffect, useRef } from 'react'
 import KnowledgeSuggest from './KnowledgeSuggest'
+import { PRIORITY_BADGE_STYLES, getAccentColor, GRADIENTS, COMMON_STYLES } from '../config/design'
 
 const PRIORITY_OPTIONS = [
-  { value: 'low',    label: 'Low',    color: '#22c55e', bg: 'rgba(34,197,94,0.12)',    border: 'rgba(34,197,94,0.3)' },
-  { value: 'medium', label: 'Medium', color: '#eab308', bg: 'rgba(234,179,8,0.12)',    border: 'rgba(234,179,8,0.3)' },
-  { value: 'high',   label: 'High',   color: '#f97316', bg: 'rgba(249,115,22,0.12)',   border: 'rgba(249,115,22,0.3)' },
-  { value: 'urgent', label: 'Urgent', color: '#ef4444', bg: 'rgba(239,68,68,0.12)',    border: 'rgba(239,68,68,0.3)' },
+  { value: 'low', label: 'Low', color: PRIORITY_BADGE_STYLES.low.color, bg: PRIORITY_BADGE_STYLES.low.background, border: PRIORITY_BADGE_STYLES.low.border },
+  { value: 'medium', label: 'Medium', color: PRIORITY_BADGE_STYLES.medium.color, bg: PRIORITY_BADGE_STYLES.medium.background, border: PRIORITY_BADGE_STYLES.medium.border },
+  { value: 'high', label: 'High', color: PRIORITY_BADGE_STYLES.high.color, bg: PRIORITY_BADGE_STYLES.high.background, border: PRIORITY_BADGE_STYLES.high.border },
+  { value: 'urgent', label: 'Urgent', color: PRIORITY_BADGE_STYLES.urgent.color, bg: PRIORITY_BADGE_STYLES.urgent.background, border: PRIORITY_BADGE_STYLES.urgent.border },
 ]
 
 const STATUS_OPTIONS = [
-  { value: 'opened',  label: 'Open',    color: '#818cf8' },
+  { value: 'opened', label: 'Open', color: '#818cf8' },
   { value: 'pending', label: 'Pending', color: '#fbbf24' },
-  { value: 'solved',  label: 'Solved',  color: '#34d399' },
+  { value: 'solved', label: 'Solved', color: '#34d399' },
 ]
 
 export default function TicketCreateModal({
@@ -24,7 +25,7 @@ export default function TicketCreateModal({
   isSuperAdmin,
 }) {
   const overlayRef = useRef(null)
-  const accentColor = isSuperAdmin ? '#f59e0b' : '#6366f1'
+  const accentColor = getAccentColor(isSuperAdmin)
 
   useEffect(() => {
     if (open) document.body.style.overflow = 'hidden'
@@ -50,7 +51,7 @@ export default function TicketCreateModal({
       {/* Slide-over panel */}
       <div className="ml-auto h-full w-full max-w-2xl flex flex-col shadow-2xl animate-slideInRight"
         style={{
-          background: 'linear-gradient(180deg, #0c0c1a 0%, #080810 100%)',
+          background: GRADIENTS.dark,
           borderLeft: '1px solid rgba(255,255,255,0.08)',
         }}>
 
